@@ -80,6 +80,29 @@ void normalize(std::vector<CompactOperatorWeight>& weights) {
   }
 }
 
+bool parse_field(const std::string& value, CompactField& field) {
+  std::vector<std::string> parts;
+  std::string current;
+  std::stringstream ss(value);
+  while (std::getline(ss, current, ',')) {
+    parts.push_back(trim(current));
+  }
+  if (parts.size() < 3) return false;
+  try {
+    field.offset = static_cast<std::uint32_t>(std::stoul(parts[0]));
+    field.size = static_cast<std::uint32_t>(std::stoul(parts[1]));
+    field.type = static_cast<FieldType>(std::stoul(parts[2]));
+    if (parts.size() >= 4) field.is_big_endian = (parts[3] == "1" || parts[3] == "true");
+    if (parts.size() >= 6) {
+      field.target_begin = static_cast<std::uint32_t>(std::stoul(parts[4]));
+      field.target_end = static_cast<std::uint32_t>(std::stoul(parts[5]));
+    }
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
 CompactRecipe parse_recipe_file(const std::filesystem::path& path) {
   CompactRecipe loaded;
   std::ifstream input(path);
@@ -139,6 +162,11 @@ CompactRecipe parse_recipe_file(const std::filesystem::path& path) {
       if (parse_range(value, range)) {
         loaded.protect_ranges.push_back(range);
       }
+    } else if (key == "field") {
+      CompactField field;
+      if (parse_field(value, field)) {
+        loaded.fields.push_back(field);
+      }
     } else if (key == "token") {
       loaded.tokens.push_back(value);
     }
@@ -177,12 +205,15 @@ RecipeCache::RecipeCache() {
 void RecipeCache::load_from_environment() {
   const char* store_env = std::getenv("FUZZPILOT_RECIPE_STORE");
   if (store_env == nullptr || *store_env == '\0') {
+    fprintf(stderr, "[M5] FUZZPILOT_RECIPE_STORE not set\n");
     return;
   }
+  fprintf(stderr, "[M5] Loading recipes from: %s\n", store_env);
   const std::filesystem::path store = store_env;
   const std::filesystem::path global_recipe_path = store / "global.recipe";
   if (std::filesystem::exists(global_recipe_path)) {
     auto loaded = parse_recipe_file(global_recipe_path);
+    fprintf(stderr, "[M5] Global recipe loaded: %s, fields: %zu\n", loaded.id.c_str(), loaded.fields.size());
     if (loaded.weights.empty()) {
       loaded.weights = global_.weights;
     }

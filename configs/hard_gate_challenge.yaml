@@ -1,0 +1,17 @@
+project: "hard_gate_challenge"
+target:
+  name: "vuln_hard"
+  binary: "/Users/qiaozhiyi/Desktop/fuzz_agent/experiments/targets/vuln_target/vuln_hard"
+  args: []
+  input_dir: "experiments/targets/vuln_target/seeds"
+  timeout_ms: 1000
+  memory_mb: 1024
+afl:
+  afl_fuzz: "afl-fuzz"
+  main_budget_sec: 300
+  plateau_window_sec: 10
+mutation_strategy:
+  enabled: true
+  recipe_store: "work_hard_gate/recipes"
+intelligence:
+  base_intelligence_path: "experiments/targets/vuln_target/hard_intel.json"

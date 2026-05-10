@@ -9,23 +9,24 @@
 namespace fuzzpilot {
 namespace {
 
-std::string first_line_from_command(const std::string& command) {
+std::string first_nonempty_line_from_command(const std::string& command) {
   std::array<char, 256> buffer{};
-  std::string output;
   FILE* pipe = popen(command.c_str(), "r");
   if (pipe == nullptr) {
     return {};
   }
+  std::string output;
   while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr) {
-    output += buffer.data();
-    if (output.find('\n') != std::string::npos) {
+    std::string line = buffer.data();
+    if (!line.empty() && line.back() == '\n') {
+      line.pop_back();
+    }
+    if (!line.empty()) {
+      output = line;
       break;
     }
   }
   pclose(pipe);
-  if (!output.empty() && output.back() == '\n') {
-    output.pop_back();
-  }
   return output;
 }
 
@@ -52,8 +53,8 @@ EnvSnapshot capture_env_snapshot(const std::string& afl_fuzz_path) {
     snapshot.arch = info.machine;
     snapshot.kernel = std::string(info.release) + " " + info.version;
   }
-  snapshot.afl_version = first_line_from_command(afl_fuzz_path + " -V 2>&1");
-  snapshot.compiler_version = first_line_from_command("c++ --version 2>&1");
+  snapshot.afl_version = first_nonempty_line_from_command(afl_fuzz_path + " -h 2>&1");
+  snapshot.compiler_version = first_nonempty_line_from_command("c++ --version 2>&1");
   return snapshot;
 }
 
@@ -70,4 +71,3 @@ std::string env_snapshot_json(const EnvSnapshot& snapshot) {
 }
 
 }  // namespace fuzzpilot
-

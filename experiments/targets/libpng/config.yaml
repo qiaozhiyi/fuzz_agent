@@ -1,0 +1,48 @@
+project: "libpng_fuzz"
+target:
+  name: "libpng_parser"
+  binary: "experiments/targets/libpng/libpng_fuzzer"
+  input_dir: "experiments/targets/libpng/seeds"
+  dict: ""
+  args: ["@@"]
+  timeout_ms: 1000
+  memory_mb: 1024
+
+afl:
+  base_env:
+    AFL_MAP_SIZE: "4096"
+    AFL_NO_UI: "1"
+    AFL_SKIP_CPUFREQ: "1"
+  main_budget_sec: 120
+  plateau_window_sec: 15
+
+fuzzer:
+  engine: "afl++"
+  threads: 1
+  timeout_ms: 1000
+
+plateau:
+  window_sec: 15
+  threshold_execs: 50
+  threshold_paths: 1
+
+micro_campaign:
+  budget_sec: 20
+  num_candidates: 4
+
+mutation_strategy:
+  enabled: true
+  recipe_store: "work_libpng/recipes"
+  custom_mutator_path: "./build-make/mutators/fuzzpilot/libfuzzpilot_mutator.dylib"
+
+static_analysis:
+  enabled: true
+  ida_dir: "/Applications/IDA Professional 9.3.app/Contents/macOS"
+  python_bin: "/opt/homebrew/anaconda3/envs/redteam/bin/python3"
+  extractor_script: "scripts/ida_extractor.py"
+
+model_api:
+  provider: "openai-compatible"
+  endpoint: "https://api.deepseek.com/chat/completions"
+  model: "deepseek-chat"
+  api_key_env: "FUZZPILOT_MODEL_API_KEY"

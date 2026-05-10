@@ -134,7 +134,7 @@ void assign_section(AppConfig& config,
     else if (key == "binary") config.target.binary = unquote(value);
     else if (key == "args") config.target.args = parse_inline_list(value);
     else if (key == "input_dir") config.target.input_dir = unquote(value);
-    else if (key == "dict") config.target.dict = unquote(value);
+    else if (key == "dict" || key == "dictionary") config.target.dict = unquote(value);
     else if (key == "cmplog_binary") config.target.cmplog_binary = unquote(value);
     else if (key == "custom_mutator") config.target.custom_mutator = unquote(value);
     else if (key == "timeout_ms") config.target.timeout_ms = parse_int(value, config.target.timeout_ms);
@@ -161,14 +161,14 @@ void assign_section(AppConfig& config,
     else if (key == "recipe_ttl_sec") config.mutation_strategy.recipe_ttl_sec = parse_int(value, config.mutation_strategy.recipe_ttl_sec);
     else if (key == "custom_mutator_path") config.mutation_strategy.custom_mutator_path = unquote(value);
     else if (key == "hot_path_io") config.mutation_strategy.hot_path_io = unquote(value);
-  } else if (section == "model_api") {
+  } else if (section == "model_api" || section == "model") {
     if (key == "enabled") config.model_api.enabled = parse_bool(value);
     else if (key == "required_for_dynamic_decision") config.model_api.required_for_dynamic_decision = parse_bool(value);
     else if (key == "provider") config.model_api.provider = unquote(value);
     else if (key == "endpoint") config.model_api.endpoint = unquote(value);
     else if (key == "endpoint_env") config.model_api.endpoint_env = unquote(value);
     else if (key == "api_key_env") config.model_api.api_key_env = unquote(value);
-    else if (key == "model") config.model_api.model = unquote(value);
+    else if (key == "model" || key == "model_name") config.model_api.model = unquote(value);
     else if (key == "timeout_ms") config.model_api.timeout_ms = parse_int(value, config.model_api.timeout_ms);
     else if (key == "max_output_tokens") config.model_api.max_output_tokens = parse_int(value, config.model_api.max_output_tokens);
     else if (key == "temperature") config.model_api.temperature = parse_double(value, config.model_api.temperature);
@@ -177,6 +177,11 @@ void assign_section(AppConfig& config,
     else if (key == "require_schema_validation") config.model_api.require_schema_validation = parse_bool(value);
     else if (key == "record_prompts") config.model_api.record_prompts = parse_bool(value);
     else if (key == "replay_cache") config.model_api.replay_cache = unquote(value);
+  } else if (section == "fuzzer") {
+    if (key == "timeout_ms") config.target.timeout_ms = parse_int(value, config.target.timeout_ms);
+  } else if (section == "plateau") {
+    if (key == "window_sec") config.afl.plateau_window_sec = parse_int(value, config.afl.plateau_window_sec);
+    else if (key == "threshold_paths") config.afl.plateau_min_new_edges = parse_int(value, config.afl.plateau_min_new_edges);
   } else if (section == "agent_runtime") {
     if (key == "strategic_mode") config.agent_runtime.strategic_mode = unquote(value);
     else if (key == "require_model_for_strategic_agents") config.agent_runtime.require_model_for_strategic_agents = parse_bool(value);
@@ -278,10 +283,8 @@ ConfigLoadResult load_config(const std::filesystem::path& path) {
     }
   }
 
-  if (result.config.afl.base_env.empty()) {
-    result.config.afl.base_env["AFL_SKIP_CPUFREQ"] = "1";
-    result.config.afl.base_env["AFL_NO_UI"] = "1";
-  }
+  result.config.afl.base_env.try_emplace("AFL_SKIP_CPUFREQ", "1");
+  result.config.afl.base_env.try_emplace("AFL_NO_UI", "1");
   return result;
 }
 

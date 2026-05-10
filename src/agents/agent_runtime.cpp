@@ -74,7 +74,15 @@ std::vector<AgentDecision> run_agent_tasks(IModelGateway& gateway,
     ModelRequest request;
     request.agent_name = task.agent_name;
     request.system_prompt =
-        "You are a FuzzPilot model-backed agent. Return valid compact JSON only.";
+        "You are a FuzzPilot model-backed agent. You are part of an Advanced Agentic Fuzzing loop (M4+). "
+        "When binary intelligence (static_context) is available, you must leverage it to orchestrate 'Structural & Semantic Mutation': \n"
+        "1. **Structural Fields**: Use identified struct layouts to define semantic fields in your 'seed_strategies' or 'per_seed_recipe_probe'. \n"
+        "   - Specify `fields` with `type`: 'Length' (to enable automatic repair), 'Magic' (to lock values), or 'Checksum'.\n"
+        "   - For 'Length' fields, define `target_begin` and `target_end` to tell the mutator which range this length describes.\n"
+        "2. **Data-flow Mapping**: If IDA identifies that a specific offset controls a sink (e.g., malloc size or strcpy), focus mutations on that 'DATA' field.\n"
+        "3. **CFG Constraints**: For unreached branches, analyze the required 'magic' comparisons at the reported addresses and propose the exact values.\n"
+        "Always justify your strategy based on the structural metadata (e.g., 'Targeting the length field at offset 0x04 to bypass size checks'). "
+        "Return valid compact JSON following the requested output schema.";
     request.user_context_json = agent_task_json(task);
     request.output_schema_json = task.output_schema_json;
     request.timeout_ms = task.timeout_ms;

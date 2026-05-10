@@ -132,8 +132,78 @@ bool mutate_splice(FpMutator& mutator,
   mutator.telemetry.record("splice", offset, before, mutator.out.size(), true);
   return true;
 }
-
 }  // namespace
+
+void apply_structural_repairs(FpMutator& mutator, const CompactRecipe& recipe) {
+  if (recipe.fields.empty()) {
+    return;
+  }
+
+  const bool debug = std::getenv("FUZZPILOT_MUTATOR_DEBUG") != nullptr;
+  if (debug) {
+    fprintf(stderr, "[M5] Applying %zu structural repairs to buffer of size %zu\n",
+            recipe.fields.size(), mutator.out.size());
+  }
+
+  for (const auto& field : recipe.fields) {
+    if (field.offset + field.size > mutator.out.size()) continue;
+
+    if (field.type == FieldType::Length) {
+      // Calculate actual length of target range
+      std::uint32_t len = 0;
+      if (field.target_end > field.target_begin && field.target_end <= mutator.out.size()) {
+        len = field.target_end - field.target_begin;
+      } else if (field.target_begin > 0 && field.target_begin < mutator.out.size()) {
+        // Use target_begin to end of buffer
+        len = static_cast<std::uint32_t>(mutator.out.size() - field.target_begin);
+      } else {
+        // Fallback: total size after field
+        len = static_cast<std::uint32_t>(mutator.out.size() - (field.offset + field.size));
+      }
+      if (debug) {
+        fprintf(stderr, "[M5] Repairing LENGTH field at offset %u with value %u\n",
+                field.offset, len);
+      }
+
+      // Write length back in correct endianness
+      if (field.size == 4) {
+        if (field.is_big_endian) {
+          mutator.out[field.offset] = (len >> 24) & 0xff;
+          mutator.out[field.offset + 1] = (len >> 16) & 0xff;
+          mutator.out[field.offset + 2] = (len >> 8) & 0xff;
+          mutator.out[field.offset + 3] = len & 0xff;
+        } else {
+          mutator.out[field.offset] = len & 0xff;
+          mutator.out[field.offset + 1] = (len >> 8) & 0xff;
+          mutator.out[field.offset + 2] = (len >> 16) & 0xff;
+          mutator.out[field.offset + 3] = (len >> 24) & 0xff;
+        }
+      } else if (field.size == 2) {
+        if (field.is_big_endian) {
+          mutator.out[field.offset] = (len >> 8) & 0xff;
+          mutator.out[field.offset + 1] = len & 0xff;
+        } else {
+          mutator.out[field.offset] = len & 0xff;
+          mutator.out[field.offset + 1] = (len >> 8) & 0xff;
+        }
+      }
+    } else if (field.type == FieldType::Checksum) {
+      // Simple XOR Checksum repair for demonstration
+      std::uint8_t xor_sum = 0;
+      for (std::size_t i = 0; i < mutator.out.size(); i++) {
+        if (i >= field.offset && i < field.offset + field.size) continue;
+        xor_sum ^= mutator.out[i];
+      }
+      if (field.size == 1) {
+        mutator.out[field.offset] = xor_sum;
+      }
+    }
+  }
+  if (debug) {
+    fprintf(stderr, "[M5] Structural repairs applied successfully\n");
+  }
+}
+
 
 FpMutator::FpMutator(unsigned int seed) : rng(seed) {
   recipes.load_from_environment();
@@ -195,6 +265,9 @@ extern "C" size_t fp_mutator_fuzz(void *data,
   if (!changed) {
     mutate_bit_flip(mutator, recipe);
   }
+
+  apply_structural_repairs(mutator, recipe);
+
   *out_buf = mutator.out.data();
   return mutator.out.size();
 }

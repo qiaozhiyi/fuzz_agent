@@ -308,6 +308,39 @@ void Database::insert_agent_memory(const std::string& id,
   sqlite3_finalize(stmt);
 }
 
+std::vector<std::string> Database::get_recent_decisions(const std::string& run_id, int limit) {
+  std::vector<std::string> decisions;
+  const char* sql = "SELECT proposal_json FROM agent_decisions WHERE run_id = ? ORDER BY created_ts DESC LIMIT ?";
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return decisions;
+  }
+  bind_text(stmt, 1, run_id);
+  sqlite3_bind_int(stmt, 2, limit);
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    const unsigned char* text = sqlite3_column_text(stmt, 0);
+    if (text) decisions.push_back(reinterpret_cast<const char*>(text));
+  }
+  sqlite3_finalize(stmt);
+  return decisions;
+}
+
+std::vector<std::string> Database::get_agent_memory(const std::string& run_id) {
+  std::vector<std::string> memory;
+  const char* sql = "SELECT value_json FROM agent_memory WHERE run_id = ? ORDER BY updated_ts DESC";
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return memory;
+  }
+  bind_text(stmt, 1, run_id);
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    const unsigned char* text = sqlite3_column_text(stmt, 0);
+    if (text) memory.push_back(reinterpret_cast<const char*>(text));
+  }
+  sqlite3_finalize(stmt);
+  return memory;
+}
+
 void Database::close() {
   if (db_ != nullptr) {
     sqlite3_close(db_);

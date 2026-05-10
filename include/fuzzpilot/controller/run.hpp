@@ -16,10 +16,10 @@ struct RunOptions {
   std::vector<std::filesystem::path> main_stats_paths;
   std::vector<std::filesystem::path> micro_stats_paths;
   bool dry_run = true;
-  std::string model_provider = "fake";
-  std::string model_endpoint = "http://127.0.0.1:11434/v1/chat/completions";
-  std::string model_name = "local-fuzzpilot-policy";
-  std::string api_key_env = "FUZZPILOT_MODEL_API_KEY";
+  std::string model_provider;
+  std::string model_endpoint;
+  std::string model_name;
+  std::string api_key_env;
 };
 
 struct RunSummary {

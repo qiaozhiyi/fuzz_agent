@@ -21,6 +21,22 @@ struct CompactRange {
   std::uint32_t end = 0;
 };
 
+enum class FieldType : std::uint8_t {
+  Data,
+  Length,
+  Magic,
+  Checksum
+};
+
+struct CompactField {
+  std::uint32_t offset = 0;
+  std::uint32_t size = 0;
+  FieldType type = FieldType::Data;
+  bool is_big_endian = true;      // Most network protocols use Big Endian
+  std::uint32_t target_begin = 0; // For Length fields
+  std::uint32_t target_end = 0;   // For Length fields
+};
+
 struct CompactOperatorWeight {
   CompactMutationOp op = CompactMutationOp::BitFlip;
   double weight = 1.0;
@@ -35,6 +51,7 @@ struct CompactRecipe {
   std::vector<CompactOperatorWeight> weights;
   std::vector<CompactRange> focus_ranges;
   std::vector<CompactRange> protect_ranges;
+  std::vector<CompactField> fields;
   std::vector<std::string> tokens;
 
   CompactMutationOp choose_operator(std::mt19937& rng) const;

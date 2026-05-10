@@ -31,7 +31,7 @@ void usage() {
       << "fuzzpilot " << kVersion << "\n"
       << "commands:\n"
       << "  init [--root PATH]\n"
-      << "  run --config PATH --stats PATH... [--afl-output-dir PATH] [--micro-stats PATH...]\n"
+      << "  run --config PATH --stats PATH... [--afl-output-dir PATH] [--micro-stats PATH...] [--provider NAME]\n"
       << "  check-config --config PATH [--runtime]\n"
       << "  env --config PATH\n"
       << "  afl-command --config PATH --output-dir PATH [--recipe-store PATH]\n"
@@ -219,11 +219,10 @@ int main(int argc, char** argv) {
         options.micro_stats_paths.emplace_back(path);
       }
       options.dry_run = !has_arg(args, "--real-run");
-      options.model_provider = arg_value(args, "--provider", "fake");
-      options.model_endpoint = arg_value(args, "--endpoint",
-                                         "http://127.0.0.1:11434/v1/chat/completions");
-      options.model_name = arg_value(args, "--model", "local-fuzzpilot-policy");
-      options.api_key_env = arg_value(args, "--api-key-env", "FUZZPILOT_MODEL_API_KEY");
+      options.model_provider = arg_value(args, "--provider");
+      options.model_endpoint = arg_value(args, "--endpoint");
+      options.model_name = arg_value(args, "--model");
+      options.api_key_env = arg_value(args, "--api-key-env");
       require_value(options.config_path.string(), "--config");
       if (options.dry_run && options.main_stats_paths.empty()) {
         throw std::runtime_error("missing required argument: --stats (required in dry-run mode)");

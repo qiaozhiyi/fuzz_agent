@@ -58,6 +58,10 @@ class Database {
                            double reward,
                            double confidence,
                            uint64_t updated_ts);
+
+  std::vector<std::string> get_recent_decisions(const std::string& run_id, int limit);
+  std::vector<std::string> get_agent_memory(const std::string& run_id);
+
   void close();
 
  private:

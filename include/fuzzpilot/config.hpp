@@ -44,7 +44,7 @@ struct MutationStrategyConfig {
   std::string default_policy = "afl_fallback";
   int max_recipes_per_seed = 4;
   int recipe_ttl_sec = 900;
-  std::filesystem::path custom_mutator_path = "./build/mutators/fuzzpilot/libfuzzpilot_mutator.dylib";
+  std::filesystem::path custom_mutator_path = "./build-make/mutators/fuzzpilot/libfuzzpilot_mutator.dylib";
   std::string hot_path_io = "mmap";
   std::map<std::string, bool> agent_controls;
 };
