@@ -1,0 +1,50 @@
+#include "fuzzpilot/runner/process.hpp"
+
+#include <cstdlib>
+#include <cstring>
+#include <spawn.h>
+#include <string>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <vector>
+
+extern char** environ;
+
+namespace fuzzpilot {
+
+ProcessResult spawn_process(const std::string& executable,
+                            const std::vector<std::string>& argv,
+                            const std::map<std::string, std::string>& env) {
+  std::vector<std::string> env_storage;
+  for (char** current = environ; current != nullptr && *current != nullptr; ++current) {
+    env_storage.emplace_back(*current);
+  }
+  for (const auto& [key, value] : env) {
+    env_storage.push_back(key + "=" + value);
+  }
+
+  std::vector<char*> argv_raw;
+  argv_raw.reserve(argv.size() + 1);
+  for (const auto& arg : argv) {
+    argv_raw.push_back(const_cast<char*>(arg.c_str()));
+  }
+  argv_raw.push_back(nullptr);
+
+  std::vector<char*> env_raw;
+  env_raw.reserve(env_storage.size() + 1);
+  for (auto& item : env_storage) {
+    env_raw.push_back(item.data());
+  }
+  env_raw.push_back(nullptr);
+
+  pid_t pid = -1;
+  const int rc = posix_spawnp(&pid, executable.c_str(), nullptr, nullptr,
+                              argv_raw.data(), env_raw.data());
+  if (rc != 0) {
+    return {.pid = -1, .error = std::strerror(rc)};
+  }
+  return {.pid = static_cast<int>(pid), .error = {}};
+}
+
+}  // namespace fuzzpilot
+

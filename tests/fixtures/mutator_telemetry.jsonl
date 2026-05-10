@@ -1,0 +1,2 @@
+{"recipe_hits":7,"recipe_misses":2,"mutation_count":9,"last_offset":3,"last_size_before":8,"last_size_after":9,"operators":{"insert_token":4,"bit_flip":3}}
+{"recipe_hits":5,"recipe_misses":1,"mutation_count":6,"last_offset":4,"last_size_before":9,"last_size_after":9,"operators":{"overwrite_range":2,"arith":4}}

@@ -1,0 +1,9 @@
+build/
+build-*/
+work/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+.DS_Store
+

@@ -1,0 +1,117 @@
+#include "fuzzpilot/agents/agent_runtime.hpp"
+
+#include "fuzzpilot/ids.hpp"
+
+#include <ctime>
+#include <sstream>
+
+namespace fuzzpilot {
+namespace {
+
+std::string json_escape(const std::string& value) {
+  std::ostringstream out;
+  for (const char c : value) {
+    switch (c) {
+      case '\\': out << "\\\\"; break;
+      case '"': out << "\\\""; break;
+      case '\n': out << "\\n"; break;
+      default: out << c; break;
+    }
+  }
+  return out.str();
+}
+
+}  // namespace
+
+std::vector<AgentTask> make_default_agent_tasks(const std::string& plateau_id,
+                                                const std::string& blackboard_json,
+                                                uint32_t budget_sec) {
+  const std::vector<std::string> agents = {
+      "CoordinatorAgent",
+      "PlateauDiagnosisAgent",
+      "MutatorAgent",
+      "DictionaryAgent",
+  };
+  std::vector<AgentTask> tasks;
+  for (const auto& agent : agents) {
+    AgentTask task;
+    task.task_id = make_id("agent_task");
+    task.agent_name = agent;
+    task.objective = "Generate typed FuzzPilot proposal for plateau " + plateau_id;
+    task.blackboard_slice_json = blackboard_json;
+    task.action_schema_json =
+        "{\"allowed_actions\":[\"default_control\",\"dictionary_probe\","
+        "\"seed_focus_probe\",\"per_seed_recipe_probe\"]}";
+    task.output_schema_json =
+        "{\"required\":[\"agent\",\"interventions\",\"seed_strategies\"]}";
+    task.budget_sec = budget_sec;
+    tasks.push_back(std::move(task));
+  }
+  return tasks;
+}
+
+std::vector<AgentDecision> run_agent_tasks(IModelGateway& gateway,
+                                           const std::string& run_id,
+                                           const std::string& plateau_id,
+                                           const std::vector<AgentTask>& tasks) {
+  std::vector<AgentDecision> decisions;
+  for (const auto& task : tasks) {
+    ModelRequest request;
+    request.agent_name = task.agent_name;
+    request.system_prompt =
+        "You are a FuzzPilot model-backed agent. Return valid compact JSON only.";
+    request.user_context_json = agent_task_json(task);
+    request.output_schema_json = task.output_schema_json;
+    request.timeout_ms = task.timeout_ms;
+    request.max_output_tokens = 1024;
+
+    AgentDecision decision;
+    decision.id = make_id("agent_decision");
+    decision.run_id = run_id;
+    decision.plateau_id = plateau_id;
+    decision.agent = task.agent_name;
+    decision.task_json = agent_task_json(task);
+    decision.model_response = gateway.complete_json(request);
+    decision.proposal_json = decision.model_response.response_json;
+    decision.created_ts = static_cast<uint64_t>(std::time(nullptr));
+    decisions.push_back(std::move(decision));
+  }
+  return decisions;
+}
+
+std::string agent_task_json(const AgentTask& task) {
+  std::ostringstream out;
+  out << "{";
+  out << "\"task_id\":\"" << json_escape(task.task_id) << "\",";
+  out << "\"agent_name\":\"" << json_escape(task.agent_name) << "\",";
+  out << "\"objective\":\"" << json_escape(task.objective) << "\",";
+  out << "\"blackboard_slice\":" << (task.blackboard_slice_json.empty() ? "{}" : task.blackboard_slice_json) << ",";
+  out << "\"action_schema\":" << (task.action_schema_json.empty() ? "{}" : task.action_schema_json) << ",";
+  out << "\"output_schema\":" << (task.output_schema_json.empty() ? "{}" : task.output_schema_json) << ",";
+  out << "\"budget_sec\":" << task.budget_sec << ",";
+  out << "\"timeout_ms\":" << task.timeout_ms;
+  out << "}";
+  return out.str();
+}
+
+std::string agent_decision_json(const AgentDecision& decision) {
+  std::ostringstream out;
+  out << "{";
+  out << "\"id\":\"" << json_escape(decision.id) << "\",";
+  out << "\"run_id\":\"" << json_escape(decision.run_id) << "\",";
+  out << "\"plateau_id\":\"" << json_escape(decision.plateau_id) << "\",";
+  out << "\"agent\":\"" << json_escape(decision.agent) << "\",";
+  out << "\"provider\":\"" << json_escape(decision.model_response.provider) << "\",";
+  out << "\"model\":\"" << json_escape(decision.model_response.model) << "\",";
+  out << "\"context_hash\":\"" << json_escape(decision.model_response.context_hash) << "\",";
+  out << "\"response_hash\":\"" << json_escape(decision.model_response.response_hash) << "\",";
+  out << "\"latency_ms\":" << decision.model_response.latency_ms << ",";
+  out << "\"schema_valid\":" << (decision.model_response.schema_valid ? "true" : "false") << ",";
+  out << "\"fallback_used\":" << (decision.fallback_used ? "true" : "false") << ",";
+  out << "\"proposal\":" << (decision.proposal_json.empty() ? "{}" : decision.proposal_json);
+  out << "}";
+  return out.str();
+}
+
+}  // namespace fuzzpilot
+
