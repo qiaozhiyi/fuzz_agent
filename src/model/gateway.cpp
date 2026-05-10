@@ -178,7 +178,7 @@ ModelResponse FakeModelGateway::complete_json(const ModelRequest& request) {
 
   response.response_json =
       std::string("{\"agent\":\"") + request.agent_name +
-      "\",\"status\":\"ok\",\"interventions\":[{\"action\":\"model_probe\","
+      "\",\"status\":\"ok\",\"interventions\":[{\"action\":\"per_seed_recipe_probe\","
       "\"hypothesis\":\"fake model proposal for deterministic smoke test\","
       "\"expected_signal\":\"new_edges\",\"risk\":\"low\"}],"
       "\"seed_strategies\":[{\"selector\":{\"mode\":\"global\"},"

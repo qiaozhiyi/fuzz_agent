@@ -57,6 +57,104 @@ void Database::execute(const std::string& sql) {
   }
 }
 
+void Database::insert_run(const std::string& id,
+                          const std::string& project,
+                          const std::string& target_name,
+                          uint64_t start_ts,
+                          const std::string& status,
+                          const std::string& os,
+                          const std::string& arch,
+                          const std::string& afl_version) {
+  const char* sql =
+      "INSERT OR REPLACE INTO runs (id, project, target_name, start_ts, end_ts, status, os, arch, "
+      "afl_version, target_hash, seed_hash) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, '', '')";
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(sqlite3_errmsg(db_));
+  }
+  bind_text(stmt, 1, id);
+  bind_text(stmt, 2, project);
+  bind_text(stmt, 3, target_name);
+  sqlite3_bind_int64(stmt, 4, static_cast<sqlite3_int64>(start_ts));
+  bind_text(stmt, 5, status);
+  bind_text(stmt, 6, os);
+  bind_text(stmt, 7, arch);
+  bind_text(stmt, 8, afl_version);
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    std::string error = sqlite3_errmsg(db_);
+    sqlite3_finalize(stmt);
+    throw std::runtime_error(error);
+  }
+  sqlite3_finalize(stmt);
+}
+
+void Database::finish_run(const std::string& id, uint64_t end_ts, const std::string& status) {
+  const char* sql = "UPDATE runs SET end_ts = ?, status = ? WHERE id = ?";
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(sqlite3_errmsg(db_));
+  }
+  sqlite3_bind_int64(stmt, 1, static_cast<sqlite3_int64>(end_ts));
+  bind_text(stmt, 2, status);
+  bind_text(stmt, 3, id);
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    std::string error = sqlite3_errmsg(db_);
+    sqlite3_finalize(stmt);
+    throw std::runtime_error(error);
+  }
+  sqlite3_finalize(stmt);
+}
+
+void Database::insert_campaign(const std::string& id,
+                               const std::string& run_id,
+                               const std::string& type,
+                               const std::string& parent_campaign_id,
+                               const std::string& intervention_id,
+                               const std::filesystem::path& output_dir,
+                               uint64_t start_ts,
+                               uint64_t budget_sec,
+                               const std::string& status) {
+  const char* sql =
+      "INSERT OR REPLACE INTO campaigns (id, run_id, type, parent_campaign_id, intervention_id, "
+      "output_dir, start_ts, end_ts, budget_sec, status) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)";
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(sqlite3_errmsg(db_));
+  }
+  bind_text(stmt, 1, id);
+  bind_text(stmt, 2, run_id);
+  bind_text(stmt, 3, type);
+  bind_text(stmt, 4, parent_campaign_id);
+  bind_text(stmt, 5, intervention_id);
+  bind_text(stmt, 6, output_dir.string());
+  sqlite3_bind_int64(stmt, 7, static_cast<sqlite3_int64>(start_ts));
+  sqlite3_bind_int64(stmt, 8, static_cast<sqlite3_int64>(budget_sec));
+  bind_text(stmt, 9, status);
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    std::string error = sqlite3_errmsg(db_);
+    sqlite3_finalize(stmt);
+    throw std::runtime_error(error);
+  }
+  sqlite3_finalize(stmt);
+}
+
+void Database::finish_campaign(const std::string& id, uint64_t end_ts, const std::string& status) {
+  const char* sql = "UPDATE campaigns SET end_ts = ?, status = ? WHERE id = ?";
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(sqlite3_errmsg(db_));
+  }
+  sqlite3_bind_int64(stmt, 1, static_cast<sqlite3_int64>(end_ts));
+  bind_text(stmt, 2, status);
+  bind_text(stmt, 3, id);
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    std::string error = sqlite3_errmsg(db_);
+    sqlite3_finalize(stmt);
+    throw std::runtime_error(error);
+  }
+  sqlite3_finalize(stmt);
+}
+
 void Database::insert_telemetry(const std::string& campaign_id, const AflStats& stats) {
   const char* sql =
       "INSERT INTO telemetry (campaign_id, ts, execs_done, execs_per_sec, paths_total, "
@@ -164,6 +262,44 @@ void Database::insert_agent_decision(const AgentDecision& decision) {
   bind_text(stmt, 13, decision.model_response.error);
   bind_text(stmt, 14, decision.proposal_json);
   sqlite3_bind_int64(stmt, 15, static_cast<sqlite3_int64>(decision.created_ts));
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    std::string error = sqlite3_errmsg(db_);
+    sqlite3_finalize(stmt);
+    throw std::runtime_error(error);
+  }
+  sqlite3_finalize(stmt);
+}
+
+void Database::insert_agent_memory(const std::string& id,
+                                   const std::string& run_id,
+                                   const std::string& target_name,
+                                   const std::string& agent,
+                                   const std::string& memory_type,
+                                   const std::string& key,
+                                   const std::string& value_json,
+                                   const std::string& evidence_json,
+                                   double reward,
+                                   double confidence,
+                                   uint64_t updated_ts) {
+  const char* sql =
+      "INSERT OR REPLACE INTO agent_memory (id, run_id, target_name, agent, memory_type, key, "
+      "value_json, evidence_json, reward, confidence, updated_ts) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(sqlite3_errmsg(db_));
+  }
+  bind_text(stmt, 1, id);
+  bind_text(stmt, 2, run_id);
+  bind_text(stmt, 3, target_name);
+  bind_text(stmt, 4, agent);
+  bind_text(stmt, 5, memory_type);
+  bind_text(stmt, 6, key);
+  bind_text(stmt, 7, value_json);
+  bind_text(stmt, 8, evidence_json);
+  sqlite3_bind_double(stmt, 9, reward);
+  sqlite3_bind_double(stmt, 10, confidence);
+  sqlite3_bind_int64(stmt, 11, static_cast<sqlite3_int64>(updated_ts));
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     std::string error = sqlite3_errmsg(db_);
     sqlite3_finalize(stmt);

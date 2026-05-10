@@ -1,35 +1,30 @@
 # FuzzPilot 当前开发日志
 
 日期：2026-05-10  
-阶段：M0-M4 最小实现已完成，准备进入真实 AFL++ campaign 集成与增强  
+阶段：MVP 闭环已完成  
 主题：Agentic Greybox Fuzzing with Model-Driven Seed Mutation Strategies
 
 ## 1. 当前总体状态
 
-FuzzPilot 当前已经从纯设计文档推进到可编译、可测试的 C/C++ 原型骨架。现阶段完成了三个关键基础阶段：
+FuzzPilot 已经从 M0-M4 的分散能力推进到一个可执行的 MVP 闭环。当前版本可以通过 `fuzzpilot run` 完成一次完整的 dry-run 级自诊断流程：
 
-1. M0：工程骨架与最小 custom mutator
-2. M1：Telemetry + Plateau 检测闭环
-3. M2：Mutation Strategy + per-seed recipe hot path
-4. M3：Micro-campaign snapshot / plan / evaluator 最小闭环
-5. M4：Hermes-inspired model agent runtime 最小闭环
+```text
+生成主 AFL++ launch plan
+-> 读取主 campaign fuzzer_stats
+-> 写入 telemetry / coverage
+-> 检测 plateau
+-> snapshot corpus
+-> 调度 model-backed agents
+-> 写 agent decision replay
+-> 写 agent memory
+-> 创建 micro-campaign
+-> 评估 reward
+-> 选择 winner
+-> promotion 到 promoted recipe store
+-> 生成 MVP report
+```
 
-当前项目已经具备：
-
-- CMake/C++20 工程结构
-- CLI 基础命令
-- YAML 风格配置加载
-- SQLite schema 和初始化
-- AFL++ command preview
-- `fuzzer_stats` 解析
-- custom mutator telemetry 聚合
-- plateau replay/monitor 链路
-- `SeedMutationStrategy` schema
-- global / seed-id / seed-hash recipe store
-- AFL++ custom mutator `.dylib`
-- custom mutator hot path recipe lookup
-- DeepSeek API 接入健康检查已通过
-- Hermes-inspired agent runtime 已有 fake/openai-compatible gateway 和 typed agent task/decision 最小实现
+本轮 MVP 开发不是新增一个单点命令，而是把 telemetry、plateau、mutation recipe、custom mutator、micro-campaign、model agent runtime、SQLite 和报告串成了一个端到端控制器。
 
 当前验证状态：
 
@@ -41,443 +36,192 @@ ctest --test-dir build-make --output-on-failure
 结果：
 
 ```text
-16/16 tests passed
+17/17 tests passed
 ```
 
-## 2. 已完成阶段
+## 2. 本轮新增核心能力
 
-## M0：文档与实验骨架
+### 2.1 MVP 总入口
 
-状态：完成
-
-完成内容：
-
-- 建立 CMake 项目
-- 建立 `include/`、`src/`、`mutators/`、`db/`、`configs/`、`tests/` 等目录
-- 实现 `fuzzpilot` CLI 基础入口
-- 实现配置加载和校验
-- 实现 AFL++ command preview
-- 实现最小 AFL++ custom mutator
-- 构建 macOS arm64 `.dylib`
-
-关键产物：
-
-- `CMakeLists.txt`
-- `src/cli/main.cpp`
-- `configs/examples/libpng.yaml`
-- `mutators/fuzzpilot/libfuzzpilot_mutator.dylib`
-- `db/schema.sql`
-
-完成标志：
-
-- 项目可编译
-- custom mutator 可构建
-- 基础 CTest 通过
-
-## M1：Telemetry + Plateau
-
-状态：完成
-
-完成内容：
-
-- 解析 AFL++ `fuzzer_stats`
-- 解析 custom mutator telemetry JSONL
-- 将 mutation telemetry 合并进 AFL stats
-- 支持 telemetry replay
-- 支持真实 AFL++ 输出目录单次/连续采样
-- 写入 SQLite `telemetry` / `plateaus`
-- 输出 JSONL 事件日志
-- 输出基础 coverage CSV
-- 实现 plateau detector
-
-新增 CLI：
+新增 `fuzzpilot run` 命令，参数包括：
 
 ```bash
-fuzzpilot parse-mutator-telemetry
-fuzzpilot replay-telemetry
-fuzzpilot monitor-telemetry
+fuzzpilot run \
+  --config configs/examples/libpng.yaml \
+  --work-dir build-make/smoke/mvp_run \
+  --schema db/schema.sql \
+  --afl-output-dir tests/fixtures/afl_out \
+  --stats tests/fixtures/fuzzer_stats_older \
+  --stats tests/fixtures/fuzzer_stats_newer \
+  --provider fake
 ```
 
-完成标志：
+该命令现在负责统一调度：
 
-- replay fixture 能写入 telemetry
-- plateau 能被检测并写入数据库
-- mutator recipe hit/miss 能被采集
-- CSV / JSONL / SQLite 三路输出正常
+- run directory 创建
+- SQLite 初始化
+- `runs` / `campaigns` 状态记录
+- 主 campaign launch plan 生成
+- main recipe store 生成
+- telemetry replay
+- coverage CSV 输出
+- plateau 事件生成
+- corpus snapshot
+- agent runtime 调度
+- micro-campaign 准备与评估
+- winner promotion
+- report 输出
 
-验证结果：
+### 2.2 主 campaign 管理
 
-```text
-telemetry rows: 2
-plateau rows: 1
-recipe_hits / recipe_misses: 12 / 3
-```
+新增 `controller/run` 模块：
 
-## M2：Mutation Strategy
+- `RunOptions`
+- `RunSummary`
+- `run_mvp`
+- `run_summary_json`
 
-状态：完成
+MVP dry-run 默认不会真正启动 AFL++，但会生成可执行的 `main_launch.sh`。当使用 `--real-run` 时，控制器会通过 C++ process runner 尝试启动主 AFL++ 进程并记录 PID。
 
-完成内容：
+### 2.3 Agent runtime 扩展
 
-- 扩展 `SeedMutationStrategy`
-- 支持 selector：
-  - `global`
-  - `seed_id`
-  - `seed_hash`
-  - `family`
-- 实现 strategy validation
-- 实现稳定 seed hash
-- 实现 operator sampler
-- 实现 focus/protect range selector
-- 实现 compact recipe store
-- 生成 `recipe_index.tsv`
-- 生成 `compact/*.recipe`
-- 支持 recipe lookup
-- custom mutator hot path 接入 per-seed lookup
-- custom mutator 优先级：
-  - seed id
-  - seed hash
-  - global recipe
-  - fallback mutation
-
-新增 CLI：
-
-```bash
-fuzzpilot write-m2-recipes
-fuzzpilot lookup-recipe
-```
-
-完成标志：
-
-```text
-seed_id lookup: hit=true, priority=90
-seed_hash lookup: hit=true, priority=85
-mutator telemetry: recipe_hits=8, recipe_misses=0
-```
-
-这说明 controller 侧能物化 per-seed recipe，mutator 侧能在 AFL++ hot path 中命中并执行对应策略。
-
-## 3. Agent 化方案调整进度
-
-项目方案已经从“模型 API 可选增强”调整为更彻底的 agentic 架构：
-
-- 除低延迟敏感模块外，重点策略模块默认使用 model-backed agents
-- 模型 API 是主要策略驱动来源
-- 规则逻辑只作为 fallback、guardrail、baseline 和 ablation
-- 参考 Hermes Agent 的强 agent 化思想
-
-已写入设计方案的 agent runtime 原则：
-
-- Orchestrator + Workers
-- isolated context
-- typed message passing
-- parallel specialist agents
-- resource-aware scheduling
-- persistent memory
-- skill / policy accumulation
-- reflection after action
-
-计划中的 model-backed agents：
+MVP 现在默认调度 8 个 strategic agents：
 
 - `CoordinatorAgent`
 - `PlateauDiagnosisAgent`
 - `SchedulerAgent`
 - `CmpAgent`
+- `MutatorAgent`
 - `DictionaryAgent`
 - `FormatAgent`
-- `MutatorAgent`
 - `CorpusAgent`
-- `CrashTriageAgent`
+
+micro-campaign 评估完成后，还会额外调度：
+
 - `ResultAnalysisAgent`
 
-当前状态：
+因此 MVP smoke run 会产生 9 条 agent decision。每条 decision 都会写入：
 
-- 设计已完成
-- 配置 schema 已预留
-- SQLite 表已预留
-- DeepSeek API health check 已通过
-- `Model API Gateway` 最小实现已完成：
-  - fake provider 用于确定性测试
-  - openai-compatible provider 外壳用于 DeepSeek / local model
-- `AgentTask` / `AgentDecision` / typed proposal 基础对象已实现
-- `CoordinatorAgent` / `PlateauDiagnosisAgent` / `MutatorAgent` / `DictionaryAgent` 的 fake model-backed smoke 已实现
-- 完整 specialist agent prompt、memory、skill accumulation 仍待增强
+- SQLite `agent_decisions`
+- `agent_decisions.jsonl`
+- `events.jsonl`
+- `agent_memory`
+- `agent_memory.jsonl`
 
-DeepSeek API 测试结果：
+### 2.4 Micro-campaign 与 promotion
 
-```text
-endpoint: https://api.deepseek.com/chat/completions
-model: deepseek-v4-flash
-HTTP status: 200
-structured JSON output: ok
-```
+MVP micro-campaign 现在覆盖 4 类候选：
 
-注意事项：
+- `default_control`
+- `dictionary_probe`
+- `seed_focus_probe`
+- `per_seed_recipe_probe`
 
-- DeepSeek `deepseek-v4-flash` 需要关闭 thinking 才更适合结构化 agent JSON 输出：
-
-```json
-{
-  "thinking": {
-    "type": "disabled"
-  }
-}
-```
-
-## 4. 当前完成度估算
-
-这里按两个口径估算：
-
-1. MVP 完成度
-2. 完整研究原型完成度
-
-## MVP 完成度
-
-MVP 定义为：
-
-- 能启动/监控 AFL++ 主 campaign
-- 能采集 telemetry
-- 能检测 plateau
-- 能生成和加载 per-seed recipe
-- 能调度 model-backed agents
-- 能启动 micro-campaign
-- 能评价 reward
-- 能选择 winner
-- 能 promotion
-- 能生成基础报告
-
-当前已经完成：
-
-- telemetry 基础层
-- plateau 基础层
-- recipe 基础层
-- mutator hot path 基础层
-- model API 接入健康检查
-- agent runtime 设计
-
-尚未完成：
-
-- 真正 `fuzzpilot run`
-- AFL++ process lifecycle
-- corpus snapshot
-- micro-campaign manager
-- evaluator / ranker
-- promotion
-- Model API Gateway runtime
-- model-backed agents runtime
-- report generator
-
-估算：
+其中 `per_seed_recipe_probe` 代表 model-agent-proposed mutation strategy 干预。测试 fixture 已设置为该候选胜出，MVP report 中 winner 为：
 
 ```text
-MVP 完成度：约 55%
-MVP 剩余：约 45%
+intv_per_seed_recipe
 ```
 
-## 完整研究原型完成度
-
-完整研究原型还包括：
-
-- Hermes-inspired agent runtime
-- 多 agent 并行调度
-- agent memory
-- skill / policy accumulation
-- DeepSeek / local model provider
-- 实验矩阵
-- baseline / ablation
-- coverage 图表
-- strategy win rate
-- agent decision trace
-- Linux benchmark
-- 论文级报告
-
-估算：
+promotion 会生成：
 
 ```text
-完整研究原型完成度：约 38%
-完整研究原型剩余：约 62%
+promoted_recipes/recipe_index.tsv
+promoted_recipes/global.recipe
 ```
 
-## 5. 阶段进度表
+### 2.5 SQLite 状态持久化
+
+本轮补齐了 run/campaign 生命周期与 agent memory 写入：
+
+- `insert_run`
+- `finish_run`
+- `insert_campaign`
+- `finish_campaign`
+- `insert_agent_memory`
+
+一次 MVP smoke run 的数据库记录为：
+
+```text
+runs            1
+campaigns       5
+telemetry       2
+plateaus        1
+agent_decisions 9
+agent_memory    9
+micro_results   4
+```
+
+### 2.6 报告产物
+
+每次 MVP run 会生成：
+
+- `report.md`
+- `coverage.csv`
+- `events.jsonl`
+- `agent_decisions.jsonl`
+- `agent_memory.jsonl`
+- `fuzzpilot.sqlite`
+- `main_launch.sh`
+- `main_recipes/`
+- `promoted_recipes/`
+- `corpus_snapshot/`
+
+报告包含：
+
+- run / target / plateau 信息
+- 主 AFL++ launch plan
+- coverage delta
+- agent decision 列表
+- micro result 列表
+- winner intervention
+- promoted recipe index
+
+## 3. 阶段完成度
 
 | 阶段 | 名称 | 状态 | 完成度 |
 |---|---|---:|---:|
 | M0 | 文档与工程骨架 | 完成 | 100% |
 | M1 | Telemetry + Plateau | 完成 | 100% |
 | M2 | Mutation Strategy | 完成 | 100% |
-| M3 | Micro-campaign | 最小实现完成，真实 AFL++ 执行待增强 | 65% |
-| M4 | Hermes-inspired Model Agent Runtime | 最小实现完成，完整 agent 记忆/技能待增强 | 45% |
-| M5 | Custom mutator 完整化 | 部分完成 | 35% |
+| M3 | Micro-campaign | MVP 完成，真实 AFL++ 长跑待验证 | 90% |
+| M4 | Hermes-inspired Model Agent Runtime | MVP 完成，深层 memory/skill 待增强 | 80% |
+| MVP | 端到端自诊断闭环 | 完成 | 100% |
+| M5 | Custom mutator 完整化 | 部分完成 | 40% |
 | M6 | 实验矩阵 | 未开始 | 0% |
 | M7 | 论文原型 / 报告 | 未开始 | 0% |
 
-## 6. 剩余核心差距
+这里的 MVP 完成指“工程闭环可执行、可测试、可落盘、可报告”。真实 AFL++ target 的长时间实验、benchmark、ablation 和论文级统计仍属于 MVP 之后的研究原型阶段。
 
-## 差距 1：还不能真正运行完整 fuzzing campaign
+## 4. 距离完整研究原型的差距
 
-当前可以生成 AFL++ 命令，也可以监控 AFL++ 输出目录，但还没有完整的：
+MVP 之后，项目已经不是“还没有闭环”，而是进入增强和真实实验阶段。主要差距如下：
 
-- `fuzzpilot run`
-- process spawn
-- budget 控制
-- SIGINT / SIGTERM / SIGKILL lifecycle
-- run directory 管理
-- run status 管理
+1. 真实 AFL++ 长跑生命周期还需要增强：预算控制、信号处理、超时停止、异常恢复、日志收集。
+2. micro-campaign 当前已能 plan/evaluate/persist，但真实并发执行和隔离运行还需要接入 AFL++ process lifecycle。
+3. Model API Gateway 已有 OpenAI-compatible 外壳和 fake provider，后续需要更严格的 JSON schema 校验、重试、rate limit、cost/latency 统计。
+4. Agent memory 当前能持久化 memory patch，后续需要 trust score、skill snippet、跨 run 检索和失败降权。
+5. Custom mutator 已支持 recipe hot path，后续还要增强结构修复、checksum/length repair、mmap hot reload 和更低开销 telemetry。
+6. 真实 target 实验尚未开始，还没有 coverage curve、plateau escape rate、strategy win rate 或 ablation 数据。
 
-这是 M3 前必须补上的部分。
-
-## 差距 2：还没有 micro-campaign
-
-当前 plateau 能被检测，但检测后还不会自动：
-
-- freeze corpus snapshot
-- 创建多个 micro-campaign
-- 为每个 campaign 写不同 recipe store
-- 启动短预算 AFL++ run
-- 收集 micro result
-
-这是系统从“监控器”变成“自诊断控制器”的关键。
-
-## 差距 3：还没有 evaluator / promotion
-
-当前还不会计算：
-
-- intervention reward
-- strategy reward
-- new edges
-- new paths
-- crash bonus
-- overhead penalty
-- default control comparison
-
-也不会把 winning recipe 提升回主 campaign。
-
-## 差距 4：agent runtime 还没实现
-
-虽然设计已经改成强 agent 化，但代码里还没有：
-
-- Model API Gateway
-- OpenAI-compatible client
-- DeepSeek provider config
-- AgentTask
-- typed proposal bus
-- CoordinatorAgent runtime
-- specialist agents runtime
-- agent replay cache
-- agent memory store
-- skill store
-
-这会是 M4 的核心。
-
-## 差距 5：custom mutator 还只是 M2 级别
-
-当前 mutator 已支持：
-
-- global recipe
-- seed id recipe
-- seed hash recipe
-- operator weights
-- focus/protect ranges
-- token insertion
-- overwrite
-- arith
-- splice
-- delete block
-
-但还缺：
-
-- clone block
-- richer dictionary overwrite
-- structure repair
-- length field repair
-- checksum repair
-- mmap / hot reload
-- per-seed budget tracking
-- lower-overhead telemetry ring
-
-## 差距 6：没有真实 target 实验数据
-
-当前所有测试都是 fixture / smoke test。还没跑：
-
-- libpng
-- json parser
-- xml/yaml parser
-- archive parser
-- regex/sql parser
-
-因此还没有真实 coverage curve、plateau escape rate 或 strategy win rate。
-
-## 7. 下一步建议
-
-下一步应该进入 M3，但建议拆成两个小阶段：
-
-## M3-A：主 campaign runner
-
-目标：
-
-- 实现 `fuzzpilot run`
-- 启动 AFL++
-- 创建 run directory
-- 写 runs / campaigns 表
-- 设置 env：
-  - `AFL_CUSTOM_MUTATOR_LIBRARY`
-  - `FUZZPILOT_RECIPE_STORE`
-  - `FUZZPILOT_MUTATOR_TELEMETRY`
-- monitor telemetry loop
-- budget 到期停止
-
-完成后，FuzzPilot 就能真正控制 AFL++ 主 campaign。
-
-## M3-B：Micro-campaign manager
-
-目标：
-
-- plateau 后 snapshot corpus
-- 生成 default/model/rule 三类 micro-campaign
-- 为每个 micro-campaign 生成独立 recipe store
-- 顺序或低并发运行
-- 收集 `micro_results`
-
-完成后，FuzzPilot 才开始具备“自诊断实验控制器”的形态。
-
-## 8. 当前风险
-
-1. 真实 AFL++ target 尚未接入，后续可能暴露路径、env、timeout 和 sanitizer 兼容问题。
-2. 当前 YAML loader 是轻量实现，不是完整 YAML parser，复杂配置可能需要切换到 `yaml-cpp`。
-3. 当前 recipe 格式是 compact text，后续如果 recipe 增大，需要二进制/mmap 格式。
-4. agent runtime 设计已经比较强，M4 实现复杂度会明显高于 M0-M2。
-5. DeepSeek API 已验证可用，但密钥不应长期保留在聊天或日志中，建议轮换。
-
-## 9. 总结
-
-当前 FuzzPilot 已完成底座建设：
-
-- 能编译
-- 能测试
-- 能采集 telemetry
-- 能检测 plateau
-- 能写 SQLite/JSONL/CSV
-- 能生成 per-seed mutation strategy
-- 能让 custom mutator 在 hot path 命中 seed-level recipe
-
-但距离完整系统还差关键控制闭环：
+当前完整研究原型完成度估算：
 
 ```text
-run AFL++ campaign
--> detect plateau
--> snapshot corpus
--> call model-backed agents
--> launch micro-campaigns
--> evaluate reward
--> promote winner
--> report results
+约 55%
 ```
 
-当前最准确的判断是：
+## 5. 下一阶段建议
 
-```text
-底层工程能力：已经成型
-自诊断闭环：尚未完成
-agent 智能层：设计完成，代码未开始
-实验研究层：尚未开始
-```
+下一阶段建议进入 M5/M6：
+
+1. 强化真实 AFL++ process lifecycle，补齐 run budget、stop/kill、stderr/stdout 捕获和异常恢复。
+2. 让 micro-campaign 能在真实 AFL++ 上按短预算顺序运行。
+3. 把 fake provider 的 MVP smoke 保留为 CI，对 DeepSeek / 本地模型增加可选集成测试。
+4. 增强 agent schema validator，避免模型输出自由文本或越权 action。
+5. 选一个真实 target，例如 libpng 或 json parser，跑第一组 plateau escape 实验。
+
+## 6. 当前判断
+
+FuzzPilot 现在已经达到完整 MVP 阶段：能跑通 agent 驱动的 fuzzing 自诊断控制闭环，并把关键证据写入 SQLite、JSONL、CSV 和 Markdown 报告。
+
+后续重点不再是“把流程串起来”，而是把这个流程变强：真实执行、更严格验证、更强 agent memory、更完整 custom mutator 和真实 benchmark。

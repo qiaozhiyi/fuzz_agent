@@ -1,5 +1,6 @@
 #include "fuzzpilot/config.hpp"
 #include "fuzzpilot/agents/agent_runtime.hpp"
+#include "fuzzpilot/controller/run.hpp"
 #include "fuzzpilot/env.hpp"
 #include "fuzzpilot/interventions/intervention.hpp"
 #include "fuzzpilot/micro/evaluator.hpp"
@@ -30,6 +31,7 @@ void usage() {
       << "fuzzpilot " << kVersion << "\n"
       << "commands:\n"
       << "  init [--root PATH]\n"
+      << "  run --config PATH --stats PATH... [--afl-output-dir PATH] [--micro-stats PATH...]\n"
       << "  check-config --config PATH [--runtime]\n"
       << "  env --config PATH\n"
       << "  afl-command --config PATH --output-dir PATH [--recipe-store PATH]\n"
@@ -200,6 +202,34 @@ int main(int argc, char** argv) {
         std::filesystem::create_directories(root / dir);
       }
       std::cout << "initialized fuzzpilot layout under " << root << "\n";
+      return 0;
+    }
+
+    if (command == "run") {
+      fuzzpilot::RunOptions options;
+      options.config_path = arg_value(args, "--config");
+      options.work_dir = arg_value(args, "--work-dir", "work");
+      options.db_path = arg_value(args, "--db");
+      options.schema_path = arg_value(args, "--schema", "db/schema.sql");
+      options.main_afl_output_dir = arg_value(args, "--afl-output-dir");
+      for (const auto& path : arg_values(args, "--stats")) {
+        options.main_stats_paths.emplace_back(path);
+      }
+      for (const auto& path : arg_values(args, "--micro-stats")) {
+        options.micro_stats_paths.emplace_back(path);
+      }
+      options.dry_run = !has_arg(args, "--real-run");
+      options.model_provider = arg_value(args, "--provider", "fake");
+      options.model_endpoint = arg_value(args, "--endpoint",
+                                         "http://127.0.0.1:11434/v1/chat/completions");
+      options.model_name = arg_value(args, "--model", "local-fuzzpilot-policy");
+      options.api_key_env = arg_value(args, "--api-key-env", "FUZZPILOT_MODEL_API_KEY");
+      require_value(options.config_path.string(), "--config");
+      if (options.main_stats_paths.empty()) {
+        throw std::runtime_error("missing required argument: --stats");
+      }
+      const auto summary = fuzzpilot::run_mvp(options);
+      std::cout << fuzzpilot::run_summary_json(summary) << "\n";
       return 0;
     }
 

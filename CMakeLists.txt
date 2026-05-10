@@ -15,6 +15,7 @@ find_package(SQLite3 REQUIRED)
 
 add_library(fuzzpilot_core STATIC
   src/config.cpp
+  src/controller/run.cpp
   src/env.cpp
   src/runner/afl_runner.cpp
   src/runner/process_posix.cpp
@@ -149,3 +150,16 @@ add_test(NAME fuzzpilot_m4_run_model_agents
     --run-id run_m4_smoke
     --plateau-id plateau_m4_smoke
     --blackboard-json "{\"plateau\":{\"reason\":\"no_new_paths\"}}")
+add_test(NAME fuzzpilot_mvp_run_dry
+  COMMAND fuzzpilot run
+    --config ${CMAKE_CURRENT_SOURCE_DIR}/configs/examples/libpng.yaml
+    --work-dir ${CMAKE_CURRENT_BINARY_DIR}/smoke/mvp_run
+    --schema ${CMAKE_CURRENT_SOURCE_DIR}/db/schema.sql
+    --afl-output-dir ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/afl_out
+    --stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fuzzer_stats_older
+    --stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fuzzer_stats_newer
+    --micro-stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fuzzer_stats_micro_control
+    --micro-stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fuzzer_stats_micro_dictionary
+    --micro-stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fuzzer_stats_micro_seed_focus
+    --micro-stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fuzzer_stats_micro_winner
+    --provider fake)

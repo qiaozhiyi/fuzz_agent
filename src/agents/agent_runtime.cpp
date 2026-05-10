@@ -21,6 +21,17 @@ std::string json_escape(const std::string& value) {
   return out.str();
 }
 
+std::string json_value_or_raw(const std::string& value) {
+  if (value.empty()) {
+    return "{}";
+  }
+  const auto first = value.find_first_not_of(" \t\r\n");
+  if (first != std::string::npos && (value[first] == '{' || value[first] == '[')) {
+    return value;
+  }
+  return std::string("{\"raw\":\"") + json_escape(value) + "\"}";
+}
+
 }  // namespace
 
 std::vector<AgentTask> make_default_agent_tasks(const std::string& plateau_id,
@@ -29,8 +40,12 @@ std::vector<AgentTask> make_default_agent_tasks(const std::string& plateau_id,
   const std::vector<std::string> agents = {
       "CoordinatorAgent",
       "PlateauDiagnosisAgent",
+      "SchedulerAgent",
+      "CmpAgent",
       "MutatorAgent",
       "DictionaryAgent",
+      "FormatAgent",
+      "CorpusAgent",
   };
   std::vector<AgentTask> tasks;
   for (const auto& agent : agents) {
@@ -108,10 +123,9 @@ std::string agent_decision_json(const AgentDecision& decision) {
   out << "\"latency_ms\":" << decision.model_response.latency_ms << ",";
   out << "\"schema_valid\":" << (decision.model_response.schema_valid ? "true" : "false") << ",";
   out << "\"fallback_used\":" << (decision.fallback_used ? "true" : "false") << ",";
-  out << "\"proposal\":" << (decision.proposal_json.empty() ? "{}" : decision.proposal_json);
+  out << "\"proposal\":" << json_value_or_raw(decision.proposal_json);
   out << "}";
   return out.str();
 }
 
 }  // namespace fuzzpilot
-

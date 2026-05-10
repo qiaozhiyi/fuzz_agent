@@ -38,6 +38,16 @@ std::vector<Intervention> default_v0_interventions(int budget_sec) {
           .risk = "medium",
           .reproducible = true,
       },
+      {
+          .id = make_id("intv_per_seed_recipe"),
+          .agent = "MutatorAgent",
+          .hypothesis = "model-proposed per-seed mutation recipes may unlock narrow parser states",
+          .action = "per_seed_recipe_probe",
+          .params = {{"budget_sec", std::to_string(budget_sec)}},
+          .expected_signal = "new_edges",
+          .risk = "medium",
+          .reproducible = true,
+      },
   };
 }
 
@@ -64,4 +74,3 @@ std::string intervention_json(const Intervention& intervention) {
 }
 
 }  // namespace fuzzpilot
-
