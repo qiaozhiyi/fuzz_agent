@@ -6,4 +6,15 @@ work/
 *.sqlite-wal
 *.log
 .DS_Store
-
+work_real_fuzz/
+test_open.py
+ida_context.json
+ida_out.json
+*.dict
+experiments/targets/*/vuln
+experiments/targets/*/vuln.i64
+experiments/targets/*/*.dSYM/
+**/out/
+**/crashes/
+**/hangs/
+**/queue/

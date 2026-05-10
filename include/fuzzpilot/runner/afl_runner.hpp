@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "fuzzpilot/micro/manager.hpp"
+
 namespace fuzzpilot {
 
 struct AflLaunchSpec {
@@ -19,6 +21,10 @@ struct AflLaunchSpec {
 AflLaunchSpec build_main_afl_spec(const AppConfig& config,
                                   const std::filesystem::path& output_dir,
                                   const std::filesystem::path& recipe_store);
+
+AflLaunchSpec build_micro_afl_spec(const AppConfig& config,
+                                   const MicroCampaignSpec& micro_spec,
+                                   const std::filesystem::path& dict_override = {});
 
 std::string shell_preview(const AflLaunchSpec& spec);
 

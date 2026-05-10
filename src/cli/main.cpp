@@ -225,8 +225,8 @@ int main(int argc, char** argv) {
       options.model_name = arg_value(args, "--model", "local-fuzzpilot-policy");
       options.api_key_env = arg_value(args, "--api-key-env", "FUZZPILOT_MODEL_API_KEY");
       require_value(options.config_path.string(), "--config");
-      if (options.main_stats_paths.empty()) {
-        throw std::runtime_error("missing required argument: --stats");
+      if (options.dry_run && options.main_stats_paths.empty()) {
+        throw std::runtime_error("missing required argument: --stats (required in dry-run mode)");
       }
       const auto summary = fuzzpilot::run_mvp(options);
       std::cout << fuzzpilot::run_summary_json(summary) << "\n";

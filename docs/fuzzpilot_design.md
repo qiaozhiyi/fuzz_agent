@@ -1794,6 +1794,44 @@ Table 6: overhead
 Table 7: model-agent ablation and replay stability
 ```
 
+## 6.26 静态分析与逆向支持 (Static Analysis Support) 模块
+
+### 职责
+
+在 Fuzzing 陷入平台期时，Agent 往往因为缺少二进制的语义级情报而处于“盲人摸象”状态（如无法得知具体的 Magic Bytes）。本模块负责通过无头模式（Headless Mode）调用专业的静态分析与逆向工程工具，自动化地从二进制文件中抽取关键上下文（如硬编码字符串、复杂比较常数等），并将其作为线索注入到 Blackboard 中，赋予 Agent 真正的逆向分析能力。
+
+### 工具选型与调用：IDA 9.0 idalib (Headless Python)
+
+本系统设计中指定采用 **IDA Pro 9.0+ 提供的 `idalib`** 作为后端静态分析引擎。
+区别于传统的 `idat64 -A -S`，`idalib` 允许我们直接在标准 Python 环境中（通过 `import ida_pro`）以极低开销、原生的方式驱动 IDA 分析引擎，完全剥离了 GUI 且性能极佳。
+
+### 核心工作流
+
+1. **触发时机**：当 `PlateauDetector` 检测到长时间无法突破新路径，且常规微战役策略失效时，触发静态分析流。
+2. **自动化脚本执行**：
+   - 构造并调用独立的 Python 脚本，例如：
+     `python3 scripts/extract_fuzz_context.py target_binary`
+   - 脚本内部直接初始化 IDA 引擎：
+     ```python
+     import ida_pro
+     # 自动生成或加载 .i64 数据库
+     ida_pro.open_database("target_binary", True)
+     ```
+3. **情报抽取 (IDAPython API)**：
+   - **字符串提取**：遍历所有可见的硬编码特征码（如 `"HEAP"`, `"FUZZMAGIC"` 等）。
+   - **CMP 常数提取**：遍历所有的比较指令，提取相关的立即数。
+   - **控制流摘要**：标记拥有大量分支校验的核心校验函数（如 parser 主循环）。
+   - 分析完成后调用 `ida_pro.close_database()`。
+4. **情报注入与 Agent 顿悟**：
+   - 独立 Python 脚本将提取的信息序列化为 JSON 格式并落盘。
+   - FuzzPilot C++ 控制器读取该 JSON，将其挂载进 `Diagnosis Blackboard` 的 `static_analysis_context` 字段中。
+   - 大模型在阅读新的 Blackboard 后，会立刻进行“顿悟”式的诊断推理（例如请求 MutatorAgent 将 `FUZZMAGIC` 加入字典配方进行定点探测）。
+
+### 设计优势
+
+- **突破盲盒限制**：解决纯灰盒 Fuzzing 因缺少字典导致的极低随机变异命中率问题。
+- **贯通自动化闭环**：无需人工介入打开逆向工具找 Magic Bytes，彻底打通“漏洞挖掘与智能逆向”的 Agentic Fuzzing 全链路。
+
 ## 7. Intervention 目录设计
 
 每个 intervention 是一个可序列化对象，包含：

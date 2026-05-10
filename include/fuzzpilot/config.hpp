@@ -90,6 +90,14 @@ struct AgentConfig {
   bool model_format = true;
 };
 
+struct StaticAnalysisConfig {
+  bool enabled = false;
+  std::filesystem::path python_bin = "python3";
+  std::filesystem::path extractor_script = "./scripts/ida_extractor.py";
+  std::filesystem::path ida_dir;  // IDADIR environment variable value
+  int timeout_sec = 60;
+};
+
 struct AppConfig {
   std::string project = "fuzzpilot";
   TargetConfig target;
@@ -99,6 +107,7 @@ struct AppConfig {
   ModelApiConfig model_api;
   AgentRuntimeConfig agent_runtime;
   AgentConfig agents;
+  StaticAnalysisConfig static_analysis;
 };
 
 struct ConfigLoadResult {

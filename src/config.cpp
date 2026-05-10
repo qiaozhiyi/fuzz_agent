@@ -196,6 +196,12 @@ void assign_section(AppConfig& config,
     else if (key == "model_policy") config.agents.model_policy = parse_bool(value);
     else if (key == "model_format") config.agents.model_format = parse_bool(value);
     else if (key == "llm_format") config.agents.model_format = parse_bool(value);
+  } else if (section == "static_analysis") {
+    if (key == "enabled") config.static_analysis.enabled = parse_bool(value);
+    else if (key == "python_bin") config.static_analysis.python_bin = unquote(value);
+    else if (key == "extractor_script") config.static_analysis.extractor_script = unquote(value);
+    else if (key == "ida_dir") config.static_analysis.ida_dir = unquote(value);
+    else if (key == "timeout_sec") config.static_analysis.timeout_sec = parse_int(value, config.static_analysis.timeout_sec);
   }
 }
 
@@ -300,8 +306,8 @@ std::vector<std::string> validate_config(const AppConfig& config, bool check_run
   if (config.target.timeout_ms <= 0) {
     errors.push_back("target.timeout_ms must be positive");
   }
-  if (config.target.memory_mb <= 0) {
-    errors.push_back("target.memory_mb must be positive");
+  if (config.target.memory_mb < 0) {
+    errors.push_back("target.memory_mb must be non-negative");
   }
   if (config.model_api.enabled) {
     if (config.model_api.model.empty()) {

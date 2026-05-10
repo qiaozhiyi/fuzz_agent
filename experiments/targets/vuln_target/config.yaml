@@ -1,0 +1,90 @@
+project: vuln_target_fuzzpilot
+target:
+  name: vuln_fuzzer
+  binary: ./experiments/targets/vuln_target/vuln
+  args: ["@@"]
+  input_dir: ./experiments/targets/vuln_target/seeds
+  dict: ""
+  timeout_ms: 1000
+  memory_mb: 0
+  persistent: false
+  sanitizers: []
+
+afl:
+  afl_fuzz: /opt/homebrew/bin/afl-fuzz
+  afl_showmap: /opt/homebrew/bin/afl-showmap
+  base_env:
+    AFL_SKIP_CPUFREQ: "1"
+    AFL_NO_UI: "1"
+    AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+    AFL_MAP_SIZE: "65536"
+  main_budget_sec: 120
+  plateau_window_sec: 15
+  plateau_min_new_edges: 0
+
+micro_campaign:
+  enabled: true
+  budget_sec: 15
+  max_parallel: 1
+  promote_metric: new_edges
+
+mutation_strategy:
+  enabled: true
+  recipe_store: ./work/recipes
+  refresh_interval_sec: 15
+  default_policy: afl_fallback
+  max_recipes_per_seed: 4
+  recipe_ttl_sec: 900
+  custom_mutator_path: ./build-make/mutators/fuzzpilot/libfuzzpilot_mutator.dylib
+  hot_path_io: compact_recipe
+  agent_controls:
+    operator_weights: true
+    offset_ranges: true
+    protect_ranges: true
+    dictionary_tokens: true
+    splice_candidates: true
+    length_repair: true
+
+model_api:
+  enabled: true
+  required_for_dynamic_decision: true
+  provider: openai_compatible
+  endpoint: https://api.deepseek.com/chat/completions
+  endpoint_env: FUZZPILOT_MODEL_ENDPOINT
+  api_key_env: FUZZPILOT_MODEL_API_KEY
+  model: deepseek-chat
+  timeout_ms: 30000
+  max_output_tokens: 2048
+  temperature: 0.2
+  decision_interval_sec: 120
+  max_candidates_per_plateau: 6
+  require_schema_validation: true
+  record_prompts: true
+  replay_cache: ./work/agent_decisions
+
+agent_runtime:
+  strategic_mode: model_api_required
+  require_model_for_strategic_agents: true
+  rule_fallback_enabled: true
+  max_parallel_model_calls: 2
+  per_agent_timeout_ms: 30000
+  agent_memory_store: ./work/agent_memory
+  skill_store: ./work/agent_skills
+  model_agents:
+    coordinator: true
+    plateau_diagnosis: true
+    scheduler: true
+    cmp: true
+    dictionary: true
+    format: true
+    mutator: true
+    corpus: true
+    crash_triage: true
+    result_analysis: true
+
+static_analysis:
+  enabled: true
+  python_bin: /opt/homebrew/anaconda3/envs/redteam/bin/python
+  extractor_script: ./scripts/ida_extractor.py
+  ida_dir: /Applications/IDA Professional 9.3.app/Contents/macOS
+  timeout_sec: 60
