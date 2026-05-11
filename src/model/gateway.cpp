@@ -1,9 +1,11 @@
 #include "fuzzpilot/model/gateway.hpp"
 
 #include "fuzzpilot/ids.hpp"
+#include "fuzzpilot/runner/process.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -30,31 +32,17 @@ std::string json_escape(const std::string& value) {
   return out.str();
 }
 
-std::string shell_quote(const std::string& value) {
-  std::string out = "'";
-  for (const char c : value) {
-    if (c == '\'') {
-      out += "'\\''";
-    } else {
-      out.push_back(c);
-    }
+bool is_valid_env_name(const std::string& value) {
+  if (value.empty()) {
+    return false;
   }
-  out += "'";
-  return out;
-}
-
-std::string read_all_from_command(const std::string& command) {
-  std::string output;
-  char buffer[4096];
-  FILE* pipe = popen(command.c_str(), "r");
-  if (pipe == nullptr) {
-    return {};
+  const unsigned char first = static_cast<unsigned char>(value.front());
+  if (!(std::isalpha(first) || value.front() == '_')) {
+    return false;
   }
-  while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-    output += buffer;
-  }
-  pclose(pipe);
-  return output;
+  return std::all_of(value.begin() + 1, value.end(), [](unsigned char c) {
+    return std::isalnum(c) || c == '_';
+  });
 }
 
 std::string decode_json_string_at(const std::string& text, std::size_t cursor) {
@@ -120,7 +108,14 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   response.request_id = make_id("model_req");
   response.context_hash = stable_text_hash(request.agent_name + request.user_context_json);
 
-  if (std::getenv(api_key_env_.c_str()) == nullptr) {
+  if (!is_valid_env_name(api_key_env_)) {
+    response.error = "invalid API key environment variable name: " + api_key_env_;
+    response.response_hash = stable_text_hash(response.error);
+    return response;
+  }
+
+  const char* api_key = std::getenv(api_key_env_.c_str());
+  if (api_key == nullptr) {
     response.error = "missing API key environment variable: " + api_key_env_;
     response.response_hash = stable_text_hash(response.error);
     return response;
@@ -144,19 +139,27 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     payload << "}";
   }
 
-  const std::string command =
-      "curl -sS --connect-timeout 10 --max-time " +
-      std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000)) +
-      " -H 'Content-Type: application/json' -H \"Authorization: Bearer $" +
-      api_key_env_ + "\" -d @" + shell_quote(payload_path.string()) + " " +
-      shell_quote(endpoint_) + " 2>&1";
-  const auto raw = read_all_from_command(command);
+  const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
+  const std::vector<std::string> argv = {
+      "curl",
+      "-sS",
+      "--connect-timeout", "10",
+      "--max-time", max_time,
+      "-H", "Content-Type: application/json",
+      "-H", std::string("Authorization: Bearer ") + api_key,
+      "-d", "@" + payload_path.string(),
+      endpoint_,
+  };
+
+  const auto curl = run_process_capture("curl", argv, {}, true);
+  const auto raw = curl.spawned ? curl.output : curl.error;
   std::error_code ec;
   std::filesystem::remove(payload_path, ec);
 
   response.response_json = extract_content_field(raw);
   response.response_hash = stable_text_hash(response.response_json);
-  response.schema_valid = response.response_json.find('{') != std::string::npos &&
+  response.schema_valid = curl.spawned && curl.exited && curl.exit_code == 0 &&
+                          response.response_json.find('{') != std::string::npos &&
                           response.response_json.find('}') != std::string::npos &&
                           raw.find("\"error\"") == std::string::npos;
   if (!response.schema_valid) {
