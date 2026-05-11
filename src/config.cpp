@@ -16,6 +16,15 @@ std::string trim(std::string value) {
   return value;
 }
 
+bool is_valid_env_name(const std::string& value) {
+  if (value.empty()) return false;
+  const unsigned char first = static_cast<unsigned char>(value.front());
+  if (!(std::isalpha(first) || value.front() == '_')) return false;
+  return std::all_of(value.begin() + 1, value.end(), [](unsigned char c) {
+    return std::isalnum(c) || c == '_';
+  });
+}
+
 std::string strip_comment(const std::string& line) {
   bool in_quote = false;
   char quote = '\0';
@@ -301,6 +310,20 @@ std::vector<std::string> validate_config(const AppConfig& config, bool check_run
   }
   if (config.target.input_dir.empty()) {
     errors.push_back("target.input_dir is required");
+  }
+  for (const auto& [key, value] : config.afl.base_env) {
+    (void)value;
+    if (!is_valid_env_name(key)) {
+      errors.push_back("afl.base_env contains invalid environment variable name: " + key);
+    }
+  }
+  if (!config.model_api.api_key_env.empty() && !is_valid_env_name(config.model_api.api_key_env)) {
+    errors.push_back("model_api.api_key_env is not a valid environment variable name: " +
+                     config.model_api.api_key_env);
+  }
+  if (!config.model_api.endpoint_env.empty() && !is_valid_env_name(config.model_api.endpoint_env)) {
+    errors.push_back("model_api.endpoint_env is not a valid environment variable name: " +
+                     config.model_api.endpoint_env);
   }
   if (config.micro_campaign.enabled &&
       config.micro_campaign.budget_sec >= config.afl.main_budget_sec) {
