@@ -1,0 +1,7 @@
+[submodule "experiments/targets/cjson/src"]
+	path = experiments/targets/cjson/src
+	url = https://github.com/DaveGamble/cJSON.git
+
+[submodule "experiments/targets/libpng/src"]
+	path = experiments/targets/libpng/src
+	url = https://github.com/pnggroup/libpng.git
