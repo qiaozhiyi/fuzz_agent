@@ -23,12 +23,12 @@ Each run record must include the following fields:
 - `model_provider`
 - `model_name`
 - `model_endpoint`
-- `prompt/context hash`
-- `agent decision id`
-- `plateau id`
-- `intervention id`
-- `micro-campaign result`
-- `promoted intervention`
+- `prompt_context_hash` (prompt/context hash)
+- `agent_decision_id` (agent decision id)
+- `plateau_id` (plateau id)
+- `intervention_id` (intervention id)
+- `micro_campaign_result` (micro-campaign result)
+- `promoted_intervention` (promoted intervention)
 
 ## JSONL event contract
 

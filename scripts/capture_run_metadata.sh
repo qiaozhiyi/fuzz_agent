@@ -110,7 +110,7 @@ fi
 
 git status --short --branch > "$OUT_DIR/git_status.txt"
 {
-  # Capture both unstaged and staged deltas for reproducibility snapshots.
+  # Capture both unstaged and staged changes for reproducibility snapshots.
   git diff
   git diff --cached
 } > "$OUT_DIR/git.patch"
