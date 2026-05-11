@@ -9,7 +9,13 @@ USAGE
 }
 
 json_escape() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+  local escaped="$1"
+  escaped="${escaped//\\/\\\\}"
+  escaped="${escaped//\"/\\\"}"
+  escaped="${escaped//$'\n'/\\n}"
+  escaped="${escaped//$'\t'/\\t}"
+  escaped="${escaped//$'\r'/\\r}"
+  printf '%s' "$escaped"
 }
 
 sha256_file() {
@@ -104,6 +110,7 @@ fi
 
 git status --short --branch > "$OUT_DIR/git_status.txt"
 {
+  # Capture both unstaged and staged deltas for reproducibility snapshots.
   git diff
   git diff --cached
 } > "$OUT_DIR/git.patch"
