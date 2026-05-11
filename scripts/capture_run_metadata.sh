@@ -8,6 +8,8 @@ Usage:
 USAGE
 }
 
+# Lightweight JSON escaping for run metadata primitives.
+# This intentionally supports common shell-safe text fields without external deps.
 json_escape() {
   local escaped="$1"
   escaped="${escaped//\\/\\\\}"
@@ -70,6 +72,16 @@ done
 if [[ -z "$RUN_ID" || -z "$CONFIG_PATH" || -z "$TARGET_NAME" || -z "$OUT_DIR" ]]; then
   echo "Error: missing required arguments." >&2
   usage
+  exit 1
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "Error: git is required but not found in PATH." >&2
+  exit 1
+fi
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "Error: this script must be run inside a git repository." >&2
   exit 1
 fi
 

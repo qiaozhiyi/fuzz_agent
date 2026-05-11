@@ -7,7 +7,7 @@ FuzzPilot is a self-diagnosing, agent-driven AFL++ fuzzing controller. It keeps 
 - **Version**: v0
 - **Maturity**: experimental
 - **Primary development platform**: macOS Apple Silicon
-- **Portability target**: Linux migration planned after the current stabilization phase
+- **Portability status**: Linux builds are covered in CI; macOS remains the primary tuning/debug platform in this phase
 
 ## Repository layout
 
