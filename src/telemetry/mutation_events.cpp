@@ -4,6 +4,7 @@
 #include <cctype>
 #include <fstream>
 #include <sstream>
+#include "fuzzpilot/json_util.hpp"
 
 namespace fuzzpilot {
 namespace {
@@ -81,18 +82,7 @@ void parse_operator_counts(const std::string& line,
   }
 }
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
+
 
 }  // namespace
 
@@ -135,7 +125,7 @@ std::string mutation_telemetry_json(const MutationTelemetrySnapshot& snapshot) {
       out << ",";
     }
     first = false;
-    out << "\"" << json_escape(op) << "\":" << count;
+    out << "\"" << fuzzpilot::json_escape(op) << "\":" << count;
   }
   out << "}}";
   return out.str();

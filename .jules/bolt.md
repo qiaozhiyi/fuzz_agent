@@ -1,0 +1,3 @@
+## 2024-05-11 - Centralized JSON string escaping using `std::string::reserve`
+**Learning:** The C++ application had multiple redundant definitions of `json_escape` that relied on `std::ostringstream`, which incurs significant performance overhead for small/medium allocations in hot paths like logging and serialization.
+**Action:** Centralized `json_escape` into `fuzzpilot/json_util.hpp` and refactored the implementation to use `std::string` with `.reserve()` to preallocate memory, preventing repeated memory allocations and stream overhead. Replaced local function declarations and updated files to use `fuzzpilot::json_escape`.

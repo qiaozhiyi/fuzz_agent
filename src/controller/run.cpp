@@ -29,22 +29,12 @@
 #include <cstdlib>
 #include <cstdio>
 #include <set>
+#include "fuzzpilot/json_util.hpp"
 
 namespace fuzzpilot {
 namespace {
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
+
 
 std::string trim(std::string value) {
   auto not_space = [](unsigned char c) { return !std::isspace(c); };
@@ -61,7 +51,7 @@ std::string json_value_or_raw(const std::string& value) {
   if (first != std::string::npos && (value[first] == '{' || value[first] == '[')) {
     return value;
   }
-  return std::string("{\"raw\":\"") + json_escape(value) + "\"}";
+  return std::string("{\"raw\":\"") + fuzzpilot::json_escape(value) + "\"}";
 }
 
 void append_line(const std::filesystem::path& path, const std::string& line) {
@@ -85,8 +75,8 @@ void write_text_file(const std::filesystem::path& path, const std::string& conte
 std::string telemetry_event_json(const std::string& run_id,
                                  const std::string& campaign_id,
                                  const AflStats& stats) {
-  return std::string("{\"event\":\"telemetry_tick\",\"run_id\":\"") + json_escape(run_id) +
-         "\",\"campaign_id\":\"" + json_escape(campaign_id) + "\",\"stats\":" +
+  return std::string("{\"event\":\"telemetry_tick\",\"run_id\":\"") + fuzzpilot::json_escape(run_id) +
+         "\",\"campaign_id\":\"" + fuzzpilot::json_escape(campaign_id) + "\",\"stats\":" +
          afl_stats_json(stats) + "}";
 }
 
@@ -392,18 +382,18 @@ void persist_agent_memory(Database& db,
 
   const auto key = summary.plateau_id + ":" + decision.agent + ":" +
                    decision.model_response.response_hash;
-  const auto evidence = std::string("{\"decision_id\":\"") + json_escape(decision.id) +
+  const auto evidence = std::string("{\"decision_id\":\"") + fuzzpilot::json_escape(decision.id) +
                         "\",\"context_hash\":\"" +
-                        json_escape(decision.model_response.context_hash) +
+                        fuzzpilot::json_escape(decision.model_response.context_hash) +
                         "\",\"schema_valid\":" +
                         (decision.model_response.schema_valid ? "true" : "false") + "}";
   db.insert_agent_memory(make_id("memory"), summary.run_id, config.target.name, decision.agent,
                          "proposal_memory_patch", key, memory_val, evidence,
                          reward_hint, decision.model_response.schema_valid ? 0.7 : 0.2, now);
   append_line(summary.agent_memory_path,
-              std::string("{\"run_id\":\"") + json_escape(summary.run_id) +
-                  "\",\"agent\":\"" + json_escape(decision.agent) +
-                  "\",\"key\":\"" + json_escape(key) +
+              std::string("{\"run_id\":\"") + fuzzpilot::json_escape(summary.run_id) +
+                  "\",\"agent\":\"" + fuzzpilot::json_escape(decision.agent) +
+                  "\",\"key\":\"" + fuzzpilot::json_escape(key) +
                   "\",\"reward_hint\":" + std::to_string(reward_hint) +
                   ",\"memory\":" +
                   json_value_or_raw(memory_val) + "}");
@@ -525,7 +515,7 @@ RunSummary run_mvp(const RunOptions& options) {
   write_text_file(summary.main_launch_path,
                   "#!/usr/bin/env sh\n" + shell_preview(main_launch) + "\n");
   append_line(events_path, std::string("{\"event\":\"main_afl_plan\",\"command\":\"") +
-                               json_escape(shell_preview(main_launch)) + "\"}");
+                               fuzzpilot::json_escape(shell_preview(main_launch)) + "\"}");
   if (!options.dry_run) {
     const auto process = spawn_process(main_launch.afl_fuzz.string(),
                                        main_launch.argv,
@@ -764,7 +754,7 @@ RunSummary run_mvp(const RunOptions& options) {
   result_task.blackboard_slice_json =
       std::string("{\"original_blackboard\":") + blackboard +
       ",\"micro_campaign_results\":{\"winner_intervention_id\":\"" +
-      json_escape(summary.winner_intervention_id) + "\",\"winner_reward\":" +
+      fuzzpilot::json_escape(summary.winner_intervention_id) + "\",\"winner_reward\":" +
       std::to_string(summary.winner_reward) + ",\"all_results\":" +
       micro_results_json(micro_results) + "}}";
   result_task.action_schema_json =
@@ -785,9 +775,9 @@ RunSummary run_mvp(const RunOptions& options) {
   RecipeStore promoted_store(summary.run_dir / "promoted_recipes");
   summary.promoted_recipe_index = promoted_store.write_compact_recipes({promoted});
   append_line(events_path, std::string("{\"event\":\"promotion\",\"winner_intervention_id\":\"") +
-                               json_escape(summary.winner_intervention_id) +
+                               fuzzpilot::json_escape(summary.winner_intervention_id) +
                                "\",\"recipe_index\":\"" +
-                               json_escape(summary.promoted_recipe_index.string()) + "\"}");
+                               fuzzpilot::json_escape(summary.promoted_recipe_index.string()) + "\"}");
 
   write_report(summary, config, main_samples, micro_results, decisions);
 
@@ -806,20 +796,20 @@ RunSummary run_mvp(const RunOptions& options) {
 std::string run_summary_json(const RunSummary& summary) {
   std::ostringstream out;
   out << "{";
-  out << "\"run_id\":\"" << json_escape(summary.run_id) << "\",";
-  out << "\"main_campaign_id\":\"" << json_escape(summary.main_campaign_id) << "\",";
-  out << "\"plateau_id\":\"" << json_escape(summary.plateau_id) << "\",";
-  out << "\"winner_intervention_id\":\"" << json_escape(summary.winner_intervention_id) << "\",";
-  out << "\"winner_campaign_id\":\"" << json_escape(summary.winner_campaign_id) << "\",";
+  out << "\"run_id\":\"" << fuzzpilot::json_escape(summary.run_id) << "\",";
+  out << "\"main_campaign_id\":\"" << fuzzpilot::json_escape(summary.main_campaign_id) << "\",";
+  out << "\"plateau_id\":\"" << fuzzpilot::json_escape(summary.plateau_id) << "\",";
+  out << "\"winner_intervention_id\":\"" << fuzzpilot::json_escape(summary.winner_intervention_id) << "\",";
+  out << "\"winner_campaign_id\":\"" << fuzzpilot::json_escape(summary.winner_campaign_id) << "\",";
   out << "\"winner_reward\":" << summary.winner_reward << ",";
-  out << "\"run_dir\":\"" << json_escape(summary.run_dir.string()) << "\",";
-  out << "\"db_path\":\"" << json_escape(summary.db_path.string()) << "\",";
-  out << "\"report_path\":\"" << json_escape(summary.report_path.string()) << "\",";
-  out << "\"coverage_csv_path\":\"" << json_escape(summary.coverage_csv_path.string()) << "\",";
-  out << "\"agent_replay_log_path\":\"" << json_escape(summary.agent_replay_log_path.string()) << "\",";
-  out << "\"agent_memory_path\":\"" << json_escape(summary.agent_memory_path.string()) << "\",";
-  out << "\"main_launch_path\":\"" << json_escape(summary.main_launch_path.string()) << "\",";
-  out << "\"promoted_recipe_index\":\"" << json_escape(summary.promoted_recipe_index.string()) << "\",";
+  out << "\"run_dir\":\"" << fuzzpilot::json_escape(summary.run_dir.string()) << "\",";
+  out << "\"db_path\":\"" << fuzzpilot::json_escape(summary.db_path.string()) << "\",";
+  out << "\"report_path\":\"" << fuzzpilot::json_escape(summary.report_path.string()) << "\",";
+  out << "\"coverage_csv_path\":\"" << fuzzpilot::json_escape(summary.coverage_csv_path.string()) << "\",";
+  out << "\"agent_replay_log_path\":\"" << fuzzpilot::json_escape(summary.agent_replay_log_path.string()) << "\",";
+  out << "\"agent_memory_path\":\"" << fuzzpilot::json_escape(summary.agent_memory_path.string()) << "\",";
+  out << "\"main_launch_path\":\"" << fuzzpilot::json_escape(summary.main_launch_path.string()) << "\",";
+  out << "\"promoted_recipe_index\":\"" << fuzzpilot::json_escape(summary.promoted_recipe_index.string()) << "\",";
   out << "\"telemetry_count\":" << summary.telemetry_count << ",";
   out << "\"agent_decision_count\":" << summary.agent_decision_count << ",";
   out << "\"micro_campaign_count\":" << summary.micro_campaign_count << ",";

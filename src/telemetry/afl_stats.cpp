@@ -5,6 +5,7 @@
 #include <ctime>
 #include <fstream>
 #include <sstream>
+#include "fuzzpilot/json_util.hpp"
 
 namespace fuzzpilot {
 namespace {
@@ -42,18 +43,7 @@ double as_double(const std::map<std::string, std::string>& raw, const std::strin
   }
 }
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
+
 
 uint64_t first_nonzero(const AflStats& stats, const std::initializer_list<const char*> keys) {
   for (const char* key : keys) {
@@ -139,7 +129,7 @@ std::string afl_stats_json(const AflStats& stats) {
       out << ",";
     }
     first = false;
-    out << "\"" << json_escape(key) << "\":\"" << json_escape(value) << "\"";
+    out << "\"" << fuzzpilot::json_escape(key) << "\":\"" << fuzzpilot::json_escape(value) << "\"";
   }
   out << "}}";
   return out.str();

@@ -4,22 +4,12 @@
 
 #include <ctime>
 #include <sstream>
+#include "fuzzpilot/json_util.hpp"
 
 namespace fuzzpilot {
 namespace {
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
+
 
 std::string json_value_or_raw(const std::string& value) {
   if (value.empty()) {
@@ -29,7 +19,7 @@ std::string json_value_or_raw(const std::string& value) {
   if (first != std::string::npos && (value[first] == '{' || value[first] == '[')) {
     return value;
   }
-  return std::string("{\"raw\":\"") + json_escape(value) + "\"}";
+  return std::string("{\"raw\":\"") + fuzzpilot::json_escape(value) + "\"}";
 }
 
 }  // namespace
@@ -105,9 +95,9 @@ std::vector<AgentDecision> run_agent_tasks(IModelGateway& gateway,
 std::string agent_task_json(const AgentTask& task) {
   std::ostringstream out;
   out << "{";
-  out << "\"task_id\":\"" << json_escape(task.task_id) << "\",";
-  out << "\"agent_name\":\"" << json_escape(task.agent_name) << "\",";
-  out << "\"objective\":\"" << json_escape(task.objective) << "\",";
+  out << "\"task_id\":\"" << fuzzpilot::json_escape(task.task_id) << "\",";
+  out << "\"agent_name\":\"" << fuzzpilot::json_escape(task.agent_name) << "\",";
+  out << "\"objective\":\"" << fuzzpilot::json_escape(task.objective) << "\",";
   out << "\"blackboard_slice\":" << (task.blackboard_slice_json.empty() ? "{}" : task.blackboard_slice_json) << ",";
   out << "\"action_schema\":" << (task.action_schema_json.empty() ? "{}" : task.action_schema_json) << ",";
   out << "\"output_schema\":" << (task.output_schema_json.empty() ? "{}" : task.output_schema_json) << ",";
@@ -120,14 +110,14 @@ std::string agent_task_json(const AgentTask& task) {
 std::string agent_decision_json(const AgentDecision& decision) {
   std::ostringstream out;
   out << "{";
-  out << "\"id\":\"" << json_escape(decision.id) << "\",";
-  out << "\"run_id\":\"" << json_escape(decision.run_id) << "\",";
-  out << "\"plateau_id\":\"" << json_escape(decision.plateau_id) << "\",";
-  out << "\"agent\":\"" << json_escape(decision.agent) << "\",";
-  out << "\"provider\":\"" << json_escape(decision.model_response.provider) << "\",";
-  out << "\"model\":\"" << json_escape(decision.model_response.model) << "\",";
-  out << "\"context_hash\":\"" << json_escape(decision.model_response.context_hash) << "\",";
-  out << "\"response_hash\":\"" << json_escape(decision.model_response.response_hash) << "\",";
+  out << "\"id\":\"" << fuzzpilot::json_escape(decision.id) << "\",";
+  out << "\"run_id\":\"" << fuzzpilot::json_escape(decision.run_id) << "\",";
+  out << "\"plateau_id\":\"" << fuzzpilot::json_escape(decision.plateau_id) << "\",";
+  out << "\"agent\":\"" << fuzzpilot::json_escape(decision.agent) << "\",";
+  out << "\"provider\":\"" << fuzzpilot::json_escape(decision.model_response.provider) << "\",";
+  out << "\"model\":\"" << fuzzpilot::json_escape(decision.model_response.model) << "\",";
+  out << "\"context_hash\":\"" << fuzzpilot::json_escape(decision.model_response.context_hash) << "\",";
+  out << "\"response_hash\":\"" << fuzzpilot::json_escape(decision.model_response.response_hash) << "\",";
   out << "\"latency_ms\":" << decision.model_response.latency_ms << ",";
   out << "\"schema_valid\":" << (decision.model_response.schema_valid ? "true" : "false") << ",";
   out << "\"fallback_used\":" << (decision.fallback_used ? "true" : "false") << ",";

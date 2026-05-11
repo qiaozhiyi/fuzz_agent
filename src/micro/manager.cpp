@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include "fuzzpilot/json_util.hpp"
 
 namespace fuzzpilot {
 namespace {
@@ -25,18 +26,7 @@ std::filesystem::path find_queue_dir(const std::filesystem::path& afl_output_dir
   return {};
 }
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
+
 
 }  // namespace
 
@@ -108,8 +98,8 @@ void prepare_micro_campaigns(const std::vector<MicroCampaignSpec>& specs) {
 std::string corpus_snapshot_json(const CorpusSnapshotResult& snapshot) {
   std::ostringstream out;
   out << "{";
-  out << "\"source_queue\":\"" << json_escape(snapshot.source_queue.string()) << "\",";
-  out << "\"snapshot_dir\":\"" << json_escape(snapshot.snapshot_dir.string()) << "\",";
+  out << "\"source_queue\":\"" << fuzzpilot::json_escape(snapshot.source_queue.string()) << "\",";
+  out << "\"snapshot_dir\":\"" << fuzzpilot::json_escape(snapshot.snapshot_dir.string()) << "\",";
   out << "\"files_copied\":" << snapshot.files_copied << ",";
   out << "\"bytes_copied\":" << snapshot.bytes_copied;
   out << "}";
@@ -119,12 +109,12 @@ std::string corpus_snapshot_json(const CorpusSnapshotResult& snapshot) {
 std::string micro_campaign_spec_json(const MicroCampaignSpec& spec) {
   std::ostringstream out;
   out << "{";
-  out << "\"id\":\"" << json_escape(spec.id) << "\",";
-  out << "\"intervention_id\":\"" << json_escape(spec.intervention_id) << "\",";
-  out << "\"name\":\"" << json_escape(spec.name) << "\",";
-  out << "\"input_dir\":\"" << json_escape(spec.input_dir.string()) << "\",";
-  out << "\"output_dir\":\"" << json_escape(spec.output_dir.string()) << "\",";
-  out << "\"recipe_store\":\"" << json_escape(spec.recipe_store.string()) << "\",";
+  out << "\"id\":\"" << fuzzpilot::json_escape(spec.id) << "\",";
+  out << "\"intervention_id\":\"" << fuzzpilot::json_escape(spec.intervention_id) << "\",";
+  out << "\"name\":\"" << fuzzpilot::json_escape(spec.name) << "\",";
+  out << "\"input_dir\":\"" << fuzzpilot::json_escape(spec.input_dir.string()) << "\",";
+  out << "\"output_dir\":\"" << fuzzpilot::json_escape(spec.output_dir.string()) << "\",";
+  out << "\"recipe_store\":\"" << fuzzpilot::json_escape(spec.recipe_store.string()) << "\",";
   out << "\"budget_sec\":" << spec.budget_sec << ",";
   out << "\"dry_run\":" << (spec.dry_run ? "true" : "false");
   out << "}";
