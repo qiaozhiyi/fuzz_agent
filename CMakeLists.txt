@@ -65,8 +65,12 @@ add_executable(fuzzpilot_mutator_smoke
 target_include_directories(fuzzpilot_mutator_smoke PRIVATE mutators/fuzzpilot)
 target_compile_features(fuzzpilot_mutator_smoke PRIVATE cxx_std_20)
 
+add_executable(fuzzpilot_process_capture_smoke tools/process_capture_smoke.cpp)
+target_link_libraries(fuzzpilot_process_capture_smoke PRIVATE fuzzpilot_core)
+
 enable_testing()
 add_test(NAME fuzzpilot_version COMMAND fuzzpilot --version)
+add_test(NAME fuzzpilot_process_capture_smoke COMMAND fuzzpilot_process_capture_smoke)
 add_test(NAME fuzzpilot_check_example
   COMMAND fuzzpilot check-config --config ${CMAKE_CURRENT_SOURCE_DIR}/configs/examples/libpng.yaml)
 add_test(NAME fuzzpilot_parse_stats

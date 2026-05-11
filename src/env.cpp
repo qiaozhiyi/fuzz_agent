@@ -2,11 +2,10 @@
 
 #include "fuzzpilot/runner/process.hpp"
 
-#include <array>
-#include <cstdio>
-#include <memory>
 #include <sstream>
+#include <string>
 #include <sys/utsname.h>
+#include <vector>
 
 namespace fuzzpilot {
 namespace {

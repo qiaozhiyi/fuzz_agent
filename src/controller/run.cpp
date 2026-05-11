@@ -121,16 +121,16 @@ std::string run_ida_extractor(const StaticAnalysisConfig& sa_config,
                               const std::filesystem::path& target_binary,
                               const std::filesystem::path& run_dir) {
   const auto output_json = run_dir / "ida_static_context.json";
-  // Use quoted paths to prevent command injection if paths contain spaces or special chars
-  const std::string cmd =
-      "IDADIR=\"" + sa_config.ida_dir.string() + "\" " +
-      "\"" + sa_config.python_bin.string() + "\" " +
-      "\"" + sa_config.extractor_script.string() + "\" " +
-      "\"" + target_binary.string() + "\" " +
-      "\"" + output_json.string() + "\" 2>/dev/null";
 
-  const int ret = std::system(cmd.c_str());
-  if (ret != 0) {
+  const auto result = run_process_capture(
+      sa_config.python_bin.string(),
+      {sa_config.python_bin.string(),
+       sa_config.extractor_script.string(),
+       target_binary.string(),
+       output_json.string()},
+      {{"IDADIR", sa_config.ida_dir.string()}},
+      true);
+  if (!result.spawned || !result.exited || result.exit_code != 0) {
     return "{\"error\":\"ida_extractor failed\"}";
   }
 
