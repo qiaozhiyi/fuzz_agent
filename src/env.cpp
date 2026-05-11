@@ -1,5 +1,7 @@
 #include "fuzzpilot/env.hpp"
 
+#include "fuzzpilot/runner/process.hpp"
+
 #include <array>
 #include <cstdio>
 #include <memory>
@@ -9,25 +11,27 @@
 namespace fuzzpilot {
 namespace {
 
-std::string first_nonempty_line_from_command(const std::string& command) {
-  std::array<char, 256> buffer{};
-  FILE* pipe = popen(command.c_str(), "r");
-  if (pipe == nullptr) {
-    return {};
-  }
-  std::string output;
-  while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr) {
-    std::string line = buffer.data();
-    if (!line.empty() && line.back() == '\n') {
+std::string first_nonempty_line(const std::string& text) {
+  std::istringstream input(text);
+  std::string line;
+  while (std::getline(input, line)) {
+    if (!line.empty() && line.back() == '\r') {
       line.pop_back();
     }
     if (!line.empty()) {
-      output = line;
-      break;
+      return line;
     }
   }
-  pclose(pipe);
-  return output;
+  return {};
+}
+
+std::string first_nonempty_line_from_process(const std::string& executable,
+                                             const std::vector<std::string>& argv) {
+  const auto result = run_process_capture(executable, argv, {}, true);
+  if (!result.spawned) {
+    return {};
+  }
+  return first_nonempty_line(result.output);
 }
 
 std::string json_escape(const std::string& value) {
@@ -53,8 +57,9 @@ EnvSnapshot capture_env_snapshot(const std::string& afl_fuzz_path) {
     snapshot.arch = info.machine;
     snapshot.kernel = std::string(info.release) + " " + info.version;
   }
-  snapshot.afl_version = first_nonempty_line_from_command(afl_fuzz_path + " -h 2>&1");
-  snapshot.compiler_version = first_nonempty_line_from_command("c++ --version 2>&1");
+  snapshot.afl_version = first_nonempty_line_from_process(afl_fuzz_path,
+                                                          {afl_fuzz_path, "-h"});
+  snapshot.compiler_version = first_nonempty_line_from_process("c++", {"c++", "--version"});
   return snapshot;
 }
 
