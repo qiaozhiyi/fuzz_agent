@@ -14,6 +14,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 find_package(SQLite3 REQUIRED)
 
 add_library(fuzzpilot_core STATIC
+  src/json_util.cpp
   src/config.cpp
   src/controller/run.cpp
   src/env.cpp

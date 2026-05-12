@@ -1,4 +1,5 @@
 #include "fuzzpilot/env.hpp"
+#include "fuzzpilot/json_util.hpp"
 
 #include "fuzzpilot/runner/process.hpp"
 
@@ -33,18 +34,6 @@ std::string first_nonempty_line_from_process(const std::string& executable,
   return first_nonempty_line(result.output);
 }
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
 
 }  // namespace
 
@@ -65,11 +54,11 @@ EnvSnapshot capture_env_snapshot(const std::string& afl_fuzz_path) {
 std::string env_snapshot_json(const EnvSnapshot& snapshot) {
   std::ostringstream out;
   out << "{";
-  out << "\"os\":\"" << json_escape(snapshot.os) << "\",";
-  out << "\"arch\":\"" << json_escape(snapshot.arch) << "\",";
-  out << "\"kernel\":\"" << json_escape(snapshot.kernel) << "\",";
-  out << "\"afl_version\":\"" << json_escape(snapshot.afl_version) << "\",";
-  out << "\"compiler_version\":\"" << json_escape(snapshot.compiler_version) << "\"";
+  out << "\"os\":\"" << fuzzpilot::json_escape(snapshot.os) << "\",";
+  out << "\"arch\":\"" << fuzzpilot::json_escape(snapshot.arch) << "\",";
+  out << "\"kernel\":\"" << fuzzpilot::json_escape(snapshot.kernel) << "\",";
+  out << "\"afl_version\":\"" << fuzzpilot::json_escape(snapshot.afl_version) << "\",";
+  out << "\"compiler_version\":\"" << fuzzpilot::json_escape(snapshot.compiler_version) << "\"";
   out << "}";
   return out.str();
 }

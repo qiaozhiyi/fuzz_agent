@@ -1,4 +1,5 @@
 #include "fuzzpilot/model/gateway.hpp"
+#include "fuzzpilot/json_util.hpp"
 
 #include "fuzzpilot/ids.hpp"
 #include "fuzzpilot/runner/process.hpp"
@@ -16,20 +17,6 @@
 namespace fuzzpilot {
 namespace {
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      case '\r': out << "\\r"; break;
-      case '\t': out << "\\t"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
 
 bool is_valid_env_name(const std::string& value) {
   if (value.empty()) {
@@ -125,13 +112,13 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   {
     std::ofstream payload(payload_path);
     payload << "{";
-    payload << "\"model\":\"" << json_escape(model_) << "\",";
+    payload << "\"model\":\"" << fuzzpilot::json_escape(model_) << "\",";
     if (disable_thinking_) {
       payload << "\"thinking\":{\"type\":\"disabled\"},";
     }
     payload << "\"messages\":[";
-    payload << "{\"role\":\"system\",\"content\":\"" << json_escape(request.system_prompt) << "\"},";
-    payload << "{\"role\":\"user\",\"content\":\"" << json_escape(request.user_context_json) << "\"}],";
+    payload << "{\"role\":\"system\",\"content\":\"" << fuzzpilot::json_escape(request.system_prompt) << "\"},";
+    payload << "{\"role\":\"user\",\"content\":\"" << fuzzpilot::json_escape(request.user_context_json) << "\"}],";
     payload << "\"response_format\":{\"type\":\"json_object\"},";
     payload << "\"max_tokens\":" << request.max_output_tokens << ",";
     payload << "\"temperature\":0.0";

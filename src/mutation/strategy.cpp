@@ -1,4 +1,5 @@
 #include "fuzzpilot/mutation/strategy.hpp"
+#include "fuzzpilot/json_util.hpp"
 
 #include "fuzzpilot/ids.hpp"
 
@@ -12,18 +13,6 @@
 namespace fuzzpilot {
 namespace {
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
 
 }  // namespace
 
@@ -73,12 +62,12 @@ void normalize_weights(std::vector<OperatorWeight>& weights) {
 std::string strategy_json(const SeedMutationStrategy& strategy) {
   std::ostringstream out;
   out << "{";
-  out << "\"id\":\"" << json_escape(strategy.id) << "\",";
-  out << "\"agent\":\"" << json_escape(strategy.agent) << "\",";
-  out << "\"seed_selector\":{\"mode\":\"" << json_escape(strategy.selector.mode)
-      << "\",\"seed_id\":\"" << json_escape(strategy.selector.seed_id)
-      << "\",\"seed_hash\":\"" << json_escape(strategy.selector.seed_hash)
-      << "\",\"family\":\"" << json_escape(strategy.selector.family) << "\"},";
+  out << "\"id\":\"" << fuzzpilot::json_escape(strategy.id) << "\",";
+  out << "\"agent\":\"" << fuzzpilot::json_escape(strategy.agent) << "\",";
+  out << "\"seed_selector\":{\"mode\":\"" << fuzzpilot::json_escape(strategy.selector.mode)
+      << "\",\"seed_id\":\"" << fuzzpilot::json_escape(strategy.selector.seed_id)
+      << "\",\"seed_hash\":\"" << fuzzpilot::json_escape(strategy.selector.seed_hash)
+      << "\",\"family\":\"" << fuzzpilot::json_escape(strategy.selector.family) << "\"},";
   out << "\"priority\":" << strategy.priority << ",";
   out << "\"ttl_sec\":" << strategy.ttl_sec << ",";
   out << "\"operator_weights\":{";
@@ -102,11 +91,11 @@ std::string strategy_json(const SeedMutationStrategy& strategy) {
   out << "\"dictionary_tokens\":[";
   for (std::size_t i = 0; i < strategy.dictionary_tokens.size(); ++i) {
     if (i != 0) out << ",";
-    out << "\"" << json_escape(strategy.dictionary_tokens[i]) << "\"";
+    out << "\"" << fuzzpilot::json_escape(strategy.dictionary_tokens[i]) << "\"";
   }
   out << "],";
   out << "\"repair_policy\":{\"length_fields\":[],\"checksum\":\"none\"},";
-  out << "\"expected_signal\":\"" << json_escape(strategy.expected_signal) << "\"";
+  out << "\"expected_signal\":\"" << fuzzpilot::json_escape(strategy.expected_signal) << "\"";
   out << "}";
   return out.str();
 }
