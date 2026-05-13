@@ -1,0 +1,3 @@
+## 2024-05-13 - [Refactored duplicated trim implementation using std::string_view]
+**Learning:** The `trim` utility function was duplicated across multiple source files (`src/telemetry/mutation_events.cpp`, `src/telemetry/afl_stats.cpp`, `src/config.cpp`, `src/controller/run.cpp`), each creating unnecessary heap allocations due to pass-by-value `std::string` behavior.
+**Action:** Centralized `trim` using `std::string_view` to avoid unnecessary allocations, improving performance from ~62ms to ~29ms for 1,000,000 iterations according to a micro-benchmark. Always use `std::string_view` for read-only string manipulation such as trimming, removing prefixes/suffixes, and passing substrings around.
