@@ -8,10 +8,13 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <fcntl.h>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace fuzzpilot {
 namespace {
@@ -120,10 +123,22 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     return response;
   }
 
-  const auto payload_path = std::filesystem::temp_directory_path() /
-                            (response.request_id + "_payload.json");
-  {
-    std::ofstream payload(payload_path);
+  auto create_secure_temp_file = [](const std::string& prefix, std::string& out_path) -> int {
+    std::string tmpl = (std::filesystem::temp_directory_path() / (prefix + "_XXXXXX")).string();
+    int fd = mkstemp(tmpl.data());
+    if (fd != -1) {
+      fchmod(fd, 0600);
+      out_path = tmpl;
+    }
+    return fd;
+  };
+
+  std::string payload_path;
+  std::string header_path;
+
+  int payload_fd = create_secure_temp_file(response.request_id + "_payload", payload_path);
+  if (payload_fd != -1) {
+    std::ostringstream payload;
     payload << "{";
     payload << "\"model\":\"" << json_escape(model_) << "\",";
     if (disable_thinking_) {
@@ -136,6 +151,20 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     payload << "\"max_tokens\":" << request.max_output_tokens << ",";
     payload << "\"temperature\":0.0";
     payload << "}";
+    const std::string payload_str = payload.str();
+    write(payload_fd, payload_str.data(), payload_str.size());
+    close(payload_fd);
+  }
+
+  int header_fd = create_secure_temp_file(response.request_id + "_header", header_path);
+  if (header_fd != -1) {
+    // Securely pass API key via a file rather than command-line arguments to prevent exposing
+    // it to process listings (e.g. `ps aux`).
+    std::ostringstream header;
+    header << "Authorization: Bearer " << api_key << "\n";
+    const std::string header_str = header.str();
+    write(header_fd, header_str.data(), header_str.size());
+    close(header_fd);
   }
 
   const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
@@ -145,8 +174,8 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
       "--connect-timeout", "10",
       "--max-time", max_time,
       "-H", "Content-Type: application/json",
-      "-H", std::string("Authorization: Bearer ") + api_key,
-      "-d", "@" + payload_path.string(),
+      "-H", "@" + header_path,
+      "-d", "@" + payload_path,
       endpoint_,
   };
 
@@ -154,6 +183,7 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   const auto raw = curl.spawned ? curl.output : curl.error;
   std::error_code ec;
   std::filesystem::remove(payload_path, ec);
+  std::filesystem::remove(header_path, ec);
 
   response.response_json = extract_content_field(raw);
   response.response_hash = stable_text_hash(response.response_json);
