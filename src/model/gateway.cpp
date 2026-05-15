@@ -12,6 +12,8 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <unistd.h>
+#include <string.h>
 
 namespace fuzzpilot {
 namespace {
@@ -139,13 +141,34 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   }
 
   const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
+
+  std::string hdr_tmpl = (std::filesystem::temp_directory_path() / "fp_hdr_XXXXXX").string();
+  std::vector<char> hdr_buf(hdr_tmpl.begin(), hdr_tmpl.end());
+  hdr_buf.push_back('\0');
+  int hdr_fd = mkstemp(hdr_buf.data());
+  if (hdr_fd == -1) {
+    response.error = "failed to create temporary file for authorization header";
+    response.response_hash = stable_text_hash(response.error);
+    return response;
+  }
+  std::string hdr_path = hdr_buf.data();
+  std::string auth_header = std::string("Authorization: Bearer ") + api_key;
+  if (write(hdr_fd, auth_header.c_str(), auth_header.size()) == -1) {
+    close(hdr_fd);
+    std::filesystem::remove(hdr_path);
+    response.error = "failed to write to temporary file for authorization header";
+    response.response_hash = stable_text_hash(response.error);
+    return response;
+  }
+  close(hdr_fd);
+
   const std::vector<std::string> argv = {
       "curl",
       "-sS",
       "--connect-timeout", "10",
       "--max-time", max_time,
       "-H", "Content-Type: application/json",
-      "-H", std::string("Authorization: Bearer ") + api_key,
+      "-H", "@" + hdr_path,
       "-d", "@" + payload_path.string(),
       endpoint_,
   };
@@ -154,6 +177,9 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   const auto raw = curl.spawned ? curl.output : curl.error;
   std::error_code ec;
   std::filesystem::remove(payload_path, ec);
+  if (!hdr_path.empty()) {
+    std::filesystem::remove(hdr_path, ec);
+  }
 
   response.response_json = extract_content_field(raw);
   response.response_hash = stable_text_hash(response.response_json);
