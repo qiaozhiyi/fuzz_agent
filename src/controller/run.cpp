@@ -1,4 +1,5 @@
 #include "fuzzpilot/controller/run.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include "fuzzpilot/agents/agent_runtime.hpp"
 #include "fuzzpilot/config.hpp"
@@ -33,25 +34,9 @@
 namespace fuzzpilot {
 namespace {
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
 
-std::string trim(std::string value) {
-  auto not_space = [](unsigned char c) { return !std::isspace(c); };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
-  return value;
-}
+
+
 
 std::string json_value_or_raw(const std::string& value) {
   if (value.empty()) {

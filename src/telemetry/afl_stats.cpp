@@ -1,4 +1,5 @@
 #include "fuzzpilot/telemetry/afl_stats.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -9,12 +10,7 @@
 namespace fuzzpilot {
 namespace {
 
-std::string trim(std::string value) {
-  auto not_space = [](unsigned char c) { return !std::isspace(c); };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
-  return value;
-}
+
 
 uint64_t as_u64(const std::map<std::string, std::string>& raw, const std::string& key) {
   const auto it = raw.find(key);
@@ -42,18 +38,7 @@ double as_double(const std::map<std::string, std::string>& raw, const std::strin
   }
 }
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
+
 
 uint64_t first_nonzero(const AflStats& stats, const std::initializer_list<const char*> keys) {
   for (const char* key : keys) {
