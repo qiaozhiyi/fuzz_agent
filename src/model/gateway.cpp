@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <unistd.h>
 
 namespace fuzzpilot {
 namespace {
@@ -138,6 +139,21 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     payload << "}";
   }
 
+  char header_tmpl[] = "/tmp/fuzzpilot_auth_XXXXXX";
+  int fd = mkstemp(header_tmpl);
+  if (fd == -1) {
+    response.error = "failed to create secure temporary file for credentials";
+    return response;
+  }
+  std::string header_content = std::string("Authorization: Bearer ") + api_key;
+  if (write(fd, header_content.c_str(), header_content.size()) != static_cast<ssize_t>(header_content.size())) {
+    close(fd);
+    unlink(header_tmpl);
+    response.error = "failed to write credentials to secure temporary file";
+    return response;
+  }
+  close(fd);
+
   const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
   const std::vector<std::string> argv = {
       "curl",
@@ -145,7 +161,7 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
       "--connect-timeout", "10",
       "--max-time", max_time,
       "-H", "Content-Type: application/json",
-      "-H", std::string("Authorization: Bearer ") + api_key,
+      "-H", "@" + std::string(header_tmpl),
       "-d", "@" + payload_path.string(),
       endpoint_,
   };
@@ -154,6 +170,7 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   const auto raw = curl.spawned ? curl.output : curl.error;
   std::error_code ec;
   std::filesystem::remove(payload_path, ec);
+  std::filesystem::remove(header_tmpl, ec);
 
   response.response_json = extract_content_field(raw);
   response.response_hash = stable_text_hash(response.response_json);
