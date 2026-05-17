@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <unistd.h>
 
 namespace fuzzpilot {
 namespace {
@@ -138,6 +139,30 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     payload << "}";
   }
 
+  const auto header_path_template = std::filesystem::temp_directory_path() /
+                                    (response.request_id + "_header_XXXXXX");
+  std::string header_path_str = header_path_template.string();
+  int fd = mkstemp(header_path_str.data());
+  if (fd == -1) {
+    response.error = "failed to create temporary file for API key";
+    response.response_hash = stable_text_hash(response.error);
+    std::error_code ec;
+    std::filesystem::remove(payload_path, ec);
+    return response;
+  }
+
+  std::string auth_header = std::string("Authorization: Bearer ") + api_key;
+  if (write(fd, auth_header.data(), auth_header.size()) == -1) {
+    response.error = "failed to write to temporary file for API key";
+    response.response_hash = stable_text_hash(response.error);
+    close(fd);
+    std::error_code ec;
+    std::filesystem::remove(header_path_str, ec);
+    std::filesystem::remove(payload_path, ec);
+    return response;
+  }
+  close(fd);
+
   const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
   const std::vector<std::string> argv = {
       "curl",
@@ -145,7 +170,7 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
       "--connect-timeout", "10",
       "--max-time", max_time,
       "-H", "Content-Type: application/json",
-      "-H", std::string("Authorization: Bearer ") + api_key,
+      "-H", "@" + header_path_str,
       "-d", "@" + payload_path.string(),
       endpoint_,
   };
@@ -154,6 +179,7 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   const auto raw = curl.spawned ? curl.output : curl.error;
   std::error_code ec;
   std::filesystem::remove(payload_path, ec);
+  std::filesystem::remove(header_path_str, ec);
 
   response.response_json = extract_content_field(raw);
   response.response_hash = stable_text_hash(response.response_json);
