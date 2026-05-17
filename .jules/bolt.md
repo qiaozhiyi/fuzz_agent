@@ -1,3 +1,0 @@
-## 2024-05-15 - Centralized String Utilities
-**Learning:** The FuzzPilot codebase had duplicated string utilities (`json_escape` and `trim`) scattered across many files, implemented inefficiently using `std::ostringstream` and pass-by-value.
-**Action:** Always check for duplicated utility functions when analyzing performance. Consolidating these into a shared header/source file and optimizing them using `std::string_view` and `std::string::reserve` provides a global performance improvement and reduces technical debt. Remember to include `\r` and `\t` in `json_escape` for robust JSON serialization.
