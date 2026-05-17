@@ -1,4 +1,5 @@
 #include "fuzzpilot/config.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -9,12 +10,7 @@
 namespace fuzzpilot {
 namespace {
 
-std::string trim(std::string value) {
-  auto not_space = [](unsigned char c) { return !std::isspace(c); };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
-  return value;
-}
+
 
 bool is_valid_env_name(const std::string& value) {
   if (value.empty()) return false;
