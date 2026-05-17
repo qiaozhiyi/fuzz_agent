@@ -1,0 +1,3 @@
+## 2024-05-17 - String utility performance footprint
+**Learning:** The codebase had many duplicated, slow implementations of `json_escape` relying on `std::ostringstream` for character-by-character string building and widespread duplicate implementations of `trim`. Also, `std::string_view` must be used carefully with temporary string copies (like those returned by `substr`) to prevent dangling views.
+**Action:** Centralize string parsing routines in `include/fuzzpilot/string_util.hpp` and optimize them to use `std::string::reserve` and `std::string_view`. Explicitly convert back to `std::string` when ownership is needed by functions like `std::stod`. This centralized approach dramatically cuts memory allocation pressure in telemetry critical paths.

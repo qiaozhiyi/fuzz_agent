@@ -1,4 +1,5 @@
 #include "fuzzpilot/config.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -9,12 +10,7 @@
 namespace fuzzpilot {
 namespace {
 
-std::string trim(std::string value) {
-  auto not_space = [](unsigned char c) { return !std::isspace(c); };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
-  return value;
-}
+
 
 bool is_valid_env_name(const std::string& value) {
   if (value.empty()) return false;
@@ -66,7 +62,7 @@ bool parse_bool(const std::string& raw) {
 
 double parse_double(const std::string& raw, double fallback) {
   try {
-    return std::stod(trim(raw));
+    return std::stod(std::string(trim(raw)));
   } catch (...) {
     return fallback;
   }
@@ -74,7 +70,7 @@ double parse_double(const std::string& raw, double fallback) {
 
 int parse_int(const std::string& raw, int fallback) {
   try {
-    return std::stoi(trim(raw));
+    return std::stoi(std::string(trim(raw)));
   } catch (...) {
     return fallback;
   }
@@ -263,7 +259,8 @@ ConfigLoadResult load_config(const std::filesystem::path& path) {
     }
 
     const auto indent = indent_of(without_comment);
-    const auto content = trim(without_comment);
+    std::string_view without_comment_view(without_comment);
+    const auto content = trim(without_comment_view);
     const auto colon = content.find(':');
     if (colon == std::string::npos) {
       result.warnings.push_back("ignored non key/value line " + std::to_string(line_no));
@@ -279,16 +276,16 @@ ConfigLoadResult load_config(const std::filesystem::path& path) {
         section = key;
       } else {
         section.clear();
-        assign_root(result.config, key, value);
+        assign_root(result.config, std::string(key), std::string(value));
       }
     } else if (indent == 2) {
       if (value.empty()) {
         subsection = key;
       } else {
-        assign_section(result.config, section, key, value);
+        assign_section(result.config, section, std::string(key), std::string(value));
       }
     } else if (indent >= 4) {
-      assign_nested(result.config, section, subsection, key, value);
+      assign_nested(result.config, section, subsection, std::string(key), std::string(value));
     }
   }
 
