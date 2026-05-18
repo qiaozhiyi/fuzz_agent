@@ -1,4 +1,5 @@
 #include "fuzzpilot/controller/run.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include "fuzzpilot/agents/agent_runtime.hpp"
 #include "fuzzpilot/config.hpp"
@@ -33,25 +34,6 @@
 namespace fuzzpilot {
 namespace {
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
-
-std::string trim(std::string value) {
-  auto not_space = [](unsigned char c) { return !std::isspace(c); };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
-  return value;
-}
 
 std::string json_value_or_raw(const std::string& value) {
   if (value.empty()) {
@@ -385,7 +367,7 @@ void persist_agent_memory(Database& db,
       if (val_start != std::string::npos) {
           // Simple heuristic to extract the value (could be string or object)
           // For real robustness we'd use a JSON parser, but here we stay lightweight
-          memory_val = trim(decision.proposal_json.substr(val_start + 1));
+          memory_val = trim(std::string_view(decision.proposal_json).substr(val_start + 1));
           if (!memory_val.empty() && memory_val.back() == '}') memory_val.pop_back();
       }
   }

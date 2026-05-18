@@ -1,4 +1,5 @@
 #include "fuzzpilot/config.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -8,13 +9,6 @@
 
 namespace fuzzpilot {
 namespace {
-
-std::string trim(std::string value) {
-  auto not_space = [](unsigned char c) { return !std::isspace(c); };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
-  return value;
-}
 
 bool is_valid_env_name(const std::string& value) {
   if (value.empty()) return false;
@@ -66,7 +60,7 @@ bool parse_bool(const std::string& raw) {
 
 double parse_double(const std::string& raw, double fallback) {
   try {
-    return std::stod(trim(raw));
+    return std::stod(std::string(trim(raw)));
   } catch (...) {
     return fallback;
   }
@@ -74,7 +68,7 @@ double parse_double(const std::string& raw, double fallback) {
 
 int parse_int(const std::string& raw, int fallback) {
   try {
-    return std::stoi(trim(raw));
+    return std::stoi(std::string(trim(raw)));
   } catch (...) {
     return fallback;
   }
@@ -270,8 +264,8 @@ ConfigLoadResult load_config(const std::filesystem::path& path) {
       continue;
     }
 
-    const auto key = trim(content.substr(0, colon));
-    const auto value = trim(content.substr(colon + 1));
+    const auto key = std::string(trim(std::string_view(content).substr(0, colon)));
+    const auto value = std::string(trim(std::string_view(content).substr(colon + 1)));
 
     if (indent == 0) {
       subsection.clear();

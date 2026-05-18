@@ -1,0 +1,3 @@
+## 2024-05-18 - Centralize String Utilities
+**Learning:** The `json_escape` and `trim` functions were duplicated across many files (13 places). Centralizing them into `include/fuzzpilot/string_util.hpp` and `src/string_util.cpp` improves maintainability and reduces binary size. It's important to use `std::string_view` for `trim` and reserve space for `json_escape` to improve performance. However, care must be taken with `std::string_view` to avoid passing it to std::stod or std::stoi which expect `std::string`.
+**Action:** Always centralize utility functions to avoid code duplication and optimize string operations using `std::string_view` where appropriate.

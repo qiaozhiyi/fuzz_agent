@@ -1,4 +1,5 @@
 #include "fuzzpilot/model/gateway.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include "fuzzpilot/ids.hpp"
 #include "fuzzpilot/runner/process.hpp"
@@ -16,20 +17,6 @@
 namespace fuzzpilot {
 namespace {
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      case '\r': out << "\\r"; break;
-      case '\t': out << "\\t"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
 
 bool is_valid_env_name(const std::string& value) {
   if (value.empty()) {

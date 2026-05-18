@@ -1,4 +1,5 @@
 #include "fuzzpilot/micro/manager.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include "fuzzpilot/ids.hpp"
 #include "fuzzpilot/mutation/recipe_store.hpp"
@@ -25,18 +26,6 @@ std::filesystem::path find_queue_dir(const std::filesystem::path& afl_output_dir
   return {};
 }
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
 
 }  // namespace
 

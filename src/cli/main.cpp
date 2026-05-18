@@ -1,4 +1,5 @@
 #include "fuzzpilot/config.hpp"
+#include "fuzzpilot/string_util.hpp"
 #include "fuzzpilot/agents/agent_runtime.hpp"
 #include "fuzzpilot/controller/run.hpp"
 #include "fuzzpilot/env.hpp"
@@ -88,19 +89,6 @@ void require_value(const std::string& value, const std::string& name) {
   }
 }
 
-std::string json_escape(const std::string& value) {
-  std::string out;
-  out.reserve(value.size());
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out += "\\\\"; break;
-      case '"': out += "\\\""; break;
-      case '\n': out += "\\n"; break;
-      default: out.push_back(c); break;
-    }
-  }
-  return out;
-}
 
 void append_text_line(const std::filesystem::path& path, const std::string& line) {
   if (path.empty()) {
@@ -134,8 +122,8 @@ std::string coverage_csv_row(const std::string& campaign_id, const fuzzpilot::Af
 std::string telemetry_event_json(const std::string& run_id,
                                  const std::string& campaign_id,
                                  const fuzzpilot::AflStats& stats) {
-  return std::string("{\"event\":\"telemetry_tick\",\"run_id\":\"") + json_escape(run_id) +
-         "\",\"campaign_id\":\"" + json_escape(campaign_id) + "\",\"stats\":" +
+  return std::string("{\"event\":\"telemetry_tick\",\"run_id\":\"") + fuzzpilot::json_escape(run_id) +
+         "\",\"campaign_id\":\"" + fuzzpilot::json_escape(campaign_id) + "\",\"stats\":" +
          fuzzpilot::afl_stats_json(stats) + "}";
 }
 
@@ -149,11 +137,11 @@ std::vector<std::string> token_args_or_default(const std::vector<std::string>& a
 
 std::string recipe_lookup_json(const fuzzpilot::RecipeLookupResult& result) {
   return std::string("{\"hit\":") + (result.hit ? "true" : "false") +
-         ",\"selector_mode\":\"" + json_escape(result.selector_mode) +
-         "\",\"selector_key\":\"" + json_escape(result.selector_key) +
+         ",\"selector_mode\":\"" + fuzzpilot::json_escape(result.selector_mode) +
+         "\",\"selector_key\":\"" + fuzzpilot::json_escape(result.selector_key) +
          "\",\"priority\":" + std::to_string(result.priority) +
-         ",\"strategy_id\":\"" + json_escape(result.strategy_id) +
-         "\",\"recipe_path\":\"" + json_escape(result.recipe_path.string()) + "\"}";
+         ",\"strategy_id\":\"" + fuzzpilot::json_escape(result.strategy_id) +
+         "\",\"recipe_path\":\"" + fuzzpilot::json_escape(result.recipe_path.string()) + "\"}";
 }
 
 void persist_sample(fuzzpilot::Database& db,
