@@ -1,25 +1,13 @@
 #include "fuzzpilot/agents/agent_runtime.hpp"
 
 #include "fuzzpilot/ids.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include <ctime>
 #include <sstream>
 
 namespace fuzzpilot {
 namespace {
-
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
 
 std::string json_value_or_raw(const std::string& value) {
   if (value.empty()) {

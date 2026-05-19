@@ -12,6 +12,7 @@
 #include "fuzzpilot/storage/db.hpp"
 #include "fuzzpilot/telemetry/collector.hpp"
 #include "fuzzpilot/telemetry/mutation_events.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include <chrono>
 #include <filesystem>
