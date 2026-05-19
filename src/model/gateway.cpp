@@ -12,9 +12,30 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <unistd.h>
 
 namespace fuzzpilot {
 namespace {
+
+class ScopedTempFile {
+  int fd_;
+  std::string path_;
+ public:
+  explicit ScopedTempFile() {
+    std::string templ = (std::filesystem::temp_directory_path() / "fuzzpilot_XXXXXX").string();
+    path_ = templ;
+    fd_ = mkstemp(path_.data());
+    if (fd_ == -1) throw std::runtime_error("mkstemp failed");
+  }
+  ~ScopedTempFile() {
+    if (fd_ != -1) close(fd_);
+    std::error_code ec; std::filesystem::remove(path_, ec);
+  }
+  const std::string& path() const { return path_; }
+  void write_content(const std::string& data) {
+    if (write(fd_, data.data(), data.size()) < 0) throw std::runtime_error("write failed");
+  }
+};
 
 std::string json_escape(const std::string& value) {
   std::ostringstream out;
@@ -139,13 +160,16 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   }
 
   const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
+  ScopedTempFile auth_header_file;
+  auth_header_file.write_content("Authorization: Bearer " + std::string(api_key));
+
   const std::vector<std::string> argv = {
       "curl",
       "-sS",
       "--connect-timeout", "10",
       "--max-time", max_time,
       "-H", "Content-Type: application/json",
-      "-H", std::string("Authorization: Bearer ") + api_key,
+      "-H", "@" + auth_header_file.path(),
       "-d", "@" + payload_path.string(),
       endpoint_,
   };

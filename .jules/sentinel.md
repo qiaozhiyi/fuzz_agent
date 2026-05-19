@@ -1,0 +1,4 @@
+## 2024-05-19 - Fix API key exposure via process arguments
+**Vulnerability:** The OpenAI API key was being passed directly to `curl` via process arguments (`-H Authorization: Bearer <key>`) in `src/model/gateway.cpp`. This exposed the secret to any user on the system who could view the process list (e.g., via `ps aux` or `/proc/<pid>/cmdline`).
+**Learning:** Even though `run_process_capture` uses internal execution logic, any arguments passed become part of the spawned child's state. When invoking external command-line tools with sensitive information, those arguments are inherently public on a POSIX system.
+**Prevention:** Avoid embedding sensitive strings in `argv`. When possible, pass secrets via `stdin`, environment variables (if managed properly and not logged), or securely handled temporary files (using `mkstemp()` combined with an RAII class to guarantee cleanup) and instruct the external tool to read from that file (e.g., `curl -H @<filepath>`).
