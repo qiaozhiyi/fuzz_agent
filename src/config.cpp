@@ -5,16 +5,13 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include "fuzzpilot/string_util.hpp"
+
 
 namespace fuzzpilot {
 namespace {
 
-std::string trim(std::string value) {
-  auto not_space = [](unsigned char c) { return !std::isspace(c); };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
-  return value;
-}
+
 
 bool is_valid_env_name(const std::string& value) {
   if (value.empty()) return false;
@@ -46,7 +43,7 @@ std::string strip_comment(const std::string& line) {
 }
 
 std::string unquote(std::string value) {
-  value = trim(value);
+  value = std::string(trim(value));
   if (value.size() >= 2) {
     const char first = value.front();
     const char last = value.back();
@@ -66,7 +63,7 @@ bool parse_bool(const std::string& raw) {
 
 double parse_double(const std::string& raw, double fallback) {
   try {
-    return std::stod(trim(raw));
+    return std::stod(std::string(trim(raw)));
   } catch (...) {
     return fallback;
   }
@@ -74,7 +71,7 @@ double parse_double(const std::string& raw, double fallback) {
 
 int parse_int(const std::string& raw, int fallback) {
   try {
-    return std::stoi(trim(raw));
+    return std::stoi(std::string(trim(raw)));
   } catch (...) {
     return fallback;
   }
@@ -82,7 +79,7 @@ int parse_int(const std::string& raw, int fallback) {
 
 std::vector<std::string> parse_inline_list(std::string value) {
   std::vector<std::string> result;
-  value = trim(value);
+  value = std::string(trim(value));
   if (value.size() < 2 || value.front() != '[' || value.back() != ']') {
     if (!value.empty()) {
       result.push_back(unquote(value));
@@ -270,8 +267,8 @@ ConfigLoadResult load_config(const std::filesystem::path& path) {
       continue;
     }
 
-    const auto key = trim(content.substr(0, colon));
-    const auto value = trim(content.substr(colon + 1));
+    const auto key = trim(std::string_view(content).substr(0, colon));
+    const auto value = trim(std::string_view(content).substr(colon + 1));
 
     if (indent == 0) {
       subsection.clear();
@@ -279,16 +276,16 @@ ConfigLoadResult load_config(const std::filesystem::path& path) {
         section = key;
       } else {
         section.clear();
-        assign_root(result.config, key, value);
+        assign_root(result.config, std::string(key), std::string(value));
       }
     } else if (indent == 2) {
       if (value.empty()) {
         subsection = key;
       } else {
-        assign_section(result.config, section, key, value);
+        assign_section(result.config, section, std::string(key), std::string(value));
       }
     } else if (indent >= 4) {
-      assign_nested(result.config, section, subsection, key, value);
+      assign_nested(result.config, section, subsection, std::string(key), std::string(value));
     }
   }
 

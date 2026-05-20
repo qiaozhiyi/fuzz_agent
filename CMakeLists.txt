@@ -33,6 +33,7 @@ add_library(fuzzpilot_core STATIC
   src/micro/evaluator.cpp
   src/storage/db.cpp
   src/interventions/default.cpp
+  src/string_util.cpp
 )
 
 target_include_directories(fuzzpilot_core PUBLIC

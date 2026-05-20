@@ -6,6 +6,8 @@
 #include <string>
 #include <sys/utsname.h>
 #include <vector>
+#include "fuzzpilot/string_util.hpp"
+
 
 namespace fuzzpilot {
 namespace {
@@ -33,18 +35,7 @@ std::string first_nonempty_line_from_process(const std::string& executable,
   return first_nonempty_line(result.output);
 }
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
+
 
 }  // namespace
 
