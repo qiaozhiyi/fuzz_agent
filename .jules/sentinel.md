@@ -1,0 +1,4 @@
+## 2024-05-18 - API Key Exposure in Command-Line Arguments
+**Vulnerability:** The OpenAI API key was being passed directly to `curl` via the command line (`-H "Authorization: Bearer <key>"`). This exposed the secret API key to any user on the system who could run `ps aux` or view process listings.
+**Learning:** Even when using external tools like `curl` via sub-processes, sensitive information must be kept out of command-line arguments (argv). `run_process_capture` creates a new process, and its arguments are publicly visible in process monitoring tools.
+**Prevention:** Always write sensitive data to a secure temporary file (e.g., using `mkstemp` and setting appropriate permissions) and use tool-specific features to read from that file (like `curl`'s `@<filepath>` syntax for headers or data). Ensure the temporary file is securely deleted (e.g., using RAII patterns) after the process completes.

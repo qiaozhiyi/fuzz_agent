@@ -12,6 +12,8 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <unistd.h>
+#include <fcntl.h>
 
 namespace fuzzpilot {
 namespace {
@@ -77,6 +79,40 @@ std::string extract_content_field(const std::string& response) {
   return decode_json_string_at(response, pos + needle.size());
 }
 
+class ScopedTempFile {
+ public:
+  ScopedTempFile(const std::string& prefix) {
+    auto temp_dir = std::filesystem::temp_directory_path();
+    std::string tmpl = (temp_dir / (prefix + "_XXXXXX")).string();
+    int fd = mkstemp(tmpl.data());
+    if (fd == -1) {
+      throw std::runtime_error("Failed to create temporary file");
+    }
+    path_ = tmpl;
+    fd_ = fd;
+  }
+
+  ~ScopedTempFile() {
+    close_fd();
+    std::error_code ec;
+    std::filesystem::remove(path_, ec);
+  }
+
+  void close_fd() {
+    if (fd_ != -1) {
+      close(fd_);
+      fd_ = -1;
+    }
+  }
+
+  const std::string& path() const { return path_; }
+  int fd() const { return fd_; }
+
+ private:
+  std::string path_;
+  int fd_ = -1;
+};
+
 }  // namespace
 
 std::string stable_text_hash(const std::string& text) {
@@ -138,6 +174,13 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     payload << "}";
   }
 
+  ScopedTempFile header_file("curl_header");
+  std::string header_content = std::string("Authorization: Bearer ") + api_key;
+  if (write(header_file.fd(), header_content.data(), header_content.size()) != static_cast<ssize_t>(header_content.size())) {
+      throw std::runtime_error("Failed to write to temporary header file");
+  }
+  header_file.close_fd();
+
   const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
   const std::vector<std::string> argv = {
       "curl",
@@ -145,7 +188,7 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
       "--connect-timeout", "10",
       "--max-time", max_time,
       "-H", "Content-Type: application/json",
-      "-H", std::string("Authorization: Bearer ") + api_key,
+      "-H", "@" + header_file.path(),
       "-d", "@" + payload_path.string(),
       endpoint_,
   };
