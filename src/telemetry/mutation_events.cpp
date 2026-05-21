@@ -1,4 +1,5 @@
 #include "fuzzpilot/telemetry/mutation_events.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -8,12 +9,7 @@
 namespace fuzzpilot {
 namespace {
 
-std::string trim(std::string value) {
-  auto not_space = [](unsigned char c) { return !std::isspace(c); };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
-  return value;
-}
+
 
 uint64_t find_u64(const std::string& line, const std::string& key) {
   const std::string needle = "\"" + key + "\":";
@@ -86,18 +82,7 @@ void parse_operator_counts(const std::string& line,
   }
 }
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
+
 
 }  // namespace
 

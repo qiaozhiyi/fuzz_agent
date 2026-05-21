@@ -1,4 +1,5 @@
 #include "fuzzpilot/agents/agent_runtime.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include "fuzzpilot/ids.hpp"
 #include "fuzzpilot/json_utils.hpp"

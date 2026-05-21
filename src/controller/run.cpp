@@ -1,4 +1,5 @@
 #include "fuzzpilot/controller/run.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include "fuzzpilot/agents/agent_runtime.hpp"
 #include "fuzzpilot/config.hpp"
@@ -34,13 +35,6 @@
 
 namespace fuzzpilot {
 namespace {
-
-std::string trim(std::string value) {
-  auto not_space = [](unsigned char c) { return !std::isspace(c); };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
-  return value;
-}
 
 void append_line(const std::filesystem::path& path, const std::string& line) {
   std::filesystem::create_directories(path.parent_path().empty() ? "." : path.parent_path());

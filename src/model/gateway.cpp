@@ -1,4 +1,5 @@
 #include "fuzzpilot/model/gateway.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include "fuzzpilot/ids.hpp"
 #include "fuzzpilot/json_utils.hpp"
@@ -301,6 +302,7 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   }
 
   const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
+
   const std::vector<std::string> argv = {
       "curl",
       "-sS",

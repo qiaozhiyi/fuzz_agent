@@ -1,4 +1,5 @@
 #include "fuzzpilot/mutation/strategy.hpp"
+#include "fuzzpilot/string_util.hpp"
 
 #include "fuzzpilot/ids.hpp"
 
@@ -13,18 +14,7 @@
 namespace fuzzpilot {
 namespace {
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
+
 
 }  // namespace
 
