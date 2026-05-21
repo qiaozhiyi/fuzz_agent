@@ -6,6 +6,25 @@
 #include <stdexcept>
 
 namespace fuzzpilot {
+namespace {
+
+void throw_if_invalid_strategy(const SeedMutationStrategy& strategy) {
+  const auto errors = validate_strategy(strategy);
+  if (errors.empty()) {
+    return;
+  }
+  std::ostringstream message;
+  message << "invalid strategy " << strategy.id << ": ";
+  for (std::size_t i = 0; i < errors.size(); ++i) {
+    if (i != 0) {
+      message << "; ";
+    }
+    message << errors[i];
+  }
+  throw std::runtime_error(message.str());
+}
+
+}  // namespace
 
 RecipeStore::RecipeStore(std::filesystem::path root) : root_(std::move(root)) {}
 
@@ -17,6 +36,7 @@ void RecipeStore::ensure_layout() const {
 
 std::filesystem::path RecipeStore::write_strategy(const SeedMutationStrategy& strategy) const {
   ensure_layout();
+  throw_if_invalid_strategy(strategy);
   const auto path = root_ / "strategies" / (strategy.id + ".json");
   {
     std::ofstream output(path);
@@ -85,6 +105,15 @@ std::string safe_filename(std::string value) {
   return value;
 }
 
+bool is_safe_recipe_filename(const std::string& value) {
+  if (value.empty() || value == "." || value == "..") {
+    return false;
+  }
+  return value.find('/') == std::string::npos &&
+         value.find('\\') == std::string::npos &&
+         value.find("..") == std::string::npos;
+}
+
 std::vector<std::string> split_tab(const std::string& line) {
   std::vector<std::string> parts;
   std::string current;
@@ -105,6 +134,7 @@ std::vector<std::string> split_tab(const std::string& line) {
 std::filesystem::path RecipeStore::write_global_mutator_recipe(
     const SeedMutationStrategy& strategy) const {
   ensure_layout();
+  throw_if_invalid_strategy(strategy);
   const auto path = root_ / "global.recipe";
   std::ofstream output(path);
   if (!output) {
@@ -116,18 +146,7 @@ std::filesystem::path RecipeStore::write_global_mutator_recipe(
 
 std::filesystem::path RecipeStore::write_compact_recipe(const SeedMutationStrategy& strategy) const {
   ensure_layout();
-  const auto errors = validate_strategy(strategy);
-  if (!errors.empty()) {
-    std::ostringstream message;
-    message << "invalid strategy " << strategy.id << ": ";
-    for (std::size_t i = 0; i < errors.size(); ++i) {
-      if (i != 0) {
-        message << "; ";
-      }
-      message << errors[i];
-    }
-    throw std::runtime_error(message.str());
-  }
+  throw_if_invalid_strategy(strategy);
 
   if (strategy.selector.mode == "global") {
     return write_global_mutator_recipe(strategy);
@@ -209,13 +228,26 @@ RecipeLookupResult RecipeStore::lookup_compact_recipe(const std::string& seed_id
       priority = static_cast<uint32_t>(std::stoul(parts[2]));
     } catch (...) {
     }
-    if (!best.hit || priority >= best.priority) {
+    // Strict greater-than for replacement, with strategy_id as a
+    // stable tiebreaker on equal priority. The previous `>=` meant the
+    // last-iterated equal-priority strategy won, which depended on
+    // filesystem ordering — different on APFS vs ext4 vs tmpfs —
+    // breaking experiment reproducibility across machines.
+    const auto& candidate_strategy_id = parts[4];
+    const bool stronger =
+        !best.hit ||
+        priority > best.priority ||
+        (priority == best.priority && candidate_strategy_id < best.strategy_id);
+    if (stronger) {
+      if (!is_safe_recipe_filename(parts[3])) {
+        continue;
+      }
       best.hit = true;
       best.selector_mode = mode;
       best.selector_key = key;
       best.priority = priority;
       best.recipe_path = root_ / "compact" / parts[3];
-      best.strategy_id = parts[4];
+      best.strategy_id = candidate_strategy_id;
     }
   }
   return best;

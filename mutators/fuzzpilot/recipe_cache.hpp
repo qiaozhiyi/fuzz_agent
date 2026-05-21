@@ -64,10 +64,30 @@ class RecipeCache {
   void load_from_environment();
   bool loaded() const { return loaded_; }
   const CompactRecipe& global() const { return global_; }
+  // Hot-path lookup. Callers should prefer the `seed_hash_hint` overload
+  // and reuse the hash across all mutations of the same seed — the
+  // original signature re-hashes the entire input on every call.
   const CompactRecipe& lookup(const std::string& seed_name,
                               const unsigned char* data,
                               std::size_t size,
                               bool* hit) const;
+  // Hot-path optimized lookup: caller passes a previously computed seed
+  // hash so we don't have to scan the full input on every mutation.
+  // If `seed_hash_hint` is empty we fall back to the legacy behaviour.
+  const CompactRecipe& lookup(const std::string& seed_name,
+                              const unsigned char* data,
+                              std::size_t size,
+                              const std::string& seed_hash_hint,
+                              bool* hit) const;
+  // Whether any seed-specific recipes are present. Mutator can use this
+  // to skip even the cheap selector_key scan when only the global recipe
+  // is loaded.
+  bool has_seed_specific() const {
+    return !seed_id_recipes_.empty() || !seed_hash_recipes_.empty();
+  }
+  // Compute the stable input hash used by the seed_hash matching key.
+  // Public so the mutator can cache it once per seed.
+  static std::string compute_seed_hash(const unsigned char* data, std::size_t size);
 
  private:
   void add_recipe(CompactRecipe recipe);

@@ -18,6 +18,12 @@ struct AflStats {
   uint64_t paths_favored = 0;
   uint64_t paths_found = 0;
   uint64_t paths_imported = 0;
+  // Absolute edge coverage. AFL++ 3.x emits `edges_found` in fuzzer_stats;
+  // when not present we fall back to 0 so callers can detect missing telemetry.
+  uint64_t edges_found = 0;
+  // Healthiness signal — true if last_update appears stale relative to
+  // sampled_at (i.e. AFL has stopped writing to fuzzer_stats).
+  bool stale = false;
   uint64_t max_depth = 0;
   uint64_t cur_path = 0;
   uint64_t pending_favs = 0;

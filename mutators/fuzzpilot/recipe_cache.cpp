@@ -66,6 +66,15 @@ std::vector<std::string> split_tab(const std::string& line) {
   return parts;
 }
 
+bool is_safe_recipe_filename(const std::string& value) {
+  if (value.empty() || value == "." || value == "..") {
+    return false;
+  }
+  return value.find('/') == std::string::npos &&
+         value.find('\\') == std::string::npos &&
+         value.find("..") == std::string::npos;
+}
+
 void normalize(std::vector<CompactOperatorWeight>& weights) {
   double total = 0.0;
   for (const auto& weight : weights) {
@@ -208,8 +217,25 @@ void RecipeCache::load_from_environment() {
     fprintf(stderr, "[M5] FUZZPILOT_RECIPE_STORE not set\n");
     return;
   }
-  fprintf(stderr, "[M5] Loading recipes from: %s\n", store_env);
-  const std::filesystem::path store = store_env;
+  // Canonicalize the path to defeat directory-traversal tricks like
+  // setting `FUZZPILOT_RECIPE_STORE=/tmp/../etc/.../something`. On
+  // shared hosts (academic clusters, CI runners) the environment is
+  // attacker-controlled by other tenants; without canonical resolution
+  // the mutator would happily walk into arbitrary directories.
+  std::error_code ec;
+  std::filesystem::path store = std::filesystem::weakly_canonical(store_env, ec);
+  if (ec) {
+    fprintf(stderr, "[M5] FUZZPILOT_RECIPE_STORE canonicalize failed: %s\n",
+            ec.message().c_str());
+    return;
+  }
+  // The recipe store must exist as a directory (not e.g. a symlink to
+  // / or a regular file). exists+is_directory guards against both.
+  if (!std::filesystem::is_directory(store, ec) || ec) {
+    fprintf(stderr, "[M5] FUZZPILOT_RECIPE_STORE not a directory: %s\n", store.c_str());
+    return;
+  }
+  fprintf(stderr, "[M5] Loading recipes from: %s\n", store.c_str());
   const std::filesystem::path global_recipe_path = store / "global.recipe";
   if (std::filesystem::exists(global_recipe_path)) {
     auto loaded = parse_recipe_file(global_recipe_path);
@@ -239,6 +265,9 @@ void RecipeCache::load_from_environment() {
     if (parts.size() < 4) {
       continue;
     }
+    if (!is_safe_recipe_filename(parts[3])) {
+      continue;
+    }
     auto recipe = parse_recipe_file(store / "compact" / parts[3]);
     if (recipe.weights.empty()) {
       recipe.weights = global_.weights;
@@ -256,16 +285,40 @@ void RecipeCache::load_from_environment() {
 
 void RecipeCache::add_recipe(CompactRecipe recipe) {
   normalize(recipe.weights);
+  // Pre-sort the protect/focus ranges so the mutator hot path can
+  // binary-search them instead of scanning. Recipes are loaded once at
+  // mutator init, so the O(N log N) sort cost is paid once per
+  // process; on the hot path we save a linear scan on every mutation.
+  std::sort(recipe.protect_ranges.begin(), recipe.protect_ranges.end(),
+            [](const CompactRange& a, const CompactRange& b) {
+              return a.begin < b.begin;
+            });
+  std::sort(recipe.focus_ranges.begin(), recipe.focus_ranges.end(),
+            [](const CompactRange& a, const CompactRange& b) {
+              return a.begin < b.begin;
+            });
   if (recipe.selector_mode == "seed_id") {
     seed_id_recipes_.push_back(std::move(recipe));
-    std::sort(seed_id_recipes_.begin(), seed_id_recipes_.end(),
+    // Stable sort by (priority desc, id asc) so the tie-breaking is
+    // reproducible across platforms — previously ties depended on
+    // filesystem iteration order, which differs between APFS / ext4.
+    std::stable_sort(seed_id_recipes_.begin(), seed_id_recipes_.end(),
               [](const CompactRecipe& lhs, const CompactRecipe& rhs) {
-                return lhs.priority > rhs.priority;
+                if (lhs.priority != rhs.priority) {
+                  return lhs.priority > rhs.priority;
+                }
+                return lhs.id < rhs.id;
               });
   } else if (recipe.selector_mode == "seed_hash") {
     const auto key = recipe.selector_key;
     const auto it = seed_hash_recipes_.find(key);
-    if (it == seed_hash_recipes_.end() || recipe.priority >= it->second.priority) {
+    // Strictly greater for replacement, with id as a tiebreaker on
+    // equal priority. Without this rule, repeated loads of the same
+    // recipe set could produce different winners on different
+    // platforms.
+    if (it == seed_hash_recipes_.end() ||
+        recipe.priority > it->second.priority ||
+        (recipe.priority == it->second.priority && recipe.id < it->second.id)) {
       seed_hash_recipes_[key] = std::move(recipe);
     }
   }
@@ -275,23 +328,42 @@ const CompactRecipe& RecipeCache::lookup(const std::string& seed_name,
                                          const unsigned char* data,
                                          std::size_t size,
                                          bool* hit) const {
+  return lookup(seed_name, data, size, std::string(), hit);
+}
+
+const CompactRecipe& RecipeCache::lookup(const std::string& seed_name,
+                                         const unsigned char* data,
+                                         std::size_t size,
+                                         const std::string& seed_hash_hint,
+                                         bool* hit) const {
   if (hit != nullptr) {
     *hit = false;
   }
 
-  for (const auto& recipe : seed_id_recipes_) {
-    if (!recipe.selector_key.empty() &&
-        (seed_name == recipe.selector_key ||
-         seed_name.find(recipe.selector_key) != std::string::npos)) {
-      if (hit != nullptr) {
-        *hit = true;
+  // Cheap path first: seed-name based selectors. We keep substring match
+  // for backward compat but short-circuit on exact match. Skipped entirely
+  // when no seed-id recipes are loaded — the previous code paid the O(N)
+  // scan even when N == 0.
+  if (!seed_id_recipes_.empty()) {
+    for (const auto& recipe : seed_id_recipes_) {
+      if (recipe.selector_key.empty()) continue;
+      if (seed_name == recipe.selector_key ||
+          seed_name.find(recipe.selector_key) != std::string::npos) {
+        if (hit != nullptr) {
+          *hit = true;
+        }
+        return recipe;
       }
-      return recipe;
     }
   }
 
-  if (data != nullptr && size > 0 && !seed_hash_recipes_.empty()) {
-    const auto key = stable_hash_hex(data, size);
+  // Hash-based recipes: prefer the caller-provided cached hash to avoid
+  // re-hashing the entire input on every mutation. Falls back to fresh
+  // hashing only when no hint was passed.
+  if (!seed_hash_recipes_.empty() && data != nullptr && size > 0) {
+    const std::string& key = !seed_hash_hint.empty()
+                                 ? seed_hash_hint
+                                 : stable_hash_hex(data, size);
     const auto it = seed_hash_recipes_.find(key);
     if (it != seed_hash_recipes_.end()) {
       if (hit != nullptr) {
@@ -307,4 +379,8 @@ const CompactRecipe& RecipeCache::lookup(const std::string& seed_name,
     }
   }
   return global_;
+}
+
+std::string RecipeCache::compute_seed_hash(const unsigned char* data, std::size_t size) {
+  return stable_hash_hex(data, size);
 }

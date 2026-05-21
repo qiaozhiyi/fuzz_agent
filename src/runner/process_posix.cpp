@@ -1,9 +1,11 @@
 #include "fuzzpilot/runner/process.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
 #include <string>
@@ -88,9 +90,24 @@ ProcessResult spawn_process(const std::string& executable,
   auto env_raw = build_env_raw(env_storage);
   auto argv_raw = build_argv_raw(argv);
 
+  // Run the child in its own process group so we can later send a
+  // single signal (TERM/KILL) to the whole group and reap AFL++'s
+  // forked workers in one shot. Without this, Ctrl+C on the controller
+  // leaves AFL++ children as orphans consuming CPU.
+  posix_spawnattr_t attr;
+  if (posix_spawnattr_init(&attr) != 0) {
+    return {.pid = -1, .error = "posix_spawnattr_init failed"};
+  }
+  if (posix_spawnattr_setpgroup(&attr, 0) != 0 ||
+      posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP) != 0) {
+    posix_spawnattr_destroy(&attr);
+    return {.pid = -1, .error = "posix_spawnattr_setpgroup failed"};
+  }
+
   pid_t pid = -1;
-  const int rc = posix_spawnp(&pid, executable.c_str(), nullptr, nullptr,
+  const int rc = posix_spawnp(&pid, executable.c_str(), nullptr, &attr,
                               argv_raw.data(), env_raw.data());
+  posix_spawnattr_destroy(&attr);
   if (rc != 0) {
     return {.pid = -1, .error = std::strerror(rc)};
   }
@@ -100,7 +117,9 @@ ProcessResult spawn_process(const std::string& executable,
 ProcessCaptureResult run_process_capture(const std::string& executable,
                                          const std::vector<std::string>& argv,
                                          const std::map<std::string, std::string>& env,
-                                         bool merge_stderr) {
+                                         bool merge_stderr,
+                                         std::size_t max_output_bytes,
+                                         int timeout_ms) {
   ProcessCaptureResult result;
   if (executable.empty() || argv.empty()) {
     result.error = "empty executable or argv";
@@ -157,40 +176,97 @@ ProcessCaptureResult run_process_capture(const std::string& executable,
   }
   result.spawned = true;
 
+  const int flags = fcntl(pipe_fd[0], F_GETFL, 0);
+  if (flags >= 0) {
+    (void)fcntl(pipe_fd[0], F_SETFL, flags | O_NONBLOCK);
+  }
+
+  const auto started = std::chrono::steady_clock::now();
+  bool child_done = false;
+  bool pipe_done = false;
   char buffer[4096];
-  while (true) {
-    const ssize_t n = read(pipe_fd[0], buffer, sizeof(buffer));
-    if (n > 0) {
-      result.output.append(buffer, static_cast<std::size_t>(n));
-      continue;
-    }
-    if (n == 0) {
+  int wstatus = 0;
+  int post_child_empty_reads = 0;
+  while (!pipe_done || !child_done) {
+    bool read_progress = false;
+    while (!pipe_done) {
+      const ssize_t n = read(pipe_fd[0], buffer, sizeof(buffer));
+      if (n > 0) {
+        read_progress = true;
+        if (result.output.size() < max_output_bytes) {
+          const auto available = max_output_bytes - result.output.size();
+          result.output.append(buffer, std::min<std::size_t>(available,
+                                                             static_cast<std::size_t>(n)));
+          if (result.output.size() == max_output_bytes && result.error.empty()) {
+            result.error = "process output truncated";
+          }
+        }
+        continue;
+      }
+      if (n == 0) {
+        pipe_done = true;
+        break;
+      }
+      if (errno == EINTR) {
+        continue;
+      }
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      result.error = std::strerror(errno);
+      pipe_done = true;
       break;
     }
-    if (errno == EINTR) {
-      continue;
+
+    if (!child_done) {
+      const pid_t waited = waitpid(pid, &wstatus, WNOHANG);
+      if (waited == pid) {
+        child_done = true;
+        result.exited = WIFEXITED(wstatus);
+        if (result.exited) {
+          result.exit_code = WEXITSTATUS(wstatus);
+        }
+        result.signaled = WIFSIGNALED(wstatus);
+        if (result.signaled) {
+          result.term_signal = WTERMSIG(wstatus);
+        }
+      } else if (waited == -1 && errno != EINTR) {
+        child_done = true;
+        if (result.error.empty()) {
+          result.error = std::strerror(errno);
+        }
+      }
     }
-    result.error = std::strerror(errno);
-    break;
+
+    if (child_done && !pipe_done && !read_progress && ++post_child_empty_reads >= 3) {
+      pipe_done = true;
+    } else if (read_progress) {
+      post_child_empty_reads = 0;
+    }
+
+    if (!child_done && timeout_ms >= 0) {
+      const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::steady_clock::now() - started)
+                                  .count();
+      if (elapsed_ms >= timeout_ms) {
+        (void)kill(pid, SIGKILL);
+        do {
+          child_done = waitpid(pid, &wstatus, 0) == pid;
+        } while (!child_done && errno == EINTR);
+        result.signaled = true;
+        result.term_signal = SIGKILL;
+        if (result.error.empty() || result.error == "process output truncated") {
+          result.error = "process timed out";
+        }
+      }
+    }
+
+    if (!pipe_done || !child_done) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
   }
   close(pipe_fd[0]);
   pipe_fd[0] = -1;
-
-  int wstatus = 0;
-  pid_t waited = -1;
-  do {
-    waited = waitpid(pid, &wstatus, 0);
-  } while (waited == -1 && errno == EINTR);
-  if (waited == pid) {
-    result.exited = WIFEXITED(wstatus);
-    if (result.exited) {
-      result.exit_code = WEXITSTATUS(wstatus);
-    }
-    result.signaled = WIFSIGNALED(wstatus);
-    if (result.signaled) {
-      result.term_signal = WTERMSIG(wstatus);
-    }
-  }
   return result;
 }
 
@@ -232,6 +308,16 @@ bool kill_process(int pid) {
   return kill(pid, SIGKILL) == 0;
 }
 
+bool interrupt_process(int pid) {
+  if (pid <= 0) return false;
+  return kill(pid, SIGINT) == 0;
+}
+
+bool terminate_process(int pid) {
+  if (pid <= 0) return false;
+  return kill(pid, SIGTERM) == 0;
+}
+
 bool suspend_process(int pid) {
   if (pid <= 0) return false;
   return kill(pid, SIGSTOP) == 0;
@@ -240,6 +326,51 @@ bool suspend_process(int pid) {
 bool resume_process(int pid) {
   if (pid <= 0) return false;
   return kill(pid, SIGCONT) == 0;
+}
+
+bool terminate_process_group(int pid) {
+  if (pid <= 0) return false;
+  // Negative pid == process group on POSIX.
+  return kill(-pid, SIGTERM) == 0;
+}
+
+bool kill_process_group(int pid) {
+  if (pid <= 0) return false;
+  return kill(-pid, SIGKILL) == 0;
+}
+
+namespace {
+// `sig_atomic_t` is the only type POSIX guarantees is safe to write
+// from a signal handler and read from the main thread without any
+// further synchronization. Using `std::atomic<int>` would be tempting
+// but the standard does not promise its store/load are async-signal-safe
+// on every platform (it's implementation-defined for lock-free types).
+volatile sig_atomic_t g_termination_signal = 0;
+
+extern "C" void termination_signal_handler(int signum) {
+  // Set once and never overwrite, so the caller sees the first signal
+  // received. Comparison and store are both atomic for sig_atomic_t.
+  if (g_termination_signal == 0) {
+    g_termination_signal = static_cast<sig_atomic_t>(signum);
+  }
+}
+}  // namespace
+
+volatile sig_atomic_t* install_termination_signal_handler() {
+  struct sigaction sa{};
+  sa.sa_handler = termination_signal_handler;
+  sigemptyset(&sa.sa_mask);
+  // SA_RESTART so well-behaved syscalls (read/select/wait) resume after
+  // the handler returns; we test the flag explicitly between iterations.
+  sa.sa_flags = SA_RESTART;
+  static bool installed = false;
+  if (!installed) {
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGTERM, &sa, nullptr);
+    sigaction(SIGHUP, &sa, nullptr);
+    installed = true;
+  }
+  return &g_termination_signal;
 }
 
 }  // namespace fuzzpilot

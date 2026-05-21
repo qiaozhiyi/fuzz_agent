@@ -11,8 +11,8 @@ target:
   sanitizers: []
 
 afl:
-  afl_fuzz: /opt/homebrew/bin/afl-fuzz
-  afl_showmap: /opt/homebrew/bin/afl-showmap
+  afl_fuzz: afl-fuzz
+  afl_showmap: afl-showmap
   base_env:
     AFL_SKIP_CPUFREQ: "1"
     AFL_NO_UI: "1"
@@ -35,7 +35,7 @@ mutation_strategy:
   default_policy: afl_fallback
   max_recipes_per_seed: 4
   recipe_ttl_sec: 900
-  custom_mutator_path: ./build-make/mutators/fuzzpilot/libfuzzpilot_mutator.dylib
+  custom_mutator_path: ./build/mutators/fuzzpilot/libfuzzpilot_mutator
   hot_path_io: compact_recipe
   agent_controls:
     operator_weights: true
@@ -83,8 +83,10 @@ agent_runtime:
     result_analysis: true
 
 static_analysis:
-  enabled: true
-  python_bin: /opt/homebrew/anaconda3/envs/redteam/bin/python
-  extractor_script: ./scripts/ida_extractor.py
-  ida_dir: /Applications/IDA Professional 9.3.app/Contents/macOS
-  timeout_sec: 60
+  enabled: false
+  backend: ghidra
+  python_bin: python3
+  extractor_script: ./scripts/ghidra/FuzzPilotGhidraExtract.java
+  ida_dir: ""
+  ghidra_home: /opt/ghidra
+  timeout_sec: 120

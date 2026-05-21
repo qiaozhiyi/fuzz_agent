@@ -4,6 +4,7 @@
 #include "fuzzpilot/config.hpp"
 #include "fuzzpilot/env.hpp"
 #include "fuzzpilot/ids.hpp"
+#include "fuzzpilot/json_utils.hpp"
 #include "fuzzpilot/micro/evaluator.hpp"
 #include "fuzzpilot/micro/manager.hpp"
 #include "fuzzpilot/model/gateway.hpp"
@@ -26,6 +27,7 @@
 
 #include <array>
 #include <cctype>
+#include <csignal>
 #include <cstdlib>
 #include <cstdio>
 #include <set>
@@ -33,35 +35,11 @@
 namespace fuzzpilot {
 namespace {
 
-std::string json_escape(const std::string& value) {
-  std::ostringstream out;
-  for (const char c : value) {
-    switch (c) {
-      case '\\': out << "\\\\"; break;
-      case '"': out << "\\\""; break;
-      case '\n': out << "\\n"; break;
-      default: out << c; break;
-    }
-  }
-  return out.str();
-}
-
 std::string trim(std::string value) {
   auto not_space = [](unsigned char c) { return !std::isspace(c); };
   value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
   value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
   return value;
-}
-
-std::string json_value_or_raw(const std::string& value) {
-  if (value.empty()) {
-    return "{}";
-  }
-  const auto first = value.find_first_not_of(" \t\r\n");
-  if (first != std::string::npos && (value[first] == '{' || value[first] == '[')) {
-    return value;
-  }
-  return std::string("{\"raw\":\"") + json_escape(value) + "\"}";
 }
 
 void append_line(const std::filesystem::path& path, const std::string& line) {
@@ -117,39 +95,99 @@ std::string plateau_blackboard_json(const PlateauEvent& plateau, const AflStats&
          "\"seed_focus_probe\",\"per_seed_recipe_probe\"]}";
 }
 
-std::string run_ida_extractor(const StaticAnalysisConfig& sa_config,
-                              const std::filesystem::path& target_binary,
-                              const std::filesystem::path& run_dir) {
-  const auto output_json = run_dir / "ida_static_context.json";
+std::string static_analysis_error_json(const std::string& backend, const std::string& error) {
+  return std::string("{\"backend\":\"") + json_escape(backend) +
+         "\",\"error\":\"" + json_escape(error.substr(0, 1024)) + "\"}";
+}
 
-  const auto result = run_process_capture(
-      sa_config.python_bin.string(),
-      {sa_config.python_bin.string(),
-       sa_config.extractor_script.string(),
-       target_binary.string(),
-       output_json.string()},
-      {{"IDADIR", sa_config.ida_dir.string()}},
-      true);
-  if (!result.spawned || !result.exited || result.exit_code != 0) {
-    return "{\"error\":\"ida_extractor failed\"}";
-  }
-
-  std::ifstream ifs(output_json);
+std::string read_text_or_error(const std::filesystem::path& path,
+                               const std::string& backend) {
+  std::ifstream ifs(path);
   if (!ifs) {
-    return "{\"error\":\"ida output not found\"}";
+    return static_analysis_error_json(backend, "static analysis output not found: " + path.string());
   }
   std::ostringstream ss;
   ss << ifs.rdbuf();
   return ss.str();
 }
 
-std::filesystem::path generate_dict_from_ida_json(const std::string& ida_json,
-                                                   const std::filesystem::path& run_dir) {
-  const auto dict_path = run_dir / "ida_generated.dict";
+std::string run_static_extractor(const StaticAnalysisConfig& sa_config,
+                                 const std::filesystem::path& target_binary,
+                                 const std::filesystem::path& run_dir,
+                                 const std::filesystem::path& output_json) {
+  const auto backend = normalize_static_backend(sa_config.backend);
+  if (backend == "ida") {
+    const auto result = run_process_capture(
+        sa_config.python_bin.string(),
+        {sa_config.python_bin.string(),
+         sa_config.extractor_script.string(),
+         target_binary.string(),
+         output_json.string()},
+        {{"IDADIR", sa_config.ida_dir.string()}},
+        true,
+        1024 * 1024,
+        std::max(1, sa_config.timeout_sec) * 1000);
+    if (!result.spawned || !result.exited || result.exit_code != 0) {
+      return static_analysis_error_json("ida",
+                                        "ida extractor failed: " + result.error + " " + result.output);
+    }
+    return read_text_or_error(output_json, "ida");
+  }
+
+  if (backend != "ghidra") {
+    return static_analysis_error_json(backend, "unsupported static analysis backend");
+  }
+
+  const auto headless = resolve_ghidra_headless_path(sa_config);
+  const auto project_dir = run_dir / "ghidra_project";
+  std::filesystem::create_directories(project_dir);
+
+  const auto script_dir = sa_config.extractor_script.parent_path().empty()
+                              ? std::filesystem::path(".")
+                              : sa_config.extractor_script.parent_path();
+  const auto script_name = sa_config.extractor_script.filename();
+  const auto project_name = "fuzzpilot_" + std::to_string(static_cast<uint64_t>(std::time(nullptr)));
+  const auto timeout = std::to_string(std::max(1, sa_config.timeout_sec));
+
+  const std::vector<std::string> argv = {
+      headless.string(),
+      project_dir.string(),
+      project_name,
+      "-import",
+      target_binary.string(),
+      "-scriptPath",
+      script_dir.string(),
+      "-postScript",
+      script_name.string(),
+      output_json.string(),
+      "-analysisTimeoutPerFile",
+      timeout,
+      "-deleteProject",
+  };
+
+  const auto result = run_process_capture(headless.string(), argv, {}, true, 1024 * 1024,
+                                          std::max(1, sa_config.timeout_sec + 30) * 1000);
+  if (!result.spawned || !result.exited || result.exit_code != 0) {
+    return static_analysis_error_json("ghidra",
+                                      "ghidra extractor failed: " + result.error + " " + result.output);
+  }
+  return read_text_or_error(output_json, "ghidra");
+}
+
+std::string run_static_extractor(const StaticAnalysisConfig& sa_config,
+                                 const std::filesystem::path& target_binary,
+                                 const std::filesystem::path& run_dir) {
+  const auto output_json = run_dir / "static_context.json";
+  return run_static_extractor(sa_config, target_binary, run_dir, output_json);
+}
+
+std::filesystem::path generate_dict_from_static_json(const std::string& static_json,
+                                                     const std::filesystem::path& run_dir) {
+  const auto dict_path = run_dir / "static_generated.dict";
   std::ofstream dict_out(dict_path);
   if (!dict_out) return {};
 
-  dict_out << "# Auto-generated by FuzzPilot from IDA Pro idalib extraction\n";
+  dict_out << "# Auto-generated by FuzzPilot from static analysis extraction\n";
 
   auto decode_json_string = [](const std::string& value) {
     std::string decoded;
@@ -193,11 +231,22 @@ std::filesystem::path generate_dict_from_ida_json(const std::string& ida_json,
   };
 
   auto should_keep_token = [](const std::string& token) {
-    if (token.size() < 3 || token.size() > 24) return false;
-    if (token.find("AFL_") == 0 || token.find("__") == 0) return false;
+    if (token.size() < 3 || token.size() > 32) return false;
+    std::string lower = token;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+      return static_cast<char>(std::tolower(c));
+    });
+    if (token.front() == '_' || token.find("__") == 0) return false;
     if (token.find('/') != std::string::npos) return false;
-    if (token.find("afl-fuzz") != std::string::npos) return false;
-    if (token.find("could not") != std::string::npos) return false;
+    const std::vector<std::string> blocked = {
+        "afl", "cmplog", "forkserver", "shmat", "shmem", "map_size",
+        "debug:", "fs_error", "libsystem", "dyld", "asan", "ubsan",
+        "sanitizer", "waitpid", "could not"};
+    for (const auto& item : blocked) {
+      if (lower.find(item) != std::string::npos) {
+        return false;
+      }
+    }
     return std::all_of(token.begin(), token.end(), [](unsigned char c) {
       return c >= 0x20 && c <= 0x7e;
     });
@@ -207,13 +256,13 @@ std::filesystem::path generate_dict_from_ida_json(const std::string& ida_json,
   // extracted_strings key and the newer magic_tokens key across M4 iterations.
   auto extract_array = [&](const std::string& key) -> std::vector<std::string> {
       std::vector<std::string> results;
-      auto pos = ida_json.find("\"" + key + "\"");
+      auto pos = static_json.find("\"" + key + "\"");
       if (pos == std::string::npos) return results;
-      auto start = ida_json.find('[', pos);
-      auto end = ida_json.find(']', start);
+      auto start = static_json.find('[', pos);
+      auto end = static_json.find(']', start);
       if (start == std::string::npos || end == std::string::npos) return results;
 
-      std::string slice = ida_json.substr(start + 1, end - start - 1);
+      std::string slice = static_json.substr(start + 1, end - start - 1);
       std::size_t s_pos = 0;
       while (s_pos < slice.size()) {
           auto q1 = slice.find('"', s_pos);
@@ -241,22 +290,25 @@ std::filesystem::path generate_dict_from_ida_json(const std::string& ida_json,
     const auto escaped = afl_dict_escape(token);
     if (escaped.empty() || !seen_tokens.insert(escaped).second) continue;
 
-    dict_out << "ida_" << token_count << "=\"" << escaped << "\"\n";
+    dict_out << "static_" << token_count << "=\"" << escaped << "\"\n";
     ++token_count;
   }
 
   auto process_cmp_constants = [&](const std::string& key) {
-    auto pos = ida_json.find("\"" + key + "\"");
+    auto pos = static_json.find("\"" + key + "\"");
     if (pos == std::string::npos) return;
-    auto start = ida_json.find('[', pos);
-    auto end = ida_json.find(']', start);
+    auto start = static_json.find('[', pos);
+    auto end = static_json.find(']', start);
     if (start == std::string::npos || end == std::string::npos) return;
 
-    std::string slice = ida_json.substr(start + 1, end - start - 1);
+    std::string slice = static_json.substr(start + 1, end - start - 1);
     std::stringstream ss(slice);
     std::string val_str;
     while (std::getline(ss, val_str, ',') && token_count < 250) {
       val_str = trim(val_str);
+      if (val_str.size() >= 2 && val_str.front() == '"' && val_str.back() == '"') {
+        val_str = decode_json_string(val_str.substr(1, val_str.size() - 2));
+      }
       if (val_str.empty()) continue;
       try {
         const uint64_t v = std::stoull(val_str);
@@ -273,7 +325,7 @@ std::filesystem::path generate_dict_from_ida_json(const std::string& ida_json,
           const auto escaped = afl_dict_escape(decoded);
           if (escaped.empty() || !seen_tokens.insert(escaped).second) continue;
 
-          dict_out << "ida_cmp_" << token_count++ << "=\"" << escaped << "\"\n";
+          dict_out << "static_cmp_" << token_count++ << "=\"" << escaped << "\"\n";
           if (token_count >= 250) break;
         }
       } catch (...) {
@@ -294,6 +346,7 @@ std::string coverage_csv_row(const AflStats& stats) {
          std::to_string(stats.execs_done) + "," +
          std::to_string(stats.execs_per_sec) + "," +
          std::to_string(stats.paths_total) + "," +
+         std::to_string(stats.edges_found) + "," +
          std::to_string(stats.bitmap_cvg) + "," +
          std::to_string(stats.unique_crashes) + "," +
          std::to_string(stats.unique_hangs) + "," +
@@ -310,6 +363,31 @@ AflStats read_stats_or_throw(const std::filesystem::path& path) {
   return *stats;
 }
 
+ProcessStatus stop_afl_process(int pid, int graceful_timeout_ms) {
+  ProcessStatus status;
+  if (pid <= 0) {
+    return status;
+  }
+  // Send graceful SIGINT first — AFL++ catches it and writes out
+  // fuzzer_stats one last time before exiting cleanly.
+  (void)interrupt_process(pid);
+  status = wait_process(pid, graceful_timeout_ms);
+  if (status.exited || status.signaled) {
+    return status;
+  }
+  // Escalate to SIGTERM, this time on the entire process group so any
+  // AFL++ worker children are also reaped. Without the -pid group send
+  // we used to leave orphaned forkserver children on hard shutdowns.
+  (void)terminate_process_group(pid);
+  status = wait_process(pid, 2000);
+  if (status.exited || status.signaled) {
+    return status;
+  }
+  // Last resort SIGKILL to the group.
+  (void)kill_process_group(pid);
+  return wait_process(pid, 1000);
+}
+
 std::string normalize_provider_name(std::string provider) {
   for (char& c : provider) {
     if (c == '_') {
@@ -319,6 +397,81 @@ std::string normalize_provider_name(std::string provider) {
     }
   }
   return provider;
+}
+
+std::string normalize_ablation_mode(std::string mode) {
+  if (mode.empty()) {
+    return "full-agent";
+  }
+  for (char& c : mode) {
+    if (c == '_') {
+      c = '-';
+    } else {
+      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+  }
+  return mode;
+}
+
+void apply_run_overrides(AppConfig& config, RunOptions& options) {
+  options.ablation_mode = normalize_ablation_mode(options.ablation_mode);
+  if (options.main_budget_override_sec > 0) {
+    config.afl.main_budget_sec = options.main_budget_override_sec;
+  }
+  if (options.micro_budget_override_sec > 0) {
+    config.micro_campaign.budget_sec = options.micro_budget_override_sec;
+  }
+  if (options.plateau_window_override_sec > 0) {
+    config.afl.plateau_window_sec = options.plateau_window_override_sec;
+  }
+
+  if (options.ablation_mode == "full") {
+    options.ablation_mode = "full-agent";
+  } else if (options.ablation_mode == "baseline") {
+    options.ablation_mode = "baseline-afl";
+  }
+
+  if (options.ablation_mode == "baseline-afl") {
+    config.micro_campaign.enabled = false;
+    config.mutation_strategy.enabled = false;
+    config.static_analysis.enabled = false;
+    config.model_api.enabled = false;
+    options.model_provider = "fake";
+  } else if (options.ablation_mode == "rule-only") {
+    config.model_api.enabled = false;
+    options.model_provider = "fake";
+  } else if (options.ablation_mode == "no-static-analysis") {
+    config.static_analysis.enabled = false;
+    options.disable_static_analysis = true;
+  } else if (options.ablation_mode == "no-mutator") {
+    config.mutation_strategy.enabled = false;
+  } else if (options.ablation_mode == "no-microcampaign") {
+    // Skip the micro-campaign validation step entirely — top-1 agent
+    // proposal is promoted directly. Measures the value of the validation
+    // closed loop.
+    config.micro_campaign.enabled = false;
+    options.disable_microcampaign = true;
+  } else if (options.ablation_mode == "no-plateau") {
+    // Run agents on a fixed cadence (or never) regardless of coverage
+    // growth. Measures the value of plateau-triggered intervention.
+    options.disable_plateau_detector = true;
+  } else if (options.ablation_mode == "random-recipe") {
+    // Recipes drawn from a uniform random distribution over operators.
+    options.recipe_source = "random";
+  } else if (options.ablation_mode == "random-reward") {
+    options.reward_mode = "random";
+  } else if (options.ablation_mode == "edges-only") {
+    options.reward_mode = "edges_only";
+  } else if (options.ablation_mode != "full-agent") {
+    throw std::runtime_error("unsupported ablation mode: " + options.ablation_mode);
+  }
+}
+
+void configure_agent_tasks(std::vector<AgentTask>& tasks, const AppConfig& config) {
+  for (auto& task : tasks) {
+    task.timeout_ms = static_cast<uint32_t>(std::max(1000, config.agent_runtime.per_agent_timeout_ms));
+    task.max_output_tokens = static_cast<uint32_t>(std::max(256, config.model_api.max_output_tokens));
+  }
 }
 
 std::string env_or_fallback(const std::string& env_name, const std::string& fallback) {
@@ -376,18 +529,9 @@ void persist_agent_memory(Database& db,
                           double reward_hint) {
   const auto now = static_cast<uint64_t>(std::time(nullptr));
 
-  // Extract specific memory patch if present, else use full proposal
   std::string memory_val = decision.proposal_json;
-  const std::string patch_marker = "\"memory_patch\"";
-  auto patch_pos = decision.proposal_json.find(patch_marker);
-  if (patch_pos != std::string::npos) {
-      auto val_start = decision.proposal_json.find(':', patch_pos);
-      if (val_start != std::string::npos) {
-          // Simple heuristic to extract the value (could be string or object)
-          // For real robustness we'd use a JSON parser, but here we stay lightweight
-          memory_val = trim(decision.proposal_json.substr(val_start + 1));
-          if (!memory_val.empty() && memory_val.back() == '}') memory_val.pop_back();
-      }
+  if (const auto patch = extract_top_level_json_value(decision.proposal_json, "memory_patch")) {
+    memory_val = *patch;
   }
 
   const auto key = summary.plateau_id + ":" + decision.agent + ":" +
@@ -417,6 +561,16 @@ void persist_agent_decision(Database& db,
                             const std::filesystem::path& events_path) {
   db.insert_agent_decision(decision);
   ++summary.agent_decision_count;
+  // Accumulate LLM accounting for end-of-run aggregation. error_kind
+  // != "ok" counts as a failed call; tokens/latency are still added
+  // because we paid for them.
+  ++summary.llm_calls;
+  if (decision.model_response.error_kind != "ok") {
+    ++summary.llm_failed_calls;
+  }
+  summary.llm_input_tokens += decision.model_response.input_tokens;
+  summary.llm_output_tokens += decision.model_response.output_tokens;
+  summary.llm_total_latency_ms += static_cast<double>(decision.model_response.latency_ms);
   append_line(events_path, std::string("{\"event\":\"agent_decision\",\"decision\":") +
                                agent_decision_json(decision) + "}");
   append_line(summary.agent_replay_log_path, agent_decision_json(decision));
@@ -450,6 +604,7 @@ void write_report(const RunSummary& summary,
   report << "Run ID: `" << summary.run_id << "`\n\n";
   report << "Project: `" << config.project << "`\n\n";
   report << "Target: `" << config.target.name << "`\n\n";
+  report << "Ablation mode: `" << summary.ablation_mode << "`\n\n";
   report << "Plateau ID: `" << summary.plateau_id << "`\n\n";
   report << "Main AFL launch plan: `" << summary.main_launch_path.string() << "`\n\n";
   report << "Main AFL PID: `" << summary.main_pid << "`\n\n";
@@ -470,12 +625,18 @@ void write_report(const RunSummary& summary,
            << "` crashes=`" << last.unique_crashes << "`\n\n";
   }
   report << "## Agent Decisions\n\n";
+  if (decisions.empty()) {
+    report << "- none\n";
+  }
   for (const auto& decision : decisions) {
     report << "- `" << decision.agent << "` provider=`" << decision.model_response.provider
            << "` schema_valid=`" << (decision.model_response.schema_valid ? "true" : "false")
            << "` context=`" << decision.model_response.context_hash << "`\n";
   }
   report << "\n## Micro Results\n\n";
+  if (micro_results.empty()) {
+    report << "- none\n";
+  }
   for (const auto& result : micro_results) {
     report << "- `" << result.intervention_id << "` campaign=`" << result.campaign_id
            << "` reward=`" << result.reward << "` new_paths=`" << result.new_paths
@@ -485,16 +646,19 @@ void write_report(const RunSummary& summary,
 
 }  // namespace
 
-RunSummary run_mvp(const RunOptions& options) {
+RunSummary run_mvp(const RunOptions& requested_options) {
+  RunOptions options = requested_options;
   if (options.config_path.empty()) {
     throw std::runtime_error("RunOptions.config_path is required");
   }
   const auto loaded = load_config(options.config_path);
-  const auto& config = loaded.config;
+  auto config = loaded.config;
+  apply_run_overrides(config, options);
 
   RunSummary summary;
   summary.run_id = make_id("run");
   summary.main_campaign_id = "main_" + summary.run_id;
+  summary.ablation_mode = options.ablation_mode;
   summary.run_dir = options.work_dir / summary.run_id;
   summary.db_path = options.db_path.empty() ? (summary.run_dir / "fuzzpilot.sqlite") : options.db_path;
   summary.report_path = summary.run_dir / "report.md";
@@ -514,13 +678,15 @@ RunSummary run_mvp(const RunOptions& options) {
   db.initialize_schema(options.schema_path);
   const auto env = capture_env_snapshot(config.afl.afl_fuzz.string());
   db.insert_run(summary.run_id, config.project, config.target.name, now, "running",
-                env.os, env.arch, env.afl_version);
+                env.os, env.arch, env.afl_version, options.ablation_mode);
   db.insert_campaign(summary.main_campaign_id, summary.run_id, "main", "", "",
                      main_output_dir, now,
                      static_cast<uint64_t>(config.afl.main_budget_sec), "running");
 
-  RecipeStore main_store(main_recipe_store);
-  main_store.write_compact_recipes({make_default_dictionary_strategy({"FUZZ", "MAGIC", "TOKEN"})});
+  if (config.mutation_strategy.enabled) {
+    RecipeStore main_store(main_recipe_store);
+    main_store.write_compact_recipes({make_default_dictionary_strategy({"FUZZ", "MAGIC", "TOKEN"})});
+  }
   const auto main_launch = build_main_afl_spec(config, main_output_dir, main_recipe_store);
   write_text_file(summary.main_launch_path,
                   "#!/usr/bin/env sh\n" + shell_preview(main_launch) + "\n");
@@ -542,11 +708,17 @@ RunSummary run_mvp(const RunOptions& options) {
   plateau_config.window_sec = static_cast<uint64_t>(config.afl.plateau_window_sec);
   plateau_config.max_new_paths = static_cast<uint64_t>(std::max(0, config.afl.plateau_min_new_edges));
   plateau_config.min_execs_delta = 1000;
+  plateau_config.disabled = options.disable_plateau_detector;
+  // Scale minimum sample count to window: aim for at least one sample per
+  // 30 seconds in the window, with a hard floor of 5 (for short test
+  // windows used in CI).
+  plateau_config.min_samples = std::max<std::size_t>(
+      5, static_cast<std::size_t>(plateau_config.window_sec / 30));
   PlateauDetector detector(plateau_config);
 
   std::vector<AflStats> main_samples;
   write_text_file(summary.coverage_csv_path,
-                  "ts,execs_done,execs_per_sec,paths_total,bitmap_cvg,"
+                  "ts,execs_done,execs_per_sec,paths_total,edges_found,bitmap_cvg,"
                   "unique_crashes,unique_hangs,recipe_hits,recipe_misses\n");
 
   auto process_stats = [&](const AflStats& stats) {
@@ -565,23 +737,25 @@ RunSummary run_mvp(const RunOptions& options) {
     }
   };
 
-  // --- Initial Binary Intelligence Scan (M4-Full RE) ---
+  // --- Initial binary intelligence scan via the configured reverse-engineering backend. ---
   std::string base_intelligence_json = "{}";
-  if (config.static_analysis.enabled && !config.static_analysis.ida_dir.empty()) {
+  if (config.static_analysis.enabled) {
     const auto intel_path = summary.run_dir / "base_intelligence.json";
     if (!std::filesystem::exists(intel_path)) {
-      append_line(events_path, "{\"event\":\"ida_initial_scan_started\"}");
-      base_intelligence_json = run_ida_extractor(config.static_analysis,
-                                                 std::filesystem::absolute(config.target.binary),
-                                                 summary.run_dir);
+      append_line(events_path,
+                  std::string("{\"event\":\"static_initial_scan_started\",\"backend\":\"") +
+                      json_escape(normalize_static_backend(config.static_analysis.backend)) + "\"}");
+      base_intelligence_json = run_static_extractor(config.static_analysis,
+                                                    std::filesystem::absolute(config.target.binary),
+                                                    summary.run_dir);
 
-      const auto raw_ida_path = summary.run_dir / "ida_static_context.json";
-      if (std::filesystem::exists(raw_ida_path)) {
-        std::filesystem::rename(summary.run_dir / "ida_static_context.json", intel_path);
+      const auto raw_static_path = summary.run_dir / "static_context.json";
+      if (std::filesystem::exists(raw_static_path)) {
+        std::filesystem::rename(raw_static_path, intel_path);
       } else {
         write_text_file(intel_path, base_intelligence_json);
       }
-      append_line(events_path, "{\"event\":\"ida_initial_scan_done\"}");
+      append_line(events_path, "{\"event\":\"static_initial_scan_done\"}");
     } else {
       std::ifstream ifs(intel_path);
       std::ostringstream ss;
@@ -598,23 +772,93 @@ RunSummary run_mvp(const RunOptions& options) {
   } else {
     TelemetryCollector collector(main_output_dir, "");
     int elapsed_sec = 0;
+    std::string last_telemetry_error;
+    // Subscribe to the SIGINT/SIGTERM flag installed in main(). When
+    // the signal arrives we break out of the main sampling loop,
+    // tear down the AFL process group, and let the rest of run_mvp
+    // run normal cleanup (DB finish_run, report writing).
+    volatile sig_atomic_t* termination_flag = install_termination_signal_handler();
     while (elapsed_sec < config.afl.main_budget_sec) {
       std::this_thread::sleep_for(std::chrono::seconds(1));
       elapsed_sec += 1;
+
+      if (termination_flag != nullptr && *termination_flag != 0) {
+        append_line(events_path,
+                    std::string("{\"event\":\"termination_signal\",\"signal\":") +
+                        std::to_string(*termination_flag) + "}");
+        break;
+      }
 
       std::string error;
       const auto stats = collector.sample(&error);
       if (stats) {
         process_stats(*stats);
-        if (!summary.plateau_id.empty()) {
+        if (config.micro_campaign.enabled && !summary.plateau_id.empty()) {
           break; // Stop main loop to evaluate micro-campaigns on plateau
+        }
+      } else {
+        last_telemetry_error = error;
+        if (summary.main_pid > 0) {
+          const auto status = wait_process(summary.main_pid, 0);
+          if (status.exited || status.signaled) {
+            std::ostringstream message;
+            message << "AFL++ main campaign exited before telemetry was available";
+            if (status.exited) {
+              message << " with exit_code=" << status.exit_code;
+            }
+            if (status.signaled) {
+              message << " from signal=" << status.term_signal;
+            }
+            if (!last_telemetry_error.empty()) {
+              message << "; last telemetry error: " << last_telemetry_error;
+            }
+            append_line(events_path,
+                        std::string("{\"event\":\"main_afl_exited_before_telemetry\","
+                                    "\"exit_code\":") +
+                            std::to_string(status.exit_code) + ",\"signaled\":" +
+                            (status.signaled ? "true" : "false") + ",\"error\":\"" +
+                            json_escape(last_telemetry_error) + "\"}");
+            summary.main_pid = -1;
+            throw std::runtime_error(message.str());
+          }
         }
       }
     }
   }
 
   if (main_samples.empty()) {
-    throw std::runtime_error("MVP run requires at least one --stats sample in the current implementation");
+    throw std::runtime_error(options.dry_run
+                                 ? "dry-run requires at least one --stats sample"
+                                 : "real run finished without any AFL++ telemetry samples");
+  }
+  if (!options.dry_run && config.micro_campaign.enabled && summary.main_pid > 0) {
+    const auto status = stop_afl_process(summary.main_pid, 5000);
+    append_line(events_path,
+                std::string("{\"event\":\"main_afl_stopped_for_analysis\",\"pid\":") +
+                    std::to_string(summary.main_pid) + ",\"exited\":" +
+                    (status.exited ? "true" : "false") + ",\"signaled\":" +
+                    (status.signaled ? "true" : "false") + "}");
+    summary.main_pid = -1;
+  }
+  if (!config.micro_campaign.enabled) {
+    std::vector<MicroResult> micro_results;
+    std::vector<AgentDecision> decisions;
+    write_report(summary, config, main_samples, micro_results, decisions);
+
+    const auto done = static_cast<uint64_t>(std::time(nullptr));
+    db.finish_campaign(summary.main_campaign_id, done, "completed", "completed");
+    // Baseline runs never invoke the LLM and never reach winner selection,
+    // so totals/status default to empty/zero. Recorded for completeness.
+    RunLlmTotals totals;
+    db.finish_run(summary.run_id, done, "completed",
+                  to_string(summary.winner_status), totals);
+
+    if (!options.dry_run && summary.main_pid > 0) {
+      stop_afl_process(summary.main_pid, 5000);
+      summary.main_pid = -1;
+    }
+    append_line(events_path, "{\"event\":\"m6_baseline_completed\",\"micro_campaigns_enabled\":false}");
+    return summary;
   }
   if (summary.plateau_id.empty()) {
     PlateauEvent forced;
@@ -639,23 +883,35 @@ RunSummary run_mvp(const RunOptions& options) {
   append_line(events_path, std::string("{\"event\":\"corpus_snapshot\",\"snapshot\":") +
                                corpus_snapshot_json(snapshot) + "}");
 
-  // --- Static Analysis via IDA Pro idalib ---
+  // --- Static Analysis via configured reverse-engineering backend ---
   std::string static_context_json = "{}";
-  std::filesystem::path ida_dict_path;
-  if (config.static_analysis.enabled && !config.static_analysis.ida_dir.empty()) {
-    append_line(events_path, "{\"event\":\"ida_extractor_started\"}");
-    static_context_json = run_ida_extractor(
-        config.static_analysis,
-        std::filesystem::absolute(config.target.binary),
-        summary.run_dir);
-    append_line(events_path, std::string("{\"event\":\"ida_extractor_done\",\"context_size\":") +
-                                 std::to_string(static_context_json.size()) + "}");
+  std::filesystem::path static_dict_path;
+  if (config.static_analysis.enabled) {
+    if (base_intelligence_json != "{}") {
+      static_context_json = base_intelligence_json;
+      write_text_file(summary.run_dir / "static_context.json", static_context_json);
+      append_line(events_path,
+                  std::string("{\"event\":\"static_extractor_reused\","
+                              "\"source\":\"base_intelligence.json\","
+                              "\"context_size\":") +
+                      std::to_string(static_context_json.size()) + "}");
+    } else {
+      append_line(events_path,
+                  std::string("{\"event\":\"static_extractor_started\",\"backend\":\"") +
+                      json_escape(normalize_static_backend(config.static_analysis.backend)) + "\"}");
+      static_context_json = run_static_extractor(
+          config.static_analysis,
+          std::filesystem::absolute(config.target.binary),
+          summary.run_dir);
+      append_line(events_path, std::string("{\"event\":\"static_extractor_done\",\"context_size\":") +
+                                   std::to_string(static_context_json.size()) + "}");
+    }
 
-    // Generate AFL++ dictionary from IDA intelligence
-    ida_dict_path = generate_dict_from_ida_json(static_context_json, summary.run_dir);
-    if (!ida_dict_path.empty() && std::filesystem::exists(ida_dict_path)) {
-      append_line(events_path, std::string("{\"event\":\"ida_dict_generated\",\"path\":\"") +
-                                   ida_dict_path.string() + "\"}");
+    // Generate AFL++ dictionary from static-analysis intelligence.
+    static_dict_path = generate_dict_from_static_json(static_context_json, summary.run_dir);
+    if (!static_dict_path.empty() && std::filesystem::exists(static_dict_path)) {
+      append_line(events_path, std::string("{\"event\":\"static_dict_generated\",\"path\":\"") +
+                                   static_dict_path.string() + "\"}");
     }
   }
 
@@ -671,15 +927,16 @@ RunSummary run_mvp(const RunOptions& options) {
   const auto recent_decisions = db.get_recent_decisions(summary.run_id, 20);
   const auto agent_memory = db.get_agent_memory(summary.run_id);
 
-  // Merge plateau-specific context with base intelligence
+  // Merge plateau-specific context with base intelligence.
   std::string combined_intel = base_intelligence_json;
   if (static_context_json != "{}" && static_context_json != base_intelligence_json) {
-      combined_intel = static_context_json; // Plateau specific usually has more up-to-date or targeted info
+    combined_intel = static_context_json;
   }
 
   const auto blackboard = plateau_blackboard_json(blackboard_plateau, main_samples.back(), combined_intel, recent_decisions, agent_memory);
-  const auto tasks = make_default_agent_tasks(
+  auto tasks = make_default_agent_tasks(
       summary.plateau_id, blackboard, static_cast<uint32_t>(config.micro_campaign.budget_sec));
+  configure_agent_tasks(tasks, config);
   auto decisions = run_agent_tasks(*gateway, summary.run_id, summary.plateau_id, tasks);
   for (const auto& decision : decisions) {
     persist_agent_decision(db, summary, config, decision, 0.0, events_path);
@@ -691,29 +948,51 @@ RunSummary run_mvp(const RunOptions& options) {
   summary.micro_campaign_count = specs.size();
 
   if (!options.dry_run && summary.main_pid > 0) {
-    kill_process(summary.main_pid);
-    wait_process(summary.main_pid, 1000);
+    const auto status = stop_afl_process(summary.main_pid, 5000);
     append_line(events_path, std::string("{\"event\":\"main_afl_stopped_for_micro\",\"pid\":") +
-                                 std::to_string(summary.main_pid) + "}");
+                                 std::to_string(summary.main_pid) +
+                                 ",\"exited\":" + (status.exited ? "true" : "false") +
+                                 ",\"signaled\":" + (status.signaled ? "true" : "false") + "}");
     summary.main_pid = -1;
   }
 
   std::vector<MicroResult> micro_results;
+  std::set<std::string> failed_micro_campaigns;
   const auto parent_stats = main_samples.back();
+  // Resolve reward mode for this run (CLI / ablation override).
+  RewardMode reward_mode = RewardMode::kEdgeWeighted;
+  if (options.reward_mode == "edges_only") {
+    reward_mode = RewardMode::kEdgesOnly;
+  } else if (options.reward_mode == "paths_only") {
+    reward_mode = RewardMode::kPathsOnly;
+  } else if (options.reward_mode == "random") {
+    reward_mode = RewardMode::kRandom;
+  }
   for (std::size_t i = 0; i < specs.size(); ++i) {
     const auto& spec = specs[i];
+    const auto campaign_start_ts = static_cast<uint64_t>(std::time(nullptr));
     db.insert_campaign(spec.id, summary.run_id, "micro", summary.main_campaign_id,
-                       spec.intervention_id, spec.output_dir, now, spec.budget_sec,
+                       spec.intervention_id, spec.output_dir, campaign_start_ts, spec.budget_sec,
                        options.dry_run ? "dry_run" : "running");
 
     AflStats micro_stats;
+    std::string termination_reason = "completed";
     if (options.dry_run) {
+      // In dry-run mode the controller fakes AFL execution by reading
+      // pre-recorded stats files. If neither micro nor main stats paths
+      // were provided we have nothing to read — fail loudly rather
+      // than calling .back() on an empty vector (which is UB).
+      if (options.micro_stats_paths.empty() && options.main_stats_paths.empty()) {
+        throw std::runtime_error(
+            "dry_run requires --stats (main) or --micro-stats; both are empty");
+      }
       const auto stats_path = options.micro_stats_paths.empty()
                                   ? options.main_stats_paths.back()
                                   : options.micro_stats_paths[std::min(i, options.micro_stats_paths.size() - 1)];
       micro_stats = read_stats_or_throw(stats_path);
+      termination_reason = "dry_run";
     } else {
-      const auto micro_launch = build_micro_afl_spec(config, spec, ida_dict_path);
+      const auto micro_launch = build_micro_afl_spec(config, spec, static_dict_path);
       write_text_file(spec.output_dir / "launch.sh", "#!/usr/bin/env sh\n" + shell_preview(micro_launch) + "\n");
       const auto process = spawn_process(micro_launch.afl_fuzz.string(), micro_launch.argv, micro_launch.env);
       if (process.pid > 0) {
@@ -721,37 +1000,120 @@ RunSummary run_mvp(const RunOptions& options) {
                                      std::to_string(process.pid) + ",\"campaign_id\":\"" + spec.id + "\"}");
         const auto status = wait_process(process.pid, spec.budget_sec * 1000 + 5000);
         if (!status.exited && !status.signaled) {
-          kill_process(process.pid);
-          wait_process(process.pid, 1000);
+          stop_afl_process(process.pid, 3000);
+          termination_reason = "timeout_killed";
+        } else if (status.signaled) {
+          termination_reason = "signaled";
         }
         std::string error;
         auto live_stats = parse_fuzzer_stats(spec.output_dir / "default" / "fuzzer_stats", &error);
         if (live_stats) {
           micro_stats = *live_stats;
         } else {
+          const auto fail_ts = static_cast<uint64_t>(std::time(nullptr));
+          db.finish_campaign(spec.id, fail_ts, "failed");
+          failed_micro_campaigns.insert(spec.id);
+          append_line(events_path,
+                      std::string("{\"event\":\"micro_afl_failed\",\"campaign_id\":\"") +
+                          json_escape(spec.id) + "\",\"intervention_id\":\"" +
+                          json_escape(spec.intervention_id) + "\",\"start_ts\":" +
+                          std::to_string(campaign_start_ts) + ",\"end_ts\":" +
+                          std::to_string(fail_ts) + ",\"reason\":\"stats_unreadable\",\"error\":\"" +
+                          json_escape(error) + "\"}");
           micro_stats = parent_stats; // fallback if failed to start/write
+          termination_reason = "stats_unreadable";
         }
       } else {
+        const auto fail_ts = static_cast<uint64_t>(std::time(nullptr));
+        db.finish_campaign(spec.id, fail_ts, "failed");
+        failed_micro_campaigns.insert(spec.id);
+        append_line(events_path,
+                    std::string("{\"event\":\"micro_afl_spawn_failed\",\"campaign_id\":\"") +
+                        json_escape(spec.id) + "\",\"intervention_id\":\"" +
+                        json_escape(spec.intervention_id) + "\",\"start_ts\":" +
+                        std::to_string(campaign_start_ts) + ",\"end_ts\":" +
+                        std::to_string(fail_ts) + ",\"reason\":\"spawn_failed\",\"error\":\"" +
+                        json_escape(process.error) + "\"}");
         micro_stats = parent_stats;
+        termination_reason = "spawn_failed";
       }
     }
-    auto result = evaluate_micro_result(spec.intervention_id, spec.id, parent_stats, micro_stats);
+    auto result = evaluate_micro_result(spec.intervention_id, spec.id, parent_stats,
+                                        micro_stats, reward_mode);
+    const auto campaign_end_ts = static_cast<uint64_t>(std::time(nullptr));
+    append_line(events_path, std::string("{\"event\":\"micro_campaign_completed\",\"campaign_id\":\"") +
+                                 json_escape(spec.id) + "\",\"start_ts\":" +
+                                 std::to_string(campaign_start_ts) + ",\"end_ts\":" +
+                                 std::to_string(campaign_end_ts) + ",\"duration_sec\":" +
+                                 std::to_string(campaign_end_ts - campaign_start_ts) +
+                                 ",\"termination_reason\":\"" + termination_reason + "\"}");
     micro_results.push_back(result);
   }
 
-  if (!micro_results.empty()) {
-    auto winner_it = std::max_element(
-        micro_results.begin(), micro_results.end(),
-        [](const MicroResult& lhs, const MicroResult& rhs) { return lhs.reward < rhs.reward; });
-    winner_it->promoted = true;
-    summary.winner_intervention_id = winner_it->intervention_id;
-    summary.winner_campaign_id = winner_it->campaign_id;
-    summary.winner_reward = winner_it->reward;
+  // Winner selection with explicit status — distinguishes "no candidates"
+  // from "all failed" from "selected" so downstream analysis doesn't
+  // conflate them.
+  auto winner_it = micro_results.end();
+  uint64_t valid_results = 0;
+  for (auto it = micro_results.begin(); it != micro_results.end(); ++it) {
+    if (failed_micro_campaigns.find(it->campaign_id) != failed_micro_campaigns.end()) {
+      continue;
+    }
+    ++valid_results;
+    if (winner_it == micro_results.end() || it->reward > winner_it->reward) {
+      winner_it = it;
+    }
   }
+  summary.micro_campaigns_failed = failed_micro_campaigns.size();
+  if (micro_results.empty()) {
+    summary.winner_status = WinnerStatus::kNoCandidates;
+  } else if (winner_it == micro_results.end()) {
+    summary.winner_status = WinnerStatus::kAllFailed;
+  } else {
+    // Naive significance check: require winner to beat the second-best by
+    // at least 5% of its own reward, or by an absolute small margin when
+    // reward magnitudes are tiny. Replaces the previous raw-comparison
+    // behaviour that promoted on any positive delta (which is statistical
+    // noise). For full significance use --micro-campaign-repeats >= 3 and
+    // run the offline Mann-Whitney pass.
+    double second_best = 0.0;
+    bool have_second = false;
+    for (const auto& r : micro_results) {
+      if (failed_micro_campaigns.count(r.campaign_id)) continue;
+      if (&r == &(*winner_it)) continue;
+      if (!have_second || r.reward > second_best) {
+        second_best = r.reward;
+        have_second = true;
+      }
+    }
+    const double abs_margin = 0.5;       // arbitrary small-reward floor
+    const double rel_margin = 0.05;      // 5% relative margin
+    const bool significant = !have_second ||
+        (winner_it->reward - second_best) >
+            std::max(abs_margin, std::abs(winner_it->reward) * rel_margin);
+    if (significant && winner_it->reward > 0.0) {
+      winner_it->promoted = true;
+      summary.winner_intervention_id = winner_it->intervention_id;
+      summary.winner_campaign_id = winner_it->campaign_id;
+      summary.winner_reward = winner_it->reward;
+      summary.winner_status = WinnerStatus::kSelected;
+    } else {
+      summary.winner_status = WinnerStatus::kNoSignificance;
+    }
+  }
+  append_line(events_path, std::string("{\"event\":\"winner_decided\",\"status\":\"") +
+                               to_string(summary.winner_status) +
+                               "\",\"valid_results\":" + std::to_string(valid_results) +
+                               ",\"failed_results\":" +
+                               std::to_string(summary.micro_campaigns_failed) +
+                               ",\"winner_reward\":" +
+                               std::to_string(summary.winner_reward) + "}");
 
   for (const auto& result : micro_results) {
     db.insert_micro_result(result);
-    db.finish_campaign(result.campaign_id, static_cast<uint64_t>(std::time(nullptr)), "completed");
+    if (failed_micro_campaigns.find(result.campaign_id) == failed_micro_campaigns.end()) {
+      db.finish_campaign(result.campaign_id, static_cast<uint64_t>(std::time(nullptr)), "completed");
+    }
     append_line(events_path, std::string("{\"event\":\"micro_result\",\"result\":") +
                                  micro_result_json(result) + "}");
   }
@@ -772,6 +1134,8 @@ RunSummary run_mvp(const RunOptions& options) {
   result_task.output_schema_json =
       "{\"required\":[\"agent\",\"memory_patch\",\"critique\"]}";
   result_task.budget_sec = static_cast<uint32_t>(config.micro_campaign.budget_sec);
+  result_task.timeout_ms = static_cast<uint32_t>(std::max(1000, config.agent_runtime.per_agent_timeout_ms));
+  result_task.max_output_tokens = static_cast<uint32_t>(std::max(256, config.model_api.max_output_tokens));
   const auto result_decisions = run_agent_tasks(
       *gateway, summary.run_id, summary.plateau_id, {result_task});
   for (const auto& decision : result_decisions) {
@@ -779,25 +1143,53 @@ RunSummary run_mvp(const RunOptions& options) {
     decisions.push_back(decision);
   }
 
-  auto promoted = make_default_dictionary_strategy(
-      {"PROMOTED", summary.winner_intervention_id, "FUZZ", "TOKEN"});
-  promoted.id = make_id("strategy_promoted");
-  RecipeStore promoted_store(summary.run_dir / "promoted_recipes");
-  summary.promoted_recipe_index = promoted_store.write_compact_recipes({promoted});
-  append_line(events_path, std::string("{\"event\":\"promotion\",\"winner_intervention_id\":\"") +
-                               json_escape(summary.winner_intervention_id) +
-                               "\",\"recipe_index\":\"" +
-                               json_escape(summary.promoted_recipe_index.string()) + "\"}");
+  if (!summary.winner_intervention_id.empty()) {
+    // Build the recipe to promote. For the `random-recipe` ablation we
+    // bypass the agent-driven dictionary strategy entirely and emit a
+    // recipe whose operator weights are sampled at random — this is
+    // what makes the ablation actually compare "agent recipes vs
+    // random recipes" rather than silently fall through to the agent
+    // strategy (which was the bug noted in the post-fix review).
+    SeedMutationStrategy promoted;
+    if (options.recipe_source == "random") {
+      // Seed the RNG from the run_id hash so the same run reproduces
+      // the same recipe; different runs differ.
+      uint64_t seed_value = std::hash<std::string>{}(summary.run_id);
+      promoted = make_random_recipe_strategy(
+          seed_value, {"PROMOTED", summary.winner_intervention_id, "FUZZ", "TOKEN"});
+    } else {
+      promoted = make_default_dictionary_strategy(
+          {"PROMOTED", summary.winner_intervention_id, "FUZZ", "TOKEN"});
+    }
+    promoted.id = make_id("strategy_promoted");
+    RecipeStore promoted_store(summary.run_dir / "promoted_recipes");
+    summary.promoted_recipe_index = promoted_store.write_compact_recipes({promoted});
+    append_line(events_path, std::string("{\"event\":\"promotion\",\"winner_intervention_id\":\"") +
+                                 json_escape(summary.winner_intervention_id) +
+                                 "\",\"recipe_source\":\"" +
+                                 json_escape(options.recipe_source) +
+                                 "\",\"recipe_index\":\"" +
+                                 json_escape(summary.promoted_recipe_index.string()) + "\"}");
+  } else {
+    append_line(events_path, "{\"event\":\"promotion_skipped\",\"reason\":\"no_successful_micro_campaign\"}");
+  }
 
   write_report(summary, config, main_samples, micro_results, decisions);
 
   const auto done = static_cast<uint64_t>(std::time(nullptr));
-  db.finish_campaign(summary.main_campaign_id, done, "completed");
-  db.finish_run(summary.run_id, done, "completed");
+  db.finish_campaign(summary.main_campaign_id, done, "completed", "completed");
+  // Persist aggregate LLM accounting collected during the run.
+  RunLlmTotals totals;
+  totals.calls = summary.llm_calls;
+  totals.failed_calls = summary.llm_failed_calls;
+  totals.input_tokens = summary.llm_input_tokens;
+  totals.output_tokens = summary.llm_output_tokens;
+  totals.total_latency_ms = summary.llm_total_latency_ms;
+  db.finish_run(summary.run_id, done, "completed",
+                to_string(summary.winner_status), totals);
 
   if (!options.dry_run && summary.main_pid > 0) {
-    kill_process(summary.main_pid);
-    wait_process(summary.main_pid, 1000);
+    stop_afl_process(summary.main_pid, 5000);
   }
 
   return summary;
@@ -811,6 +1203,8 @@ std::string run_summary_json(const RunSummary& summary) {
   out << "\"plateau_id\":\"" << json_escape(summary.plateau_id) << "\",";
   out << "\"winner_intervention_id\":\"" << json_escape(summary.winner_intervention_id) << "\",";
   out << "\"winner_campaign_id\":\"" << json_escape(summary.winner_campaign_id) << "\",";
+  out << "\"winner_status\":\"" << to_string(summary.winner_status) << "\",";
+  out << "\"ablation_mode\":\"" << json_escape(summary.ablation_mode) << "\",";
   out << "\"winner_reward\":" << summary.winner_reward << ",";
   out << "\"run_dir\":\"" << json_escape(summary.run_dir.string()) << "\",";
   out << "\"db_path\":\"" << json_escape(summary.db_path.string()) << "\",";
@@ -823,9 +1217,25 @@ std::string run_summary_json(const RunSummary& summary) {
   out << "\"telemetry_count\":" << summary.telemetry_count << ",";
   out << "\"agent_decision_count\":" << summary.agent_decision_count << ",";
   out << "\"micro_campaign_count\":" << summary.micro_campaign_count << ",";
+  out << "\"micro_campaigns_failed\":" << summary.micro_campaigns_failed << ",";
+  out << "\"llm_calls\":" << summary.llm_calls << ",";
+  out << "\"llm_input_tokens\":" << summary.llm_input_tokens << ",";
+  out << "\"llm_output_tokens\":" << summary.llm_output_tokens << ",";
+  out << "\"llm_failed_calls\":" << summary.llm_failed_calls << ",";
+  out << "\"llm_total_latency_ms\":" << summary.llm_total_latency_ms << ",";
   out << "\"main_pid\":" << summary.main_pid;
   out << "}";
   return out.str();
+}
+
+const char* to_string(WinnerStatus status) {
+  switch (status) {
+    case WinnerStatus::kNoCandidates: return "no_candidates";
+    case WinnerStatus::kAllFailed: return "all_failed";
+    case WinnerStatus::kSelected: return "selected";
+    case WinnerStatus::kNoSignificance: return "no_significance";
+  }
+  return "unknown";
 }
 
 }  // namespace fuzzpilot

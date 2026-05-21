@@ -2,6 +2,7 @@
 #include "fuzzpilot/agents/agent_runtime.hpp"
 #include "fuzzpilot/controller/run.hpp"
 #include "fuzzpilot/env.hpp"
+#include "fuzzpilot/experiments/m6_matrix.hpp"
 #include "fuzzpilot/interventions/intervention.hpp"
 #include "fuzzpilot/micro/evaluator.hpp"
 #include "fuzzpilot/micro/manager.hpp"
@@ -9,6 +10,7 @@
 #include "fuzzpilot/mutation/recipe_store.hpp"
 #include "fuzzpilot/plateau/detector.hpp"
 #include "fuzzpilot/runner/afl_runner.hpp"
+#include "fuzzpilot/runner/process.hpp"
 #include "fuzzpilot/storage/db.hpp"
 #include "fuzzpilot/telemetry/collector.hpp"
 #include "fuzzpilot/telemetry/mutation_events.hpp"
@@ -17,6 +19,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -32,7 +35,9 @@ void usage() {
       << "commands:\n"
       << "  init [--root PATH]\n"
       << "  run --config PATH --stats PATH... [--afl-output-dir PATH] [--micro-stats PATH...] [--provider NAME]\n"
+      << "      [--ablation full-agent|baseline-afl|rule-only|no-static-analysis|no-mutator]\n"
       << "  check-config --config PATH [--runtime]\n"
+      << "  m6-matrix --config PATH... [--out-dir PATH] [--work-dir PATH] [--repeats N]\n"
       << "  env --config PATH\n"
       << "  afl-command --config PATH --output-dir PATH [--recipe-store PATH]\n"
       << "  parse-stats --stats PATH\n"
@@ -85,6 +90,32 @@ std::vector<std::string> arg_values(const std::vector<std::string>& args,
 void require_value(const std::string& value, const std::string& name) {
   if (value.empty()) {
     throw std::runtime_error("missing required argument: " + name);
+  }
+}
+
+// Parse a CLI integer argument with a helpful error message — wraps
+// std::stoi/stoll so the user sees "invalid --main-budget-sec value
+// 'abc'" instead of the bare `std::invalid_argument` message from the
+// outer catch-all.
+int parse_int_arg(const std::string& name, const std::string& value, int default_value = 0) {
+  if (value.empty()) {
+    return default_value;
+  }
+  try {
+    std::size_t pos = 0;
+    const auto parsed = std::stoll(value, &pos);
+    if (pos != value.size()) {
+      throw std::runtime_error("argument " + name + " has trailing garbage: '" + value + "'");
+    }
+    if (parsed < static_cast<long long>(std::numeric_limits<int>::min()) ||
+        parsed > static_cast<long long>(std::numeric_limits<int>::max())) {
+      throw std::runtime_error("argument " + name + " out of int range: '" + value + "'");
+    }
+    return static_cast<int>(parsed);
+  } catch (const std::invalid_argument&) {
+    throw std::runtime_error("argument " + name + " must be an integer, got: '" + value + "'");
+  } catch (const std::out_of_range&) {
+    throw std::runtime_error("argument " + name + " out of range: '" + value + "'");
   }
 }
 
@@ -184,6 +215,10 @@ void persist_plateau(fuzzpilot::Database& db,
 
 int main(int argc, char** argv) {
   try {
+    // Install signal handler once at process startup so any subcommand
+    // that spawns AFL++ subprocesses can cooperatively shut down on
+    // SIGINT/SIGTERM instead of leaving orphan workers.
+    fuzzpilot::install_termination_signal_handler();
     std::vector<std::string> args(argv + 1, argv + argc);
     if (args.empty() || args[0] == "--help" || args[0] == "-h") {
       usage();
@@ -223,6 +258,13 @@ int main(int argc, char** argv) {
       options.model_endpoint = arg_value(args, "--endpoint");
       options.model_name = arg_value(args, "--model");
       options.api_key_env = arg_value(args, "--api-key-env");
+      options.ablation_mode = arg_value(args, "--ablation", "full-agent");
+      options.main_budget_override_sec =
+          parse_int_arg("--main-budget-sec", arg_value(args, "--main-budget-sec", "0"));
+      options.micro_budget_override_sec =
+          parse_int_arg("--micro-budget-sec", arg_value(args, "--micro-budget-sec", "0"));
+      options.plateau_window_override_sec =
+          parse_int_arg("--plateau-window-sec", arg_value(args, "--plateau-window-sec", "0"));
       require_value(options.config_path.string(), "--config");
       if (options.dry_run && options.main_stats_paths.empty()) {
         throw std::runtime_error("missing required argument: --stats (required in dry-run mode)");
@@ -230,6 +272,36 @@ int main(int argc, char** argv) {
       const auto summary = fuzzpilot::run_mvp(options);
       std::cout << fuzzpilot::run_summary_json(summary) << "\n";
       return 0;
+    }
+
+    if (command == "m6-matrix") {
+      fuzzpilot::M6MatrixOptions options;
+      for (const auto& path : arg_values(args, "--config")) {
+        options.config_paths.emplace_back(path);
+      }
+      options.out_dir = arg_value(args, "--out-dir", options.out_dir.string());
+      options.work_dir = arg_value(args, "--work-dir", options.work_dir.string());
+      options.repeats =
+          parse_int_arg("--repeats",
+                        arg_value(args, "--repeats", std::to_string(options.repeats)),
+                        options.repeats);
+      options.main_budget_sec =
+          parse_int_arg("--main-budget-sec",
+                        arg_value(args, "--main-budget-sec",
+                                  std::to_string(options.main_budget_sec)),
+                        options.main_budget_sec);
+      options.micro_budget_sec =
+          parse_int_arg("--micro-budget-sec",
+                        arg_value(args, "--micro-budget-sec",
+                                  std::to_string(options.micro_budget_sec)),
+                        options.micro_budget_sec);
+      options.check_runtime_paths = has_arg(args, "--runtime");
+      if (options.config_paths.empty()) {
+        throw std::runtime_error("missing required argument: --config");
+      }
+      const auto result = fuzzpilot::write_m6_matrix(options);
+      std::cout << fuzzpilot::m6_matrix_result_json(result) << "\n";
+      return result.error_count == 0 ? 0 : 2;
     }
 
     if (command == "check-config") {
@@ -363,8 +435,9 @@ int main(int argc, char** argv) {
       const auto jsonl_path = arg_value(args, "--jsonl");
       const auto coverage_csv_path = arg_value(args, "--coverage-csv");
       const auto mutator_telemetry_path = arg_value(args, "--mutator-telemetry");
-      const int samples = std::stoi(arg_value(args, "--samples", "0"));
-      const int interval_ms = std::stoi(arg_value(args, "--interval-ms", "10000"));
+      const int samples = parse_int_arg("--samples", arg_value(args, "--samples", "0"));
+      const int interval_ms =
+          parse_int_arg("--interval-ms", arg_value(args, "--interval-ms", "10000"), 10000);
       require_value(campaign_dir, "--campaign-dir");
       require_value(db_path, "--db");
       require_value(campaign_id, "--campaign-id");
@@ -477,6 +550,12 @@ int main(int argc, char** argv) {
       const auto endpoint = arg_value(args, "--endpoint", "http://127.0.0.1:11434/v1/chat/completions");
       const auto model = arg_value(args, "--model", "local-fuzzpilot-policy");
       const auto api_key_env = arg_value(args, "--api-key-env", "FUZZPILOT_MODEL_API_KEY");
+      const auto timeout_ms = static_cast<uint32_t>(
+          parse_int_arg("--timeout-ms",
+                        arg_value(args, "--timeout-ms", "30000"), 30000));
+      const auto max_output_tokens = static_cast<uint32_t>(
+          parse_int_arg("--max-output-tokens",
+                        arg_value(args, "--max-output-tokens", "1024"), 1024));
       require_value(db_path, "--db");
       require_value(run_id, "--run-id");
       require_value(plateau_id, "--plateau-id");
@@ -484,7 +563,11 @@ int main(int argc, char** argv) {
       fuzzpilot::Database db;
       db.open(db_path);
       db.initialize_schema(schema_path);
-      const auto tasks = fuzzpilot::make_default_agent_tasks(plateau_id, blackboard_json, 180);
+      auto tasks = fuzzpilot::make_default_agent_tasks(plateau_id, blackboard_json, 180);
+      for (auto& task : tasks) {
+        task.timeout_ms = timeout_ms;
+        task.max_output_tokens = max_output_tokens;
+      }
       std::vector<fuzzpilot::AgentDecision> decisions;
       if (provider == "fake") {
         fuzzpilot::FakeModelGateway gateway;
@@ -594,7 +677,7 @@ int main(int argc, char** argv) {
     }
 
     if (command == "list-interventions") {
-      const int budget = std::stoi(arg_value(args, "--budget-sec", "180"));
+      const int budget = parse_int_arg("--budget-sec", arg_value(args, "--budget-sec", "180"), 180);
       for (const auto& intervention : fuzzpilot::default_v0_interventions(budget)) {
         std::cout << fuzzpilot::intervention_json(intervention) << "\n";
       }

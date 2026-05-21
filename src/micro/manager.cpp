@@ -10,6 +10,9 @@
 namespace fuzzpilot {
 namespace {
 
+constexpr uint64_t kMaxSnapshotFiles = 4096;
+constexpr uint64_t kMaxSnapshotFileBytes = 16ull * 1024ull * 1024ull;
+
 std::filesystem::path find_queue_dir(const std::filesystem::path& afl_output_dir) {
   const auto direct = afl_output_dir / "queue";
   if (std::filesystem::is_directory(direct)) {
@@ -53,18 +56,30 @@ CorpusSnapshotResult snapshot_corpus(const std::filesystem::path& afl_output_dir
   result.snapshot_dir = snapshot_dir;
 
   for (const auto& entry : std::filesystem::directory_iterator(queue_dir)) {
-    if (!entry.is_regular_file()) {
+    if (result.files_copied >= kMaxSnapshotFiles) {
+      break;
+    }
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(entry.symlink_status(ec)) || ec) {
       continue;
     }
     const auto filename = entry.path().filename().string();
     if (!filename.empty() && filename[0] == '.') {
       continue;
     }
+    const auto size = std::filesystem::file_size(entry.path(), ec);
+    if (ec || size > kMaxSnapshotFileBytes) {
+      continue;
+    }
     const auto dest = snapshot_dir / entry.path().filename();
     std::filesystem::copy_file(entry.path(), dest,
-                               std::filesystem::copy_options::overwrite_existing);
+                               std::filesystem::copy_options::overwrite_existing,
+                               ec);
+    if (ec) {
+      continue;
+    }
     ++result.files_copied;
-    result.bytes_copied += std::filesystem::file_size(dest);
+    result.bytes_copied += size;
   }
   if (result.files_copied == 0) {
     throw std::runtime_error("queue snapshot copied zero files from: " + queue_dir.string());
@@ -132,4 +147,3 @@ std::string micro_campaign_spec_json(const MicroCampaignSpec& spec) {
 }
 
 }  // namespace fuzzpilot
-

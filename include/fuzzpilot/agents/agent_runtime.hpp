@@ -15,8 +15,13 @@ struct AgentTask {
   std::string blackboard_slice_json;
   std::string action_schema_json;
   std::string output_schema_json;
+  // Per-agent role description. Embedded into the system prompt so the
+  // model genuinely differentiates SchedulerAgent from MutatorAgent. If
+  // empty, a default is generated from agent_name.
+  std::string role_description;
   uint32_t budget_sec = 0;
   uint32_t timeout_ms = 30000;
+  uint32_t max_output_tokens = 1024;
 };
 
 struct AgentDecision {
@@ -35,6 +40,18 @@ std::vector<AgentTask> make_default_agent_tasks(const std::string& plateau_id,
                                                 const std::string& blackboard_json,
                                                 uint32_t budget_sec);
 
+// Filter tasks to drop disabled agents — used by the ablation matrix to
+// run "no Coordinator" / "no Mutator" experiments.
+std::vector<AgentTask> filter_disabled_agents(std::vector<AgentTask> tasks,
+                                              const std::vector<std::string>& disabled);
+
+// Strict structural validation of an agent proposal against the action
+// schema + numeric range guardrails. Returns true if the proposal is
+// acceptable; reason is populated on failure for logging.
+bool validate_agent_proposal(const std::string& proposal_json,
+                             const std::string& action_schema_json,
+                             std::string* reason);
+
 std::vector<AgentDecision> run_agent_tasks(IModelGateway& gateway,
                                            const std::string& run_id,
                                            const std::string& plateau_id,
@@ -44,4 +61,3 @@ std::string agent_task_json(const AgentTask& task);
 std::string agent_decision_json(const AgentDecision& decision);
 
 }  // namespace fuzzpilot
-

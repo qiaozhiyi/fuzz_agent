@@ -30,8 +30,11 @@ AflLaunchSpec build_main_afl_spec(const AppConfig& config,
   spec.afl_fuzz = config.afl.afl_fuzz;
   spec.output_dir = output_dir;
   spec.env = config.afl.base_env;
-  spec.env["AFL_CUSTOM_MUTATOR_LIBRARY"] = config.mutation_strategy.custom_mutator_path.string();
-  spec.env["FUZZPILOT_RECIPE_STORE"] = recipe_store.string();
+  if (config.mutation_strategy.enabled) {
+    spec.env["AFL_CUSTOM_MUTATOR_LIBRARY"] =
+        resolve_mutator_library_path(config.mutation_strategy.custom_mutator_path).string();
+    spec.env["FUZZPILOT_RECIPE_STORE"] = recipe_store.string();
+  }
 
   spec.argv.push_back(spec.afl_fuzz.string());
   spec.argv.push_back("-i");
@@ -61,8 +64,11 @@ AflLaunchSpec build_micro_afl_spec(const AppConfig& config,
   spec.afl_fuzz = config.afl.afl_fuzz;
   spec.output_dir = micro_spec.output_dir;
   spec.env = config.afl.base_env;
-  spec.env["AFL_CUSTOM_MUTATOR_LIBRARY"] = config.mutation_strategy.custom_mutator_path.string();
-  spec.env["FUZZPILOT_RECIPE_STORE"] = micro_spec.recipe_store.string();
+  if (config.mutation_strategy.enabled) {
+    spec.env["AFL_CUSTOM_MUTATOR_LIBRARY"] =
+        resolve_mutator_library_path(config.mutation_strategy.custom_mutator_path).string();
+    spec.env["FUZZPILOT_RECIPE_STORE"] = micro_spec.recipe_store.string();
+  }
 
   spec.argv.push_back(spec.afl_fuzz.string());
   spec.argv.push_back("-i");
@@ -73,7 +79,7 @@ AflLaunchSpec build_micro_afl_spec(const AppConfig& config,
   spec.argv.push_back(std::to_string(config.target.memory_mb));
   spec.argv.push_back("-t");
   spec.argv.push_back(std::to_string(config.target.timeout_ms));
-  // Use IDA-generated dict if available, otherwise fall back to config dict
+  // Use the static-analysis-generated dict if available, otherwise fall back to the config dict.
   const auto& effective_dict = (!dict_override.empty() && std::filesystem::exists(dict_override))
                                    ? dict_override
                                    : config.target.dict;
@@ -106,4 +112,3 @@ std::string shell_preview(const AflLaunchSpec& spec) {
 }
 
 }  // namespace fuzzpilot
-

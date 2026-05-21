@@ -1,6 +1,7 @@
 #include "fuzzpilot/mutation/range_selector.hpp"
 
 #include <algorithm>
+#include <limits>
 
 namespace fuzzpilot {
 
@@ -27,7 +28,17 @@ std::optional<std::size_t> select_mutation_offset(const std::vector<ByteRange>& 
       std::uniform_int_distribution<std::size_t> range_dist(0, focus_ranges.size() - 1);
       const auto& range = focus_ranges[range_dist(rng)];
       const std::size_t begin = std::min<std::size_t>(range.begin, input_size - 1);
-      const std::size_t end = std::min<std::size_t>(std::max(range.end, range.begin + 1), input_size);
+      // Promote to size_t before the +1 so we never wrap a uint32_t at
+      // numeric_limits<uint32_t>::max(); the size_t domain has 32 bits
+      // of headroom on every supported platform.
+      const std::size_t range_end_st = range.end;
+      const std::size_t bumped_end =
+          static_cast<std::size_t>(range.begin) + std::size_t{1};
+      const std::size_t end = std::min<std::size_t>(
+          std::max<std::size_t>(range_end_st, bumped_end), input_size);
+      if (end <= begin) {
+        continue;
+      }
       std::uniform_int_distribution<std::size_t> offset_dist(begin, end - 1);
       candidate = offset_dist(rng);
     } else {

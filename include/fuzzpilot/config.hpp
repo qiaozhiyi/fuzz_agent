@@ -44,7 +44,7 @@ struct MutationStrategyConfig {
   std::string default_policy = "afl_fallback";
   int max_recipes_per_seed = 4;
   int recipe_ttl_sec = 900;
-  std::filesystem::path custom_mutator_path = "./build-make/mutators/fuzzpilot/libfuzzpilot_mutator.dylib";
+  std::filesystem::path custom_mutator_path = "./build/mutators/fuzzpilot/libfuzzpilot_mutator";
   std::string hot_path_io = "mmap";
   std::map<std::string, bool> agent_controls;
 };
@@ -92,9 +92,12 @@ struct AgentConfig {
 
 struct StaticAnalysisConfig {
   bool enabled = false;
+  std::string backend = "ghidra";
   std::filesystem::path python_bin = "python3";
-  std::filesystem::path extractor_script = "./scripts/ida_extractor.py";
+  std::filesystem::path extractor_script = "./scripts/ghidra/FuzzPilotGhidraExtract.java";
   std::filesystem::path ida_dir;  // IDADIR environment variable value
+  std::filesystem::path ghidra_home;
+  std::filesystem::path ghidra_headless = "analyzeHeadless";
   int timeout_sec = 60;
 };
 
@@ -118,5 +121,8 @@ struct ConfigLoadResult {
 ConfigLoadResult load_config(const std::filesystem::path& path);
 std::vector<std::string> validate_config(const AppConfig& config, bool check_runtime_paths);
 std::string summarize_config(const AppConfig& config);
+std::filesystem::path resolve_mutator_library_path(const std::filesystem::path& configured_path);
+std::string normalize_static_backend(std::string backend);
+std::filesystem::path resolve_ghidra_headless_path(const StaticAnalysisConfig& config);
 
 }  // namespace fuzzpilot

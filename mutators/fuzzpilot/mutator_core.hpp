@@ -17,6 +17,15 @@ struct FpMutator {
   std::mt19937 rng;
   std::vector<unsigned char> out;
   std::string current_seed;
+  // Cached debug flag — read once at construction so we don't make a
+  // getenv() syscall on every mutation call (which fires millions of
+  // times per minute on the AFL++ hot path).
+  bool debug_enabled = false;
+  // Pre-hashed seed identity for recipe lookup. Reset on queue_get /
+  // queue_new_entry; computed lazily on first mutation of a new seed.
+  // Eliminates the O(n) hash over the full input buffer on every call.
+  std::string seed_hash_cache;
+  bool seed_hash_valid = false;
 };
 
 extern "C" {

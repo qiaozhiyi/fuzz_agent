@@ -1,8 +1,10 @@
 #include "fuzzpilot/runner/process.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -25,6 +27,14 @@ int main(int argc, char** argv) {
     }
     return 0;
   }
+  if (argc == 2 && std::string(argv[1]) == "--child-sleep") {
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    return 0;
+  }
+  if (argc == 2 && std::string(argv[1]) == "--child-large-output") {
+    std::cout << "abcdefghijklmnopqrstuvwxyz";
+    return 0;
+  }
 
   setenv(kEnvName, "old", 1);
   const std::string self = argv[0];
@@ -40,6 +50,22 @@ int main(int argc, char** argv) {
   if (output != "new") {
     std::cerr << "environment override did not win; output=" << output << "\n";
     return 2;
+  }
+
+  const auto timeout = fuzzpilot::run_process_capture(
+      self, {self, "--child-sleep"}, {}, true, 1024, 50);
+  if (!timeout.spawned || !timeout.signaled || timeout.error != "process timed out") {
+    std::cerr << "process timeout guard failed: " << timeout.error << "\n";
+    return 3;
+  }
+
+  const auto truncated = fuzzpilot::run_process_capture(
+      self, {self, "--child-large-output"}, {}, true, 8, 1000);
+  if (!truncated.spawned || !truncated.exited || truncated.output != "abcdefgh" ||
+      truncated.error != "process output truncated") {
+    std::cerr << "process output limit guard failed: output=" << truncated.output
+              << " error=" << truncated.error << "\n";
+    return 4;
   }
 
   std::cout << "process capture smoke passed\n";

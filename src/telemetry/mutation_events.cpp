@@ -75,7 +75,12 @@ void parse_operator_counts(const std::string& line,
     try {
       operator_counts[op] += static_cast<uint64_t>(
           std::stoull(body.substr(colon + 1, value_end - colon - 1)));
-    } catch (...) {
+    } catch (const std::exception&) {
+      // Numeric parse failed (overflow / malformed). Don't change
+      // the running counter — the previous total stays in place and
+      // we move on to the next operator. Sentinel value -1 in the
+      // record would be visible via the count comparison in the
+      // analysis layer; here we just refuse to corrupt the total.
     }
     cursor = value_end + 1;
   }
@@ -120,6 +125,79 @@ std::optional<MutationTelemetrySnapshot> parse_mutator_telemetry(
     parse_operator_counts(line, snapshot.operator_counts);
   }
   return snapshot;
+}
+
+bool parse_mutator_telemetry_incremental(
+    const std::filesystem::path& path,
+    std::uint64_t& start_offset,
+    MutationTelemetrySnapshot& accumulator,
+    std::string* error) {
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec)) {
+    // Not yet created by AFL — treat as success with no delta.
+    return true;
+  }
+  const auto file_size = static_cast<std::uint64_t>(std::filesystem::file_size(path, ec));
+  if (ec) {
+    if (error) *error = "stat failed: " + ec.message();
+    return false;
+  }
+  if (file_size < start_offset) {
+    // File shrank or was rotated by AFL. Reset accumulator and reparse
+    // from scratch so we don't double-count nor lose data.
+    accumulator = MutationTelemetrySnapshot{};
+    start_offset = 0;
+  }
+  if (file_size == start_offset) {
+    // No new content since last read. Cheap path — nothing to do.
+    return true;
+  }
+
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {
+    if (error) *error = "failed to open mutator telemetry: " + path.string();
+    return false;
+  }
+  input.seekg(static_cast<std::streamoff>(start_offset));
+  if (!input) {
+    if (error) *error = "seek failed in mutator telemetry: " + path.string();
+    return false;
+  }
+
+  // Read remaining bytes. We deliberately read line-by-line via
+  // getline so that a partially-flushed trailing line is left for the
+  // next iteration — we only advance start_offset to the end of the
+  // last fully-terminated line.
+  std::uint64_t consumed = start_offset;
+  std::string line;
+  while (true) {
+    if (!std::getline(input, line)) {
+      break;
+    }
+    const auto after = static_cast<std::uint64_t>(input.tellg());
+    // getline returns true even for an unterminated last line; detect
+    // that by checking eof and bail without advancing the offset, so
+    // the partial line is reparsed next time once AFL finishes writing.
+    if (input.eof()) {
+      input.clear();
+      if (after == file_size) {
+        // Line was complete (file ends with newline). Commit it.
+        consumed = after;
+      }
+      break;
+    }
+    consumed = after;
+    std::string trimmed = trim(line);
+    if (trimmed.empty()) {
+      continue;
+    }
+    accumulator.recipe_hits += find_u64(trimmed, "recipe_hits");
+    accumulator.recipe_misses += find_u64(trimmed, "recipe_misses");
+    accumulator.mutation_count += find_u64(trimmed, "mutation_count");
+    parse_operator_counts(trimmed, accumulator.operator_counts);
+  }
+  start_offset = consumed;
+  return true;
 }
 
 std::string mutation_telemetry_json(const MutationTelemetrySnapshot& snapshot) {

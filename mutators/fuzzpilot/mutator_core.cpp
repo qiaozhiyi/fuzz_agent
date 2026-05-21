@@ -15,12 +15,26 @@ std::size_t random_offset(std::mt19937& rng, std::size_t size) {
 }
 
 bool is_protected(const CompactRecipe& recipe, std::size_t offset) {
-  for (const auto& range : recipe.protect_ranges) {
-    if (offset >= range.begin && offset < range.end) {
-      return true;
-    }
+  // Recipe loader pre-sorts protect_ranges by `begin` ascending, so a
+  // binary search over them is correct here. Linear fallback would
+  // also work but burns cycles on every mutation; AFL hot path can't
+  // afford the extra branches.
+  const auto& ranges = recipe.protect_ranges;
+  if (ranges.empty()) {
+    return false;
   }
-  return false;
+  // upper_bound returns the first range whose `begin` is strictly
+  // greater than `offset`. We then step back one (if possible) to find
+  // the candidate range that could contain `offset`.
+  auto it = std::upper_bound(ranges.begin(), ranges.end(), offset,
+      [](std::size_t off, const CompactRange& r) {
+        return off < r.begin;
+      });
+  if (it == ranges.begin()) {
+    return false;
+  }
+  --it;
+  return offset >= it->begin && offset < it->end;
 }
 
 std::size_t choose_focus_offset(const CompactRecipe& recipe, std::mt19937& rng, std::size_t size) {
@@ -53,7 +67,8 @@ void mutate_bit_flip(FpMutator& mutator, const CompactRecipe& recipe) {
   const auto offset = choose_focus_offset(recipe, mutator.rng, mutator.out.size());
   const unsigned char bit = static_cast<unsigned char>(1u << (mutator.rng() % 8u));
   mutator.out[offset] ^= bit;
-  mutator.telemetry.record("bit_flip", offset, mutator.out.size(), mutator.out.size(), true);
+  mutator.telemetry.record(CompactMutationOp::BitFlip,
+                           offset, mutator.out.size(), mutator.out.size(), true);
 }
 
 void mutate_overwrite_byte(FpMutator& mutator, const CompactRecipe& recipe) {
@@ -62,7 +77,8 @@ void mutate_overwrite_byte(FpMutator& mutator, const CompactRecipe& recipe) {
   }
   const auto offset = choose_focus_offset(recipe, mutator.rng, mutator.out.size());
   mutator.out[offset] = static_cast<unsigned char>(mutator.rng() & 0xffu);
-  mutator.telemetry.record("overwrite_range", offset, mutator.out.size(), mutator.out.size(), true);
+  mutator.telemetry.record(CompactMutationOp::OverwriteRange,
+                           offset, mutator.out.size(), mutator.out.size(), true);
 }
 
 void mutate_arith(FpMutator& mutator, const CompactRecipe& recipe) {
@@ -72,7 +88,8 @@ void mutate_arith(FpMutator& mutator, const CompactRecipe& recipe) {
   const auto offset = choose_focus_offset(recipe, mutator.rng, mutator.out.size());
   const int delta = (mutator.rng() % 2u) == 0 ? 1 : -1;
   mutator.out[offset] = static_cast<unsigned char>(mutator.out[offset] + delta);
-  mutator.telemetry.record("arith", offset, mutator.out.size(), mutator.out.size(), true);
+  mutator.telemetry.record(CompactMutationOp::Arith,
+                           offset, mutator.out.size(), mutator.out.size(), true);
 }
 
 bool mutate_insert_token(FpMutator& mutator, const CompactRecipe& recipe, std::size_t max_size) {
@@ -86,11 +103,19 @@ bool mutate_insert_token(FpMutator& mutator, const CompactRecipe& recipe, std::s
   }
   const std::size_t available = max_size - mutator.out.size();
   const std::size_t count = std::min<std::size_t>(available, token.size());
-  const auto offset = random_offset(mutator.rng, mutator.out.size() + 1);
+  // Bounds: offset chosen from [0, out.size()] inclusive — out.size()+1
+  // possibilities. Guard against degenerate state where out is empty.
+  const auto offset = mutator.out.empty()
+                          ? std::size_t{0}
+                          : random_offset(mutator.rng, mutator.out.size() + 1);
+  if (offset > mutator.out.size()) {
+    return false;
+  }
   const auto before = mutator.out.size();
   mutator.out.insert(mutator.out.begin() + static_cast<std::ptrdiff_t>(offset),
                      token.begin(), token.begin() + static_cast<std::ptrdiff_t>(count));
-  mutator.telemetry.record("insert_token", offset, before, mutator.out.size(), true);
+  mutator.telemetry.record(CompactMutationOp::InsertToken,
+                           offset, before, mutator.out.size(), true);
   return true;
 }
 
@@ -99,6 +124,11 @@ bool mutate_delete_block(FpMutator& mutator, const CompactRecipe& recipe) {
     return false;
   }
   const auto offset = choose_focus_offset(recipe, mutator.rng, mutator.out.size());
+  // Guard the subtraction: if focus_offset returned exactly out.size()
+  // (defensive — shouldn't happen) we'd underflow. Also cap by buffer.
+  if (offset >= mutator.out.size()) {
+    return false;
+  }
   const std::size_t max_len = std::min<std::size_t>(16, mutator.out.size() - offset);
   if (max_len == 0) {
     return false;
@@ -108,7 +138,8 @@ bool mutate_delete_block(FpMutator& mutator, const CompactRecipe& recipe) {
   const auto before = mutator.out.size();
   mutator.out.erase(mutator.out.begin() + static_cast<std::ptrdiff_t>(offset),
                     mutator.out.begin() + static_cast<std::ptrdiff_t>(offset + len));
-  mutator.telemetry.record("delete_block", offset, before, mutator.out.size(), true);
+  mutator.telemetry.record(CompactMutationOp::DeleteBlock,
+                           offset, before, mutator.out.size(), true);
   return true;
 }
 
@@ -129,7 +160,8 @@ bool mutate_splice(FpMutator& mutator,
   const auto before = mutator.out.size();
   mutator.out.insert(mutator.out.begin() + static_cast<std::ptrdiff_t>(offset),
                      add_buf + add_offset, add_buf + add_offset + count);
-  mutator.telemetry.record("splice", offset, before, mutator.out.size(), true);
+  mutator.telemetry.record(CompactMutationOp::Splice,
+                           offset, before, mutator.out.size(), true);
   return true;
 }
 }  // namespace
@@ -139,33 +171,42 @@ void apply_structural_repairs(FpMutator& mutator, const CompactRecipe& recipe) {
     return;
   }
 
-  const bool debug = std::getenv("FUZZPILOT_MUTATOR_DEBUG") != nullptr;
+  // Use cached debug flag — never call getenv() in the hot path.
+  const bool debug = mutator.debug_enabled;
   if (debug) {
     fprintf(stderr, "[M5] Applying %zu structural repairs to buffer of size %zu\n",
             recipe.fields.size(), mutator.out.size());
   }
 
   for (const auto& field : recipe.fields) {
-    if (field.offset + field.size > mutator.out.size()) continue;
+    // Bounds check using a checked-add to avoid uint32 wrap when both
+    // `offset` and `size` are near UINT32_MAX (recipe could come from an
+    // adversarial LLM proposal).
+    if (field.size == 0) continue;
+    if (field.offset >= mutator.out.size()) continue;
+    if (static_cast<std::uint64_t>(field.offset) + field.size > mutator.out.size()) continue;
 
     if (field.type == FieldType::Length) {
       // Calculate actual length of target range
       std::uint32_t len = 0;
-      if (field.target_end > field.target_begin && field.target_end <= mutator.out.size()) {
+      if (field.target_end > field.target_begin &&
+          field.target_end <= mutator.out.size()) {
         len = field.target_end - field.target_begin;
       } else if (field.target_begin > 0 && field.target_begin < mutator.out.size()) {
-        // Use target_begin to end of buffer
         len = static_cast<std::uint32_t>(mutator.out.size() - field.target_begin);
       } else {
-        // Fallback: total size after field
-        len = static_cast<std::uint32_t>(mutator.out.size() - (field.offset + field.size));
+        const std::uint64_t after = static_cast<std::uint64_t>(field.offset) + field.size;
+        len = after <= mutator.out.size()
+                  ? static_cast<std::uint32_t>(mutator.out.size() - after)
+                  : 0;
       }
       if (debug) {
         fprintf(stderr, "[M5] Repairing LENGTH field at offset %u with value %u\n",
                 field.offset, len);
       }
 
-      // Write length back in correct endianness
+      // Write length back in correct endianness — guarded above so all
+      // accesses are in-range.
       if (field.size == 4) {
         if (field.is_big_endian) {
           mutator.out[field.offset] = (len >> 24) & 0xff;
@@ -207,6 +248,12 @@ void apply_structural_repairs(FpMutator& mutator, const CompactRecipe& recipe) {
 
 FpMutator::FpMutator(unsigned int seed) : rng(seed) {
   recipes.load_from_environment();
+  // Read debug flag once at construction so the hot path never calls
+  // getenv() — that syscall isn't free and serialised getenv access on
+  // Linux/macOS shows up in mutation-rate microbenchmarks.
+  if (const char* dbg = std::getenv("FUZZPILOT_MUTATOR_DEBUG")) {
+    debug_enabled = (dbg[0] != '\0' && dbg[0] != '0');
+  }
 }
 
 extern "C" void *fp_mutator_init(unsigned int seed) {
@@ -225,7 +272,15 @@ extern "C" size_t fp_mutator_fuzz(void *data,
   }
   auto& mutator = *static_cast<FpMutator*>(data);
   bool recipe_hit = false;
-  const CompactRecipe& recipe = mutator.recipes.lookup(mutator.current_seed, buf, buf_size, &recipe_hit);
+  // Compute the seed hash at most once per seed entry — re-use the cache
+  // until queue_get / queue_new_entry invalidates it. Skip entirely when
+  // there are no seed-hash recipes loaded.
+  if (mutator.recipes.has_seed_specific() && !mutator.seed_hash_valid) {
+    mutator.seed_hash_cache = RecipeCache::compute_seed_hash(buf, buf_size);
+    mutator.seed_hash_valid = true;
+  }
+  const CompactRecipe& recipe = mutator.recipes.lookup(mutator.current_seed, buf, buf_size,
+                                                        mutator.seed_hash_cache, &recipe_hit);
   mutator.out.assign(buf, buf + std::min(buf_size, max_size));
 
   if (recipe_hit) {
@@ -283,7 +338,11 @@ extern "C" void fp_mutator_deinit(void *data) {
 
 extern "C" unsigned char fp_mutator_queue_get(void *data, const char *filename) {
   if (data != nullptr && filename != nullptr) {
-    static_cast<FpMutator*>(data)->current_seed = filename;
+    auto* m = static_cast<FpMutator*>(data);
+    m->current_seed = filename;
+    // Invalidate cached seed hash — next mutation will recompute once.
+    m->seed_hash_valid = false;
+    m->seed_hash_cache.clear();
   }
   return 1;
 }
@@ -293,6 +352,9 @@ extern "C" void fp_mutator_queue_new_entry(void *data,
                                            const char *filename_orig_queue) {
   (void)filename_orig_queue;
   if (data != nullptr && filename_new_queue != nullptr) {
-    static_cast<FpMutator*>(data)->current_seed = filename_new_queue;
+    auto* m = static_cast<FpMutator*>(data);
+    m->current_seed = filename_new_queue;
+    m->seed_hash_valid = false;
+    m->seed_hash_cache.clear();
   }
 }

@@ -33,7 +33,7 @@ mutation_strategy:
   default_policy: afl_fallback
   max_recipes_per_seed: 4
   recipe_ttl_sec: 900
-  custom_mutator_path: ./build/mutators/fuzzpilot/libfuzzpilot_mutator.dylib
+  custom_mutator_path: ./build/mutators/fuzzpilot/libfuzzpilot_mutator
   hot_path_io: compact_recipe
   agent_controls:
     operator_weights: true
@@ -90,3 +90,12 @@ agents:
   mutation_policy: true
   model_policy: true
   model_format: true
+
+static_analysis:
+  enabled: false
+  backend: ghidra
+  ghidra_home: /opt/ghidra
+  extractor_script: ./scripts/ghidra/FuzzPilotGhidraExtract.java
+  python_bin: python3
+  ida_dir: ""
+  timeout_sec: 120

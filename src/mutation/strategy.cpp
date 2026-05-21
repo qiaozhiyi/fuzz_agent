@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 
@@ -146,6 +147,12 @@ std::vector<std::string> validate_strategy(const SeedMutationStrategy& strategy)
       errors.push_back("dictionary token is too large");
       break;
     }
+    if (token.find('\n') != std::string::npos ||
+        token.find('\r') != std::string::npos ||
+        token.find('\0') != std::string::npos) {
+      errors.push_back("dictionary token contains unsupported control characters");
+      break;
+    }
   }
   return errors;
 }
@@ -224,6 +231,42 @@ SeedMutationStrategy make_seed_hash_strategy(const std::filesystem::path& seed_p
   strategy.priority = 85;
   strategy.focus_ranges = {{0, 4096}};
   strategy.protect_ranges = {};
+  return strategy;
+}
+
+SeedMutationStrategy make_random_recipe_strategy(uint64_t seed,
+                                                 std::vector<std::string> tokens) {
+  // Deterministic RNG keyed by `seed` — replay of the same run
+  // produces the same recipe. The full list of operators is sampled
+  // with uniform random weights, then normalized.
+  std::mt19937_64 rng(seed == 0 ? 0xC0FFEEull : seed);
+  std::uniform_real_distribution<double> dist(0.05, 1.0);
+
+  SeedMutationStrategy strategy;
+  strategy.id = make_id("strategy_random");
+  strategy.agent = "RandomRecipeAblation";
+  strategy.selector.mode = "global";
+  strategy.priority = 50;
+  strategy.ttl_sec = 900;
+  // All six core operators get a random weight; agent-style focus is
+  // skipped so the mutator falls back to whole-buffer random offset
+  // selection. This is exactly the baseline-ish behaviour the
+  // ablation is supposed to compare against the agent-driven recipe.
+  strategy.operator_weights = {
+      {MutationOp::BitFlip,        dist(rng)},
+      {MutationOp::OverwriteRange, dist(rng)},
+      {MutationOp::InsertToken,    dist(rng)},
+      {MutationOp::Arith,          dist(rng)},
+      {MutationOp::Splice,         dist(rng)},
+      {MutationOp::DeleteBlock,    dist(rng)},
+  };
+  normalize_weights(strategy.operator_weights);
+  // No focus/protect — entire buffer is mutable. This is intentional:
+  // the ablation answers "does targeted offset selection matter?"
+  strategy.focus_ranges = {};
+  strategy.protect_ranges = {};
+  strategy.dictionary_tokens = std::move(tokens);
+  strategy.expected_signal = "new_edges";
   return strategy;
 }
 

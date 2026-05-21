@@ -17,7 +17,22 @@ if(APPLE)
   set_target_properties(fuzzpilot_mutator PROPERTIES SUFFIX ".dylib")
 endif()
 
+if(WIN32)
+  add_custom_command(TARGET fuzzpilot_mutator POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:fuzzpilot_mutator>"
+      "$<TARGET_FILE_DIR:fuzzpilot_mutator>/libfuzzpilot_mutator"
+    COMMENT "Creating extensionless fuzzpilot mutator copy")
+else()
+  add_custom_command(TARGET fuzzpilot_mutator POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -f
+      "$<TARGET_FILE_DIR:fuzzpilot_mutator>/libfuzzpilot_mutator"
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+      "$<TARGET_FILE_NAME:fuzzpilot_mutator>"
+      "$<TARGET_FILE_DIR:fuzzpilot_mutator>/libfuzzpilot_mutator"
+    COMMENT "Creating extensionless fuzzpilot mutator link")
+endif()
+
 target_compile_options(fuzzpilot_mutator PRIVATE
   $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic>
 )
-

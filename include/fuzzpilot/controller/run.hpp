@@ -20,7 +20,31 @@ struct RunOptions {
   std::string model_endpoint;
   std::string model_name;
   std::string api_key_env;
+  std::string ablation_mode = "full-agent";
+  int main_budget_override_sec = 0;
+  int micro_budget_override_sec = 0;
+  int plateau_window_override_sec = 0;
+  // Per-finding ablation hooks (see code review section "PAPER-BLOCKING").
+  // These are orthogonal to ablation_mode so reviewers can request precise
+  // factor-isolated experiments.
+  bool disable_plateau_detector = false;
+  bool disable_microcampaign = false;
+  bool disable_static_analysis = false;
+  std::string reward_mode = "edge_weighted";   // edge_weighted | edges_only | paths_only | random
+  std::string recipe_source = "agent";          // agent | rule | random | none
+  uint64_t micro_campaign_repeats = 1;          // statistical confidence per intervention
+  uint64_t llm_token_budget_per_run = 0;        // 0 = unlimited; else hard-cap
+  std::vector<std::string> disabled_agents;     // names like "Coordinator", "Mutator"
 };
+
+enum class WinnerStatus {
+  kNoCandidates,   // no micro-campaigns were planned
+  kAllFailed,      // every campaign failed to produce stats
+  kSelected,       // at least one valid campaign; winner picked
+  kNoSignificance, // best candidate not significantly better than baseline
+};
+
+const char* to_string(WinnerStatus status);
 
 struct RunSummary {
   std::string run_id;
@@ -40,7 +64,16 @@ struct RunSummary {
   uint64_t telemetry_count = 0;
   uint64_t agent_decision_count = 0;
   uint64_t micro_campaign_count = 0;
+  uint64_t micro_campaigns_failed = 0;
+  WinnerStatus winner_status = WinnerStatus::kNoCandidates;
+  // Aggregate model accounting for the run (filled even on partial completion).
+  uint64_t llm_calls = 0;
+  uint64_t llm_input_tokens = 0;
+  uint64_t llm_output_tokens = 0;
+  uint64_t llm_failed_calls = 0;
+  double llm_total_latency_ms = 0.0;
   int main_pid = -1;
+  std::string ablation_mode;
 };
 
 RunSummary run_mvp(const RunOptions& options);

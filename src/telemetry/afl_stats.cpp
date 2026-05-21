@@ -101,6 +101,10 @@ std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
   stats.paths_favored = as_u64(stats.raw, "paths_favored");
   stats.paths_found = as_u64(stats.raw, "paths_found");
   stats.paths_imported = as_u64(stats.raw, "paths_imported");
+  // AFL++ 3.x calls this `edges_found`; some forks emit `edge_count` / `total_edges`.
+  // Prefer absolute edge count over bitmap percentage for statistical comparison.
+  stats.edges_found =
+      first_nonzero(stats, {"edges_found", "edge_count", "total_edges", "fuzzed_edges"});
   stats.max_depth = as_u64(stats.raw, "max_depth");
   stats.cur_path = as_u64(stats.raw, "cur_path");
   stats.pending_favs = as_u64(stats.raw, "pending_favs");
@@ -115,6 +119,24 @@ std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
   stats.last_hang = as_u64(stats.raw, "last_hang");
   stats.recipe_hits = as_u64(stats.raw, "recipe_hits");
   stats.recipe_misses = as_u64(stats.raw, "recipe_misses");
+  // Trim already-promoted keys from raw so the on-disk JSON (and the
+  // in-memory map carried in every telemetry sample) stays bounded.
+  // Without this, a 24h run accumulates several hundred MB of
+  // redundant strings since each sample copies the entire raw map.
+  static const std::initializer_list<const char*> kTypedKeys = {
+      "last_update", "execs_done", "execs_per_sec", "paths_total",
+      "paths_favored", "paths_found", "paths_imported",
+      "edges_found", "edge_count", "total_edges", "fuzzed_edges",
+      "max_depth", "cur_path", "pending_favs", "pending_total",
+      "variable_paths", "unique_crashes", "unique_hangs",
+      "bitmap_cvg", "stability",
+      "last_path", "last_find", "last_path_time",
+      "last_crash", "last_hang",
+      "recipe_hits", "recipe_misses",
+  };
+  for (const char* key : kTypedKeys) {
+    stats.raw.erase(key);
+  }
   return stats;
 }
 
@@ -125,6 +147,8 @@ std::string afl_stats_json(const AflStats& stats) {
   out << "\"execs_done\":" << stats.execs_done << ",";
   out << "\"execs_per_sec\":" << stats.execs_per_sec << ",";
   out << "\"paths_total\":" << stats.paths_total << ",";
+  out << "\"edges_found\":" << stats.edges_found << ",";
+  out << "\"stale\":" << (stats.stale ? "true" : "false") << ",";
   out << "\"unique_crashes\":" << stats.unique_crashes << ",";
   out << "\"unique_hangs\":" << stats.unique_hangs << ",";
   out << "\"bitmap_cvg\":" << stats.bitmap_cvg << ",";
@@ -150,6 +174,7 @@ std::string afl_stats_summary(const AflStats& stats) {
   out << "execs_done=" << stats.execs_done
       << " execs_per_sec=" << stats.execs_per_sec
       << " paths_total=" << stats.paths_total
+      << " edges_found=" << stats.edges_found
       << " unique_crashes=" << stats.unique_crashes
       << " unique_hangs=" << stats.unique_hangs
       << " bitmap_cvg=" << stats.bitmap_cvg

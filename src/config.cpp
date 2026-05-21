@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -23,6 +25,10 @@ bool is_valid_env_name(const std::string& value) {
   return std::all_of(value.begin() + 1, value.end(), [](unsigned char c) {
     return std::isalnum(c) || c == '_';
   });
+}
+
+bool should_check_filesystem_path(const std::filesystem::path& path) {
+  return path.is_absolute() || path.has_parent_path();
 }
 
 std::string strip_comment(const std::string& line) {
@@ -212,9 +218,12 @@ void assign_section(AppConfig& config,
     else if (key == "llm_format") config.agents.model_format = parse_bool(value);
   } else if (section == "static_analysis") {
     if (key == "enabled") config.static_analysis.enabled = parse_bool(value);
+    else if (key == "backend" || key == "tool") config.static_analysis.backend = unquote(value);
     else if (key == "python_bin") config.static_analysis.python_bin = unquote(value);
     else if (key == "extractor_script") config.static_analysis.extractor_script = unquote(value);
     else if (key == "ida_dir") config.static_analysis.ida_dir = unquote(value);
+    else if (key == "ghidra_home") config.static_analysis.ghidra_home = unquote(value);
+    else if (key == "ghidra_headless" || key == "analyze_headless") config.static_analysis.ghidra_headless = unquote(value);
     else if (key == "timeout_sec") config.static_analysis.timeout_sec = parse_int(value, config.static_analysis.timeout_sec);
   }
 }
@@ -242,7 +251,100 @@ std::string join_args(const std::vector<std::string>& values) {
   return out.str();
 }
 
+#if !defined(__APPLE__)
+bool looks_like_macho_binary(const std::filesystem::path& path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {
+    return false;
+  }
+  unsigned char bytes[4] = {0, 0, 0, 0};
+  input.read(reinterpret_cast<char*>(bytes), sizeof(bytes));
+  if (input.gcount() != static_cast<std::streamsize>(sizeof(bytes))) {
+    return false;
+  }
+  const uint32_t magic = (static_cast<uint32_t>(bytes[0]) << 24) |
+                         (static_cast<uint32_t>(bytes[1]) << 16) |
+                         (static_cast<uint32_t>(bytes[2]) << 8) |
+                         static_cast<uint32_t>(bytes[3]);
+  switch (magic) {
+    case 0xfeedface:
+    case 0xfeedfacf:
+    case 0xcafebabe:
+    case 0xcafebabf:
+    case 0xcefaedfe:
+    case 0xcffaedfe:
+    case 0xbebafeca:
+    case 0xbfbafeca:
+      return true;
+    default:
+      return false;
+  }
+}
+#endif
+
 }  // namespace
+
+std::string normalize_static_backend(std::string value) {
+  value = trim(value);
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+    if (c == '_') {
+      return '-';
+    }
+    return static_cast<char>(std::tolower(c));
+  });
+  if (value.empty() || value == "off" || value == "disabled" || value == "false") {
+    return "none";
+  }
+  if (value == "ghidra-headless") {
+    return "ghidra";
+  }
+  if (value == "idalib") {
+    return "ida";
+  }
+  return value;
+}
+
+std::filesystem::path resolve_ghidra_headless_path(const StaticAnalysisConfig& config) {
+  if (!config.ghidra_home.empty()) {
+    return config.ghidra_home / "support" / "analyzeHeadless";
+  }
+  return config.ghidra_headless.empty() ? std::filesystem::path("analyzeHeadless")
+                                       : config.ghidra_headless;
+}
+
+std::filesystem::path resolve_mutator_library_path(const std::filesystem::path& configured_path) {
+  if (configured_path.empty() || std::filesystem::exists(configured_path)) {
+    return configured_path;
+  }
+
+  std::vector<std::string> suffixes;
+#if defined(__APPLE__)
+  suffixes = {".dylib", ".so"};
+#elif defined(_WIN32)
+  suffixes = {".dll"};
+#else
+  suffixes = {".so", ".dylib"};
+#endif
+
+  if (configured_path.extension().empty()) {
+    for (const auto& suffix : suffixes) {
+      auto candidate = configured_path;
+      candidate += suffix;
+      if (std::filesystem::exists(candidate)) {
+        return candidate;
+      }
+    }
+  } else {
+    for (const auto& suffix : suffixes) {
+      auto candidate = configured_path;
+      candidate.replace_extension(suffix);
+      if (std::filesystem::exists(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return configured_path;
+}
 
 ConfigLoadResult load_config(const std::filesystem::path& path) {
   std::ifstream input(path);
@@ -311,10 +413,29 @@ std::vector<std::string> validate_config(const AppConfig& config, bool check_run
   if (config.target.input_dir.empty()) {
     errors.push_back("target.input_dir is required");
   }
+  // Sensitive env vars that fuzzpilot itself manages; allowing the
+  // config to override them would let a malicious config redirect the
+  // custom mutator, the recipe store, or LD_PRELOAD into attacker-
+  // controlled paths. Validation rejects them outright with a clear
+  // error rather than silently letting the override win.
+  static const std::set<std::string> kReservedEnvKeys = {
+      "AFL_CUSTOM_MUTATOR_LIBRARY",
+      "AFL_PRELOAD",
+      "LD_PRELOAD",
+      "DYLD_INSERT_LIBRARIES",   // macOS equivalent of LD_PRELOAD
+      "FUZZPILOT_RECIPE_STORE",
+      "FUZZPILOT_MUTATOR_TELEMETRY",
+      "FUZZPILOT_MUTATOR_DEBUG",
+      "PATH",
+      "LD_LIBRARY_PATH",
+  };
   for (const auto& [key, value] : config.afl.base_env) {
     (void)value;
     if (!is_valid_env_name(key)) {
       errors.push_back("afl.base_env contains invalid environment variable name: " + key);
+    }
+    if (kReservedEnvKeys.count(key)) {
+      errors.push_back("afl.base_env may not override reserved variable: " + key);
     }
   }
   if (!config.model_api.api_key_env.empty() && !is_valid_env_name(config.model_api.api_key_env)) {
@@ -328,6 +449,15 @@ std::vector<std::string> validate_config(const AppConfig& config, bool check_run
   if (config.micro_campaign.enabled &&
       config.micro_campaign.budget_sec >= config.afl.main_budget_sec) {
     errors.push_back("micro_campaign.budget_sec must be smaller than afl.main_budget_sec");
+  }
+  if (config.afl.main_budget_sec <= 0) {
+    errors.push_back("afl.main_budget_sec must be positive");
+  }
+  if (config.afl.plateau_window_sec <= 0) {
+    errors.push_back("afl.plateau_window_sec must be positive");
+  }
+  if (config.micro_campaign.budget_sec <= 0) {
+    errors.push_back("micro_campaign.budget_sec must be positive");
   }
   if (config.target.timeout_ms <= 0) {
     errors.push_back("target.timeout_ms must be positive");
@@ -369,11 +499,54 @@ std::vector<std::string> validate_config(const AppConfig& config, bool check_run
     } else if ((std::filesystem::status(config.target.binary).permissions() &
                 std::filesystem::perms::owner_exec) == std::filesystem::perms::none) {
       errors.push_back("target.binary is not owner-executable: " + config.target.binary.string());
+#if !defined(__APPLE__)
+    } else if (looks_like_macho_binary(config.target.binary)) {
+      errors.push_back("target.binary is a Mach-O binary; rebuild the target for Ubuntu/Linux: " +
+                       config.target.binary.string());
+#endif
     }
     if (!std::filesystem::is_directory(config.target.input_dir)) {
       errors.push_back("target.input_dir does not exist: " + config.target.input_dir.string());
     } else if (std::filesystem::is_empty(config.target.input_dir)) {
       errors.push_back("target.input_dir is empty: " + config.target.input_dir.string());
+    }
+    if (config.mutation_strategy.enabled &&
+        !std::filesystem::exists(resolve_mutator_library_path(config.mutation_strategy.custom_mutator_path))) {
+      errors.push_back("mutation_strategy.custom_mutator_path does not exist: " +
+                       config.mutation_strategy.custom_mutator_path.string());
+    }
+    if (config.static_analysis.enabled) {
+      const auto backend = normalize_static_backend(config.static_analysis.backend);
+      if (backend == "none") {
+        errors.push_back("static_analysis.enabled is true but static_analysis.backend is disabled");
+      } else if (backend != "ida" && backend != "ghidra") {
+        errors.push_back("static_analysis.backend is unsupported: " + config.static_analysis.backend);
+      }
+      if (!std::filesystem::exists(config.static_analysis.extractor_script)) {
+        errors.push_back("static_analysis.extractor_script does not exist: " +
+                         config.static_analysis.extractor_script.string());
+      }
+      if (backend == "ida") {
+        if (should_check_filesystem_path(config.static_analysis.python_bin) &&
+            !std::filesystem::exists(config.static_analysis.python_bin)) {
+          errors.push_back("static_analysis.python_bin does not exist: " +
+                           config.static_analysis.python_bin.string());
+        }
+        if (config.static_analysis.ida_dir.empty() ||
+            !std::filesystem::is_directory(config.static_analysis.ida_dir)) {
+          errors.push_back("static_analysis.ida_dir does not exist: " +
+                           config.static_analysis.ida_dir.string());
+        }
+      } else if (backend == "ghidra") {
+        const auto headless = resolve_ghidra_headless_path(config.static_analysis);
+        if (should_check_filesystem_path(headless) && !std::filesystem::exists(headless)) {
+          errors.push_back("static_analysis.ghidra_headless does not exist: " +
+                           headless.string());
+        }
+      }
+      if (config.static_analysis.timeout_sec <= 0) {
+        errors.push_back("static_analysis.timeout_sec must be positive");
+      }
     }
   }
   return errors;
@@ -403,6 +576,10 @@ std::string summarize_config(const AppConfig& config) {
   out << "agent_max_parallel_model_calls="
       << config.agent_runtime.max_parallel_model_calls << "\n";
   out << "agent_memory_store=" << config.agent_runtime.agent_memory_store.string() << "\n";
+  out << "static_analysis_enabled="
+      << (config.static_analysis.enabled ? "true" : "false") << "\n";
+  out << "static_analysis_backend="
+      << normalize_static_backend(config.static_analysis.backend) << "\n";
   return out.str();
 }
 

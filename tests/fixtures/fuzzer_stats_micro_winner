@@ -15,4 +15,5 @@ unique_crashes    : 0
 unique_hangs      : 0
 bitmap_cvg        : 1.80%
 stability         : 100.00%
+edges_found       : 36
 last_path         : 1710000800

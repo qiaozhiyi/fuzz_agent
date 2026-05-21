@@ -61,5 +61,11 @@ SeedMutationStrategy make_seed_focus_strategy(std::string seed_id,
                                               std::vector<std::string> tokens);
 SeedMutationStrategy make_seed_hash_strategy(const std::filesystem::path& seed_path,
                                              std::vector<std::string> tokens);
+// Strategy with uniformly-random operator weights, used by the
+// `random-recipe` ablation. The seed argument seeds an internal RNG
+// so a given run produces a reproducible recipe. Tokens are passed
+// through so the mutator still has something to insert.
+SeedMutationStrategy make_random_recipe_strategy(uint64_t seed,
+                                                 std::vector<std::string> tokens);
 
 }  // namespace fuzzpilot

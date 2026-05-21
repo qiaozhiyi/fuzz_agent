@@ -1,0 +1,12 @@
+.git
+.idea
+build
+build-*
+build-make
+cmake-build-*
+results
+work
+work_*
+*.sqlite
+*.db
+*.log

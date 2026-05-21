@@ -33,13 +33,16 @@ micro_campaign:
 mutation_strategy:
   enabled: true
   recipe_store: "work_cjson/recipes"
-  custom_mutator_path: "./build-make/mutators/fuzzpilot/libfuzzpilot_mutator.dylib"
+  custom_mutator_path: "./build/mutators/fuzzpilot/libfuzzpilot_mutator"
 
 static_analysis:
-  enabled: true
-  ida_dir: "/Applications/IDA Professional 9.3.app/Contents/macOS"
-  python_bin: "/opt/homebrew/anaconda3/envs/redteam/bin/python3"
-  extractor_script: "scripts/ida_extractor.py"
+  enabled: false
+  backend: "ghidra"
+  ida_dir: ""
+  python_bin: "python3"
+  ghidra_home: "/opt/ghidra"
+  extractor_script: "scripts/ghidra/FuzzPilotGhidraExtract.java"
+  timeout_sec: 120
 
 model_api:
   provider: "openai-compatible"

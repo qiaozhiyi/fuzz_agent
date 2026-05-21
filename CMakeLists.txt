@@ -17,6 +17,8 @@ add_library(fuzzpilot_core STATIC
   src/config.cpp
   src/controller/run.cpp
   src/env.cpp
+  src/experiments/m6_matrix.cpp
+  src/json_utils.cpp
   src/runner/afl_runner.cpp
   src/runner/process_posix.cpp
   src/model/gateway.cpp
@@ -68,9 +70,13 @@ target_compile_features(fuzzpilot_mutator_smoke PRIVATE cxx_std_20)
 add_executable(fuzzpilot_process_capture_smoke tools/process_capture_smoke.cpp)
 target_link_libraries(fuzzpilot_process_capture_smoke PRIVATE fuzzpilot_core)
 
+add_executable(fuzzpilot_json_utils_smoke tools/json_utils_smoke.cpp)
+target_link_libraries(fuzzpilot_json_utils_smoke PRIVATE fuzzpilot_core)
+
 enable_testing()
 add_test(NAME fuzzpilot_version COMMAND fuzzpilot --version)
 add_test(NAME fuzzpilot_process_capture_smoke COMMAND fuzzpilot_process_capture_smoke)
+add_test(NAME fuzzpilot_json_utils_smoke COMMAND fuzzpilot_json_utils_smoke)
 add_test(NAME fuzzpilot_check_example
   COMMAND fuzzpilot check-config --config ${CMAKE_CURRENT_SOURCE_DIR}/configs/examples/libpng.yaml)
 add_test(NAME fuzzpilot_parse_stats
@@ -154,6 +160,15 @@ add_test(NAME fuzzpilot_m4_run_model_agents
     --run-id run_m4_smoke
     --plateau-id plateau_m4_smoke
     --blackboard-json "{\"plateau\":{\"reason\":\"no_new_paths\"}}")
+add_test(NAME fuzzpilot_m6_matrix
+  COMMAND fuzzpilot m6-matrix
+    --config ${CMAKE_CURRENT_SOURCE_DIR}/experiments/targets/cjson/config.yaml
+    --config ${CMAKE_CURRENT_SOURCE_DIR}/experiments/targets/libpng/config.yaml
+    --out-dir ${CMAKE_CURRENT_BINARY_DIR}/smoke/m6_matrix
+    --work-dir ${CMAKE_CURRENT_BINARY_DIR}/smoke/m6_work
+    --repeats 1
+    --main-budget-sec 3600
+    --micro-budget-sec 120)
 add_test(NAME fuzzpilot_mvp_run_dry
   COMMAND fuzzpilot run
     --config ${CMAKE_CURRENT_SOURCE_DIR}/configs/examples/libpng.yaml

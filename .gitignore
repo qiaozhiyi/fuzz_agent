@@ -1,5 +1,8 @@
 build/
 build-*/
+build-make
+cmake-build-*/
+.idea/
 work/
 work_*/
 *.sqlite
@@ -13,6 +16,9 @@ db/*.db-wal
 work_real_fuzz/
 test_open.py
 scratch/
+results/*
+!results/.gitkeep
+!results/README.md
 scripts/__pycache__/
 ida_context.json
 ida_out.json
@@ -35,3 +41,4 @@ experiments/targets/*/*.dSYM/
 **/crashes/
 **/hangs/
 **/queue/
+.cache/
