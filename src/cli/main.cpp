@@ -605,6 +605,7 @@ int main(int argc, char** argv) {
       plateau_config.window_sec = static_cast<uint64_t>(std::stoull(arg_value(args, "--window-sec", "600")));
       plateau_config.max_new_paths = 0;
       plateau_config.min_execs_delta = 1000;
+      plateau_config.min_samples = 2;
       fuzzpilot::PlateauDetector detector(plateau_config);
       (void)detector.add_sample(*older, "run_smoke", "main_smoke");
       const auto event = detector.add_sample(*newer, "run_smoke", "main_smoke");

@@ -17,9 +17,15 @@ int main() {
       "\\\"seed_strategies\\\":[]\"}";
   const std::string truncated =
       "{\"agent\":\"SmokeAgent\",\"interventions\":[{\"action\":\"dictionary_probe\"}";
+  const std::string default_proposal_schema =
+      "{\"required\":[\"agent\",\"interventions\",\"seed_strategies\"]}";
+  auto satisfies_default_proposal_schema = [&](const std::string& json) {
+    return fuzzpilot::json_object_satisfies_required_schema(json,
+                                                            default_proposal_schema);
+  };
 
   if (!fuzzpilot::is_complete_json_value(valid) ||
-      !fuzzpilot::is_agent_proposal_json(valid)) {
+      !satisfies_default_proposal_schema(valid)) {
     std::cerr << "valid agent proposal rejected\n";
     return 1;
   }
@@ -28,20 +34,20 @@ int main() {
     return 2;
   }
   if (fuzzpilot::is_complete_json_value(truncated) ||
-      fuzzpilot::is_agent_proposal_json(truncated)) {
+      satisfies_default_proposal_schema(truncated)) {
     std::cerr << "truncated proposal accepted\n";
     return 3;
   }
   if (fuzzpilot::is_complete_json_value(malformed) ||
-      fuzzpilot::is_agent_proposal_json(malformed)) {
+      satisfies_default_proposal_schema(malformed)) {
     std::cerr << "malformed proposal accepted\n";
     return 4;
   }
-  if (fuzzpilot::is_agent_proposal_json(nested_only)) {
+  if (satisfies_default_proposal_schema(nested_only)) {
     std::cerr << "nested-only proposal keys accepted\n";
     return 5;
   }
-  if (fuzzpilot::is_agent_proposal_json(string_only)) {
+  if (satisfies_default_proposal_schema(string_only)) {
     std::cerr << "string-only proposal keys accepted\n";
     return 6;
   }
@@ -55,7 +61,7 @@ int main() {
     std::cerr << "result analysis schema rejected\n";
     return 7;
   }
-  if (fuzzpilot::is_agent_proposal_json(result_analysis)) {
+  if (satisfies_default_proposal_schema(result_analysis)) {
     std::cerr << "result analysis accepted as default proposal schema\n";
     return 8;
   }
