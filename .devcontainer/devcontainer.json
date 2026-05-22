@@ -6,6 +6,9 @@
       "AFLPP_MAKE_JOBS": "2"
     }
   },
+  "features": {
+    "ghcr.io/devcontainers/features/sshd:1": {}
+  },
   "workspaceFolder": "/work/fuzz_agent",
   "workspaceMount": "source=${localWorkspaceFolder},target=/work/fuzz_agent,type=bind,consistency=cached",
   "hostRequirements": {
