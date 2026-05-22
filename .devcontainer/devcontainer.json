@@ -1,0 +1,35 @@
+{
+  "name": "FuzzPilot",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "AFLPP_MAKE_JOBS": "2"
+    }
+  },
+  "workspaceFolder": "/work/fuzz_agent",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/work/fuzz_agent,type=bind,consistency=cached",
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "32gb"
+  },
+  "remoteEnv": {
+    "FUZZPILOT_MODEL_API_KEY": "${localEnv:FUZZPILOT_MODEL_API_KEY}"
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "twxs.cmake",
+        "ms-python.python",
+        "redhat.vscode-yaml",
+        "github.vscode-pull-request-github"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}
