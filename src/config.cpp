@@ -364,25 +364,27 @@ ConfigLoadResult load_config(const std::filesystem::path& path) {
       continue;
     }
 
-    const auto key = trim(content.substr(0, colon));
-    const auto value = trim(content.substr(colon + 1));
+    // Performance optimization: Cast to std::string_view before substr
+    // to avoid temporary heap allocations during the parsing loop.
+    const auto key = trim(std::string_view(content).substr(0, colon));
+    const auto value = trim(std::string_view(content).substr(colon + 1));
 
     if (indent == 0) {
       subsection.clear();
       if (value.empty()) {
-        section = key;
+        section = std::string(key);
       } else {
         section.clear();
-        assign_root(result.config, key, value);
+        assign_root(result.config, std::string(key), std::string(value));
       }
     } else if (indent == 2) {
       if (value.empty()) {
-        subsection = key;
+        subsection = std::string(key);
       } else {
-        assign_section(result.config, section, key, value);
+        assign_section(result.config, section, std::string(key), std::string(value));
       }
     } else if (indent >= 4) {
-      assign_nested(result.config, section, subsection, key, value);
+      assign_nested(result.config, section, subsection, std::string(key), std::string(value));
     }
   }
 

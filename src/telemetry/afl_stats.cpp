@@ -70,10 +70,12 @@ std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
     if (colon == std::string::npos) {
       continue;
     }
-    const auto key = trim(line.substr(0, colon));
-    const auto value = trim(line.substr(colon + 1));
+    // Performance optimization: Cast to std::string_view before substr
+    // to avoid temporary heap allocations during the parsing loop.
+    const auto key = trim(std::string_view(line).substr(0, colon));
+    const auto value = trim(std::string_view(line).substr(colon + 1));
     if (!key.empty()) {
-      stats.raw[key] = value;
+      stats.raw[std::string(key)] = std::string(value);
     }
   }
 
