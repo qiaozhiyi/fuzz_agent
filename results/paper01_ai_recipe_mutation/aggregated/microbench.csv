@@ -1,0 +1,16 @@
+run_id,config,repeat,iterations,mean_ns_per_call,mean_exec_per_sec,stddev
+p1_e3_microbench_fp-active_r01,fp-active,r01,100000,516.069,1937730.0,0.0
+p1_e3_microbench_fp-active_r02,fp-active,r02,100000,613.197,1630800.0,0.0
+p1_e3_microbench_fp-active_r03,fp-active,r03,100000,611.214,1636090.0,0.0
+p1_e3_microbench_fp-active_r04,fp-active,r04,100000,618.611,1616520.0,0.0
+p1_e3_microbench_fp-active_r05,fp-active,r05,100000,614.11,1628370.0,0.0
+p1_e3_microbench_fp-empty_r01,fp-empty,r01,100000,458.136,2182760.0,0.0
+p1_e3_microbench_fp-empty_r02,fp-empty,r02,100000,610.612,1637700.0,0.0
+p1_e3_microbench_fp-empty_r03,fp-empty,r03,100000,609.003,1642030.0,0.0
+p1_e3_microbench_fp-empty_r04,fp-empty,r04,100000,608.768,1642660.0,0.0
+p1_e3_microbench_fp-empty_r05,fp-empty,r05,100000,610.315,1638500.0,0.0
+p1_e3_microbench_vanilla_r01,vanilla,r01,100000,103.87,9627380.0,0.0
+p1_e3_microbench_vanilla_r02,vanilla,r02,100000,202.15,4946830.0,0.0
+p1_e3_microbench_vanilla_r03,vanilla,r03,100000,218.457,4577560.0,0.0
+p1_e3_microbench_vanilla_r04,vanilla,r04,100000,199.453,5013700.0,0.0
+p1_e3_microbench_vanilla_r05,vanilla,r05,100000,227.981,4386330.0,0.0

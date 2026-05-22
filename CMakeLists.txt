@@ -58,6 +58,7 @@ add_executable(fuzzpilot src/cli/main.cpp)
 target_link_libraries(fuzzpilot PRIVATE fuzzpilot_core)
 
 add_subdirectory(mutators/fuzzpilot)
+add_subdirectory(tools/mutator_microbench)
 
 add_executable(fuzzpilot_mutator_smoke
   tools/mutator_smoke.cpp

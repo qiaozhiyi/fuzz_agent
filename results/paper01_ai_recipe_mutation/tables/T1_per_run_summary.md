@@ -1,0 +1,12 @@
+# T1 — Per-run summary (Paper 1)
+
+| run_id | exp | target | mode | repeat | status | execs_done | execs_per_sec | paths_total | edges_found | bitmap_cvg | unique_crashes | unique_hangs | plateau_events | proposals | promotions | schema_valid_rate | fallback_rate |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| p1_e1_cjson_baseline-afl_r01 | e1 | cjson | baseline-afl | r01 | failed_short_run | 18158102 | 151060.71 | 428 | 249 | 21.84% | 0 | 0 | 0 | 0 | 0 |  |  |
+| p1_e1_cjson_baseline-afl_r02 | e1 | cjson | baseline-afl | r02 | failed_short_run | 18070706 | 150247.40 | 436 | 249 | 21.84% | 0 | 0 | 0 | 0 | 0 |  |  |
+| p1_e1_cjson_baseline-afl_r03 | e1 | cjson | baseline-afl | r03 | failed_short_run | 18072439 | 150296.80 | 419 | 249 | 21.84% | 0 | 0 | 0 | 0 | 0 |  |  |
+| p1_e1_cjson_baseline-afl_r04 | e1 | cjson | baseline-afl | r04 | failed_short_run | 18080331 | 150329.93 | 447 | 249 | 21.84% | 0 | 0 | 0 | 0 | 0 |  |  |
+| p1_e1_cjson_baseline-afl_r05 | e1 | cjson | baseline-afl | r05 | failed_short_run | 20276273 | 168708.85 | 465 | 249 | 21.84% | 0 | 0 | 0 | 0 | 0 |  |  |
+| p1_e2_cjson_no-static-analysis_r01 | e2 | cjson | no-static-analysis | r01 | skipped |  |  |  |  |  |  |  | 0 | 0 | 0 |  |  |
+| p1_e2_cjson_no-static-analysis_r02 | e2 | cjson | no-static-analysis | r02 | skipped |  |  |  |  |  |  |  | 0 | 0 | 0 |  |  |
+| p1_e2_cjson_no-static-analysis_r03 | e2 | cjson | no-static-analysis | r03 | skipped |  |  |  |  |  |  |  | 0 | 0 | 0 |  |  |

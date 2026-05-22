@@ -34,6 +34,13 @@ sha256_file() {
   exit 1
 }
 
+metadata_value() {
+  local key="$1"
+  local file="${FUZZPILOT_IMAGE_METADATA:-/work/fuzz_agent/build/fuzzpilot_image_metadata.env}"
+  [[ -f "$file" ]] || return 1
+  awk -F= -v k="$key" '$1 == k { sub(/^[^=]*=/, ""); print; found=1; exit } END { exit found ? 0 : 1 }' "$file"
+}
+
 RUN_ID=""
 CONFIG_PATH=""
 TARGET_NAME=""
@@ -75,16 +82,6 @@ if [[ -z "$RUN_ID" || -z "$CONFIG_PATH" || -z "$TARGET_NAME" || -z "$OUT_DIR" ]]
   exit 1
 fi
 
-if ! command -v git >/dev/null 2>&1; then
-  echo "Error: git is required but not found in PATH." >&2
-  exit 1
-fi
-
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo "Error: this script must be run inside a git repository." >&2
-  exit 1
-fi
-
 if [[ ! -f "$CONFIG_PATH" ]]; then
   echo "Error: config file not found: $CONFIG_PATH" >&2
   exit 1
@@ -93,16 +90,31 @@ fi
 mkdir -p "$OUT_DIR"
 
 CAPTURED_AT_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-GIT_COMMIT="$(git rev-parse HEAD)"
-GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+GIT_COMMIT="unknown"
+GIT_BRANCH="unknown"
+GIT_DIRTY="unknown"
+GIT_AVAILABLE=false
 OS_NAME="$(uname -s)"
 ARCH_NAME="$(uname -m)"
 CONFIG_SHA256="$(sha256_file "$CONFIG_PATH")"
+TARGET_PLATFORM="$(metadata_value target_platform 2>/dev/null || echo "${FUZZPILOT_DOCKER_PLATFORM:-unknown}")"
+BUILD_PLATFORM="$(metadata_value build_platform 2>/dev/null || echo "unknown")"
+IMAGE_AFLPP_REF="$(metadata_value aflpp_ref 2>/dev/null || echo "unknown")"
+IMAGE_GHIDRA_VERSION="$(metadata_value ghidra_version 2>/dev/null || echo "unknown")"
 
-if [[ -n "$(git status --porcelain)" ]]; then
-  GIT_DIRTY=true
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_AVAILABLE=true
+  GIT_COMMIT="$(git rev-parse HEAD)"
+  GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+  if [[ -n "$(git status --porcelain)" ]]; then
+    GIT_DIRTY=true
+  else
+    GIT_DIRTY=false
+  fi
 else
-  GIT_DIRTY=false
+  GIT_COMMIT="$(metadata_value vcs_ref 2>/dev/null || echo unknown)"
+  GIT_BRANCH="$(metadata_value vcs_branch 2>/dev/null || echo unknown)"
+  GIT_DIRTY="$(metadata_value vcs_dirty 2>/dev/null || echo unknown)"
 fi
 
 {
@@ -116,15 +128,30 @@ fi
   printf '  "config_sha256": "%s",\n' "$(json_escape "$CONFIG_SHA256")"
   printf '  "target_name": "%s",\n' "$(json_escape "$TARGET_NAME")"
   printf '  "os": "%s",\n' "$(json_escape "$OS_NAME")"
-  printf '  "arch": "%s"\n' "$(json_escape "$ARCH_NAME")"
+  printf '  "arch": "%s",\n' "$(json_escape "$ARCH_NAME")"
+  printf '  "target_platform": "%s",\n' "$(json_escape "$TARGET_PLATFORM")"
+  printf '  "build_platform": "%s",\n' "$(json_escape "$BUILD_PLATFORM")"
+  printf '  "aflpp_ref": "%s",\n' "$(json_escape "$IMAGE_AFLPP_REF")"
+  printf '  "ghidra_version": "%s"\n' "$(json_escape "$IMAGE_GHIDRA_VERSION")"
   printf '}\n'
 } > "$OUT_DIR/run_metadata.json"
 
-git status --short --branch > "$OUT_DIR/git_status.txt"
-{
-  # Capture both unstaged and staged changes for reproducibility snapshots.
-  git diff
-  git diff --cached
-} > "$OUT_DIR/git.patch"
+if [[ "$GIT_AVAILABLE" == true ]]; then
+  git status --short --branch > "$OUT_DIR/git_status.txt"
+  {
+    # Capture both unstaged and staged changes for reproducibility snapshots.
+    git diff
+    git diff --cached
+  } > "$OUT_DIR/git.patch"
+else
+  {
+    printf 'git repository unavailable in runtime image\n'
+    printf 'commit: %s\n' "$GIT_COMMIT"
+    printf 'branch: %s\n' "$GIT_BRANCH"
+    printf 'dirty: %s\n' "$GIT_DIRTY"
+    printf 'target_platform: %s\n' "$TARGET_PLATFORM"
+  } > "$OUT_DIR/git_status.txt"
+  printf 'git diff unavailable: runtime image was built without .git\n' > "$OUT_DIR/git.patch"
+fi
 
 echo "Captured metadata in: $OUT_DIR"

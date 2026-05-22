@@ -1,0 +1,21 @@
+mode: no-mutator
+description: |
+  Full FuzzPilot loop (plateau detection, model calls, micro-campaigns,
+  promotion) BUT the recipe-guided AFL++ custom mutator is not loaded.
+  Promoted "interventions" reduce to dictionary additions / seed
+  splices that AFL++ can apply natively. Used to isolate the mutator's
+  contribution.
+
+config_override:
+  mutation_strategy:
+    enabled: false
+  plateau:
+    enabled: true
+  micro_campaign:
+    enabled: true
+  static_analysis:
+    enabled: true
+  model_api:
+    enabled: true
+
+afl_cli_extra: []

@@ -19,7 +19,15 @@ scratch/
 results/*
 !results/.gitkeep
 !results/README.md
+!results/paper01_ai_recipe_mutation/
+results/paper01_ai_recipe_mutation/runs/*/work/
+results/paper01_ai_recipe_mutation/runs/*/stdout.log
+results/paper01_ai_recipe_mutation/runs/*/stderr.log
+results/paper01_ai_recipe_mutation/runs/*/status
+results/paper01_ai_recipe_mutation/microbench/*.status
 scripts/__pycache__/
+# IDA artifacts (IDA backend has been removed but keep these patterns
+# so any stray .id0/.til files from prior runs aren't accidentally committed)
 ida_context.json
 ida_out.json
 *.dict

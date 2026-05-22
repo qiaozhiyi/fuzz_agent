@@ -1,0 +1,154 @@
+# Paper 1 preprint manifest.
+#
+# Lists every run required to produce the arXiv placeholder version of
+# FuzzPilot. The batch driver (`scripts/paper01/run_batch.sh`) consumes
+# this file to know what to launch. The validity report compares this
+# manifest against observed runs under `results/paper01_ai_recipe_mutation/runs/`.
+#
+# Convention: run_id = p1_<exp>_<target>_<mode>_r<NN>
+# All AFL runs use --budget-sec 14400 (4 hours). Override via batch driver if needed.
+
+paper: "paper01_ai_recipe_mutation"
+version: 1
+defaults:
+  budget_sec: 14400
+  target_config: "experiments/targets/cjson/config.yaml"
+  out_root: "results/paper01_ai_recipe_mutation/runs"
+  metadata_script: "scripts/capture_run_metadata.sh"
+
+experiments:
+  - id: E1a
+    description: "cJSON baseline AFL++"
+    target: cjson_parser
+    mode: baseline-afl
+    repeats: 5
+    budget_sec: 14400
+    runs:
+      - p1_e1_cjson_baseline-afl_r01
+      - p1_e1_cjson_baseline-afl_r02
+      - p1_e1_cjson_baseline-afl_r03
+      - p1_e1_cjson_baseline-afl_r04
+      - p1_e1_cjson_baseline-afl_r05
+
+  - id: E1b
+    description: "cJSON FuzzPilot full-agent (plateau-triggered LLM + recipe mutator)"
+    target: cjson_parser
+    mode: full-agent
+    repeats: 5
+    budget_sec: 14400
+    runs:
+      - p1_e1_cjson_full-agent_r01
+      - p1_e1_cjson_full-agent_r02
+      - p1_e1_cjson_full-agent_r03
+      - p1_e1_cjson_full-agent_r04
+      - p1_e1_cjson_full-agent_r05
+
+  - id: E2a
+    description: "cJSON rule-only ablation (no LLM, rule recipes only)"
+    target: cjson_parser
+    mode: rule-only
+    repeats: 3
+    budget_sec: 14400
+    runs:
+      - p1_e2_cjson_rule-only_r01
+      - p1_e2_cjson_rule-only_r02
+      - p1_e2_cjson_rule-only_r03
+
+  - id: E2b
+    description: "cJSON no-mutator ablation (FuzzPilot controller without recipe-guided mutator)"
+    target: cjson_parser
+    mode: no-mutator
+    repeats: 3
+    budget_sec: 14400
+    runs:
+      - p1_e2_cjson_no-mutator_r01
+      - p1_e2_cjson_no-mutator_r02
+      - p1_e2_cjson_no-mutator_r03
+
+  - id: E2c
+    description: "cJSON no-static-analysis ablation (LLM without Ghidra binary context)"
+    target: cjson_parser
+    mode: no-static-analysis
+    repeats: 3
+    budget_sec: 14400
+    runs:
+      - p1_e2_cjson_no-static-analysis_r01
+      - p1_e2_cjson_no-static-analysis_r02
+      - p1_e2_cjson_no-static-analysis_r03
+
+  - id: E3
+    description: "Mutator-only microbenchmark (no AFL++ loop)"
+    kind: microbench
+    target: cjson_parser
+    iterations: 100000
+    seed_count: 10000
+    configs: [vanilla, fp-empty, fp-active]
+    repeats: 5
+    runs:
+      - p1_e3_microbench_vanilla_r01
+      - p1_e3_microbench_vanilla_r02
+      - p1_e3_microbench_vanilla_r03
+      - p1_e3_microbench_vanilla_r04
+      - p1_e3_microbench_vanilla_r05
+      - p1_e3_microbench_fp-empty_r01
+      - p1_e3_microbench_fp-empty_r02
+      - p1_e3_microbench_fp-empty_r03
+      - p1_e3_microbench_fp-empty_r04
+      - p1_e3_microbench_fp-empty_r05
+      - p1_e3_microbench_fp-active_r01
+      - p1_e3_microbench_fp-active_r02
+      - p1_e3_microbench_fp-active_r03
+      - p1_e3_microbench_fp-active_r04
+      - p1_e3_microbench_fp-active_r05
+
+  - id: E5
+    description: "OPTIONAL libpng smoke (1 baseline + 1 full-agent)"
+    optional: true
+    target: libpng_parser
+    target_config: "experiments/targets/libpng/config.yaml"
+    budget_sec: 14400
+    runs:
+      - id: p1_e5_libpng_baseline-afl_r01
+        mode: baseline-afl
+      - id: p1_e5_libpng_full-agent_r01
+        mode: full-agent
+
+acceptance:
+  per_run_required_files:
+    - "fuzzer_stats"
+    - "coverage.csv"
+    - "events.jsonl"
+    - "run_metadata.json"
+  per_full_agent_required_files:
+    - "agent_decisions.jsonl"
+    - "agent_memory.jsonl"
+    - "fuzzpilot.sqlite"
+  min_execs_done: 1000000
+  # Runtime guard: a run that exits long before its budget is by definition
+  # not a 4-hour baseline, even if AFL++ happens to clock 10M+ execs against
+  # a small seed corpus. Set to 95% of the default 14400s budget so a slightly
+  # short legitimate run is still accepted, but a 120s smoke is rejected.
+  min_run_time_sec: 14000
+  min_coverage_csv_rows: 200
+  min_schema_valid_rate_full_agent: 0.7
+  # Microbench gates. Note: as of the vanilla_havoc.so redesign, the
+  # vanilla baseline is itself a dlopen'd AFL++-style mutator, so all
+  # three configs share the same dispatch path and the comparison is
+  # symmetric. See tools/mutator_microbench/vanilla_havoc.cpp.
+  #
+  # Strict gate: recipe-guided mutation must not add measurable cost
+  # over empty-recipe dispatch (this is the paper's RQ2 claim).
+  microbench_fp_active_vs_fp_empty_max_overhead_pct: 5.0
+  # Sanity gate: FuzzPilot dispatch within an order of magnitude of the
+  # AFL-style havoc baseline. FuzzPilot mutator does more work per call
+  # (telemetry ring, recipe cache lookup, dispatch bookkeeping); in
+  # virtualized arm64 containers the indirect-call overhead is also
+  # amplified. Loose threshold; if this fails it indicates a regression
+  # in mutator hot path, not a paper-claim problem. Note: this is a
+  # ratio expressed as percent overhead, so 400.0 means "fp-empty may
+  # be up to 5x slower than vanilla".
+  microbench_fp_empty_vs_vanilla_max_overhead_pct: 400.0
+  # End-to-end throughput parity: the canonical RQ2 evidence is the
+  # ratio of E1b (full-agent) median execs_per_sec over E1a (baseline-afl)
+  # from fuzzer_stats — see Day 5 aggregate output.
+  end_to_end_full_agent_vs_baseline_min_ratio: 0.85

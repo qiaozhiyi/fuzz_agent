@@ -11,8 +11,8 @@ target:
   sanitizers: ["asan", "ubsan"]
 
 afl:
-  afl_fuzz: /opt/homebrew/bin/afl-fuzz
-  afl_showmap: /opt/homebrew/bin/afl-showmap
+  afl_fuzz: afl-fuzz
+  afl_showmap: afl-showmap
   base_env:
     AFL_SKIP_CPUFREQ: "1"
     AFL_NO_UI: "1"
@@ -97,5 +97,4 @@ static_analysis:
   ghidra_home: /opt/ghidra
   extractor_script: ./scripts/ghidra/FuzzPilotGhidraExtract.java
   python_bin: python3
-  ida_dir: ""
   timeout_sec: 120

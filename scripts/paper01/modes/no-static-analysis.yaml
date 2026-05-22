@@ -1,0 +1,25 @@
+mode: no-static-analysis
+description: |
+  Full FuzzPilot loop (plateau detection, model calls, micro-campaigns,
+  promotion, recipe-guided mutator) BUT static-analysis hints (Ghidra
+  function/CFG context) are stripped from the prompt envelope. Used to
+  measure how much the static binary context contributes on top of the
+  blackboard + telemetry summaries that the agent already receives.
+
+  The CLI switch --ablation no-static-analysis (see
+  src/controller/run.cpp:419) is what actually short-circuits the Ghidra
+  context feed; this YAML documents the semantic intent for reviewers.
+
+config_override:
+  mutation_strategy:
+    enabled: true
+  plateau:
+    enabled: true
+  micro_campaign:
+    enabled: true
+  static_analysis:
+    enabled: false
+  model_api:
+    enabled: true
+
+afl_cli_extra: []

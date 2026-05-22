@@ -87,6 +87,5 @@ static_analysis:
   backend: ghidra
   python_bin: python3
   extractor_script: ./scripts/ghidra/FuzzPilotGhidraExtract.java
-  ida_dir: ""
   ghidra_home: /opt/ghidra
   timeout_sec: 120

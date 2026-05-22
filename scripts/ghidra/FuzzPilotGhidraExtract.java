@@ -186,8 +186,12 @@ public class FuzzPilotGhidraExtract extends GhidraScript {
                 return;
             }
             String cmpMnemonic = previous.getMnemonicString().toLowerCase(Locale.ROOT);
-            if (cmpMnemonic.contains("cmp") || cmpMnemonic.contains("test") ||
-                cmpMnemonic.contains("subs") || cmpMnemonic.contains("adds")) {
+            // Cross-ISA: x86 uses cmp/test/sub/add/and; AArch64/ARM uses
+            // cmp/tst/subs/adds. Match the shared prefixes so x86 binaries
+            // don't end up with empty branch_constraints.
+            if (cmpMnemonic.startsWith("cmp") || cmpMnemonic.startsWith("test") ||
+                cmpMnemonic.startsWith("tst") || cmpMnemonic.startsWith("sub") ||
+                cmpMnemonic.startsWith("add") || cmpMnemonic.startsWith("and")) {
                 BranchConstraint constraint = new BranchConstraint();
                 constraint.addr = instruction.getAddress().toString();
                 constraint.condition = mnemonic;
@@ -325,7 +329,16 @@ public class FuzzPilotGhidraExtract extends GhidraScript {
                 DecompileResults results = decompiler.decompileFunction(function, 20, monitor);
                 if (results != null && results.decompileCompleted() &&
                     results.getDecompiledFunction() != null) {
-                    meta.decompiled = results.getDecompiledFunction().getC();
+                    String c = results.getDecompiledFunction().getC();
+                    // Cap decompiled bodies at 4 KiB to keep the LLM
+                    // prompt token budget bounded; large functions are
+                    // marked with a TRUNCATED tag.
+                    final int MAX_DECOMPILED_BYTES = 4096;
+                    if (c != null && c.length() > MAX_DECOMPILED_BYTES) {
+                        c = c.substring(0, MAX_DECOMPILED_BYTES) +
+                            "\n/* TRUNCATED by FuzzPilotGhidraExtract */";
+                    }
+                    meta.decompiled = c == null ? "" : c;
                     ++count;
                 }
             }

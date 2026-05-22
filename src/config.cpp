@@ -217,7 +217,6 @@ void assign_section(AppConfig& config,
     else if (key == "backend" || key == "tool") config.static_analysis.backend = unquote(value);
     else if (key == "python_bin") config.static_analysis.python_bin = unquote(value);
     else if (key == "extractor_script") config.static_analysis.extractor_script = unquote(value);
-    else if (key == "ida_dir") config.static_analysis.ida_dir = unquote(value);
     else if (key == "ghidra_home") config.static_analysis.ghidra_home = unquote(value);
     else if (key == "ghidra_headless" || key == "analyze_headless") config.static_analysis.ghidra_headless = unquote(value);
     else if (key == "timeout_sec") config.static_analysis.timeout_sec = parse_int(value, config.static_analysis.timeout_sec);
@@ -293,9 +292,6 @@ std::string normalize_static_backend(std::string value) {
   }
   if (value == "ghidra-headless") {
     return "ghidra";
-  }
-  if (value == "idalib") {
-    return "ida";
   }
   return value;
 }
@@ -515,25 +511,14 @@ std::vector<std::string> validate_config(const AppConfig& config, bool check_run
       const auto backend = normalize_static_backend(config.static_analysis.backend);
       if (backend == "none") {
         errors.push_back("static_analysis.enabled is true but static_analysis.backend is disabled");
-      } else if (backend != "ida" && backend != "ghidra") {
-        errors.push_back("static_analysis.backend is unsupported: " + config.static_analysis.backend);
+      } else if (backend != "ghidra") {
+        errors.push_back("static_analysis.backend is unsupported (only 'ghidra' is supported): " + config.static_analysis.backend);
       }
       if (!std::filesystem::exists(config.static_analysis.extractor_script)) {
         errors.push_back("static_analysis.extractor_script does not exist: " +
                          config.static_analysis.extractor_script.string());
       }
-      if (backend == "ida") {
-        if (should_check_filesystem_path(config.static_analysis.python_bin) &&
-            !std::filesystem::exists(config.static_analysis.python_bin)) {
-          errors.push_back("static_analysis.python_bin does not exist: " +
-                           config.static_analysis.python_bin.string());
-        }
-        if (config.static_analysis.ida_dir.empty() ||
-            !std::filesystem::is_directory(config.static_analysis.ida_dir)) {
-          errors.push_back("static_analysis.ida_dir does not exist: " +
-                           config.static_analysis.ida_dir.string());
-        }
-      } else if (backend == "ghidra") {
+      if (backend == "ghidra") {
         const auto headless = resolve_ghidra_headless_path(config.static_analysis);
         if (should_check_filesystem_path(headless) && !std::filesystem::exists(headless)) {
           errors.push_back("static_analysis.ghidra_headless does not exist: " +

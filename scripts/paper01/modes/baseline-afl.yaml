@@ -1,0 +1,34 @@
+# Paper 1 mode overrides
+#
+# These YAML snippets describe per-mode tweaks to the base target config
+# (e.g. experiments/targets/cjson/config.yaml). The batch driver does NOT
+# yet merge these — they are documentation of the intended config delta
+# for each ablation, and serve as the source of truth when reviewers ask
+# "what exactly did 'rule-only' mean?".
+#
+# The CLI flag --ablation already selects the right code paths inside
+# the FuzzPilot controller; these YAMLs only document what each path
+# implies semantically. If you need to apply a YAML-level override
+# (e.g. disable static analysis for the no-static-analysis mode), do it
+# by extending experiments/targets/cjson/config.yaml or by passing
+# --ablation no-static-analysis.
+
+mode: baseline-afl
+description: |
+  AFL++ vanilla. No FuzzPilot controller intervention (no plateau
+  detection, no model calls, no micro-campaigns, no recipe-guided
+  mutator). Used as the throughput and coverage anchor.
+
+config_override:
+  mutation_strategy:
+    enabled: false
+  plateau:
+    threshold_paths: 9999999
+  micro_campaign:
+    enabled: false
+  static_analysis:
+    enabled: false
+  model_api:
+    enabled: false
+
+afl_cli_extra: []

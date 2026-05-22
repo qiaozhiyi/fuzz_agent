@@ -1,0 +1,20 @@
+mode: rule-only
+description: |
+  FuzzPilot controller + recipe-guided mutator, but model calls are
+  disabled. On plateau, fall back to rule-based recipes from
+  mutation_strategy. Used to isolate the LLM's contribution from the
+  rest of the system.
+
+config_override:
+  mutation_strategy:
+    enabled: true
+  plateau:
+    enabled: true
+  micro_campaign:
+    enabled: true
+  static_analysis:
+    enabled: false
+  model_api:
+    enabled: false   # the --ablation rule-only switch enforces this in code
+
+afl_cli_extra: []

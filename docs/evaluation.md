@@ -11,7 +11,7 @@ windows under equal budgets.
 |---|---|
 | `baseline-afl` | AFL++ without FuzzPilot control |
 | `rule-only` | deterministic controller logic without model calls |
-| `no-static-analysis` | full loop without IDA/Ghidra context |
+| `no-static-analysis` | full loop without Ghidra context |
 | `no-mutator` | full loop without recipe-guided mutation |
 | `full-agent` | configured FuzzPilot loop |
 
@@ -56,7 +56,9 @@ Controller outcomes:
 - Use fresh output directories for every repeat.
 - Record AFL++ version, OS, CPU, commit, config hash, and target binary hash.
 - Run multiple repeats per target and mode.
-- Treat macOS/arm64 as development only; use Linux/x86_64 for main evidence.
+- Treat Docker as the experiment boundary. macOS/Linux and amd64/arm64 hosts may
+  run the workflow, but paper-comparable data should use
+  `FUZZPILOT_DOCKER_PLATFORM=linux/amd64`.
 
 ## Crash Handling
 
@@ -99,8 +101,8 @@ scripts/capture_run_metadata.sh \
 
 ## Next Work
 
-1. Reproduce `docs/quickstart.md` on a clean Ubuntu/x86_64 machine.
-2. Rebuild cJSON and libpng harnesses on that machine.
+1. Reproduce `docs/quickstart.md` on a clean Docker-capable machine.
+2. Run the Docker smoke on the host-native platform and on `linux/amd64`.
 3. Run short real-run smokes for every matrix mode.
 4. Add crash replay/deduplication scripts.
 5. Run repeated cJSON and libpng experiments.

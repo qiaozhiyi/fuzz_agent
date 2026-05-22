@@ -1,0 +1,6 @@
+run_id,mode,execs_per_sec
+p1_e1_cjson_baseline-afl_r01,baseline-afl,151060.71
+p1_e1_cjson_baseline-afl_r02,baseline-afl,150247.4
+p1_e1_cjson_baseline-afl_r03,baseline-afl,150296.8
+p1_e1_cjson_baseline-afl_r04,baseline-afl,150329.93
+p1_e1_cjson_baseline-afl_r05,baseline-afl,168708.85

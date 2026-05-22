@@ -22,27 +22,24 @@ Use the CLI matrix generator to create auditable long-run plans:
 The generated matrix includes baseline AFL++, rule-only, no-static-analysis,
 no-mutator, and full-agent runs for each target.
 
-## Ubuntu/x86 preflight
+## Portable Docker preflight
 
-Before moving long runs to an x86_64 Ubuntu cloud server, run:
-
-```bash
-scripts/docker_ubuntu_smoke.sh
-```
-
-The smoke builds under Ubuntu, checks CTest, verifies the Linux
-`libfuzzpilot_mutator.so`, rebuilds the bundled target harnesses as ELF/x86-64,
-and confirms the shared configs use the extensionless `libfuzzpilot_mutator`
-path.
-
-Before running the full cJSON/libpng matrix on a cloud server, initialize target
-submodules and rebuild Linux target binaries:
+Before moving long runs to any Docker-capable host, run:
 
 ```bash
-git submodule update --init --recursive
-scripts/build_ubuntu_targets.sh
+scripts/fuzzpilot_docker.sh smoke
 ```
 
-If a submodule is unavailable, install the matching system development package
-(`libcjson-dev` or `libpng-dev`) and rerun the build helper. Do not reuse the
-checked-in macOS arm64 target binaries for Ubuntu/x86_64 long runs.
+The smoke builds the image for the selected platform, checks CTest during image
+build, validates target configs inside the container, rebuilds target harnesses
+inside the image, and runs a short cJSON baseline campaign.
+
+For paper-comparable data, force the canonical platform:
+
+```bash
+FUZZPILOT_DOCKER_PLATFORM=linux/amd64 scripts/fuzzpilot_docker.sh smoke
+```
+
+Native runs are still possible, but then you must initialize submodules and
+rebuild target binaries on that machine. Do not reuse checked-in binaries across
+CPU/OS boundaries.

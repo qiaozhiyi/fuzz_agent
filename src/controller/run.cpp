@@ -110,26 +110,8 @@ std::string run_static_extractor(const StaticAnalysisConfig& sa_config,
                                  const std::filesystem::path& run_dir,
                                  const std::filesystem::path& output_json) {
   const auto backend = normalize_static_backend(sa_config.backend);
-  if (backend == "ida") {
-    const auto result = run_process_capture(
-        sa_config.python_bin.string(),
-        {sa_config.python_bin.string(),
-         sa_config.extractor_script.string(),
-         target_binary.string(),
-         output_json.string()},
-        {{"IDADIR", sa_config.ida_dir.string()}},
-        true,
-        1024 * 1024,
-        std::max(1, sa_config.timeout_sec) * 1000);
-    if (!result.spawned || !result.exited || result.exit_code != 0) {
-      return static_analysis_error_json("ida",
-                                        "ida extractor failed: " + result.error + " " + result.output);
-    }
-    return read_text_or_error(output_json, "ida");
-  }
-
   if (backend != "ghidra") {
-    return static_analysis_error_json(backend, "unsupported static analysis backend");
+    return static_analysis_error_json(backend, "unsupported static analysis backend (only 'ghidra' is supported)");
   }
 
   const auto headless = resolve_ghidra_headless_path(sa_config);

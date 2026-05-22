@@ -216,38 +216,141 @@ def parse_repeat(value: str) -> str:
     return value
 
 
+def _read_target_from_metadata(run_dir: Path, fallback: str) -> str:
+    """Recover the canonical target name (e.g. "cjson_parser") from
+    run_metadata.json. Falls back to a guess parsed from the run_id if the
+    metadata file is missing.
+    """
+    meta_path = run_dir / "run_metadata.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            name = meta.get("target_name")
+            if name:
+                return str(name)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return fallback
+
+
+def _record_from_run_dir(run_dir: Path, target: str, mode: str, repeat: str, run_id: str) -> RunRecord:
+    record = RunRecord(
+        target=target,
+        mode=mode,
+        repeat=repeat,
+        run_id=run_id,
+        run_dir=run_dir,
+    )
+    coverage_path = run_dir / "coverage.csv"
+    if coverage_path.exists():
+        record.coverage_rows = read_coverage(coverage_path)
+    if not record.coverage_rows:
+        record.notes.append("empty coverage.csv")
+    if not (run_dir / "events.jsonl").exists():
+        record.notes.append("missing events.jsonl")
+    if not (run_dir / "report.md").exists():
+        record.notes.append("missing report.md")
+    read_sqlite(run_dir, record)
+    # FS status file is what scripts/paper01/run_batch.sh actually writes
+    # (completed | failed | failed_short_run | skipped). Prefer it over
+    # whatever the sqlite runs table happened to record, since the batch
+    # driver applies the manifest acceptance gates *after* the run exits.
+    status_path = run_dir / "status"
+    if status_path.exists():
+        fs_status = status_path.read_text().strip()
+        if fs_status:
+            record.run_status = fs_status
+    return record
+
+
 def discover_runs(run_root: Path) -> list[RunRecord]:
+    """Discover runs under either the flat or the legacy nested layout.
+
+    Flat layout (current run_batch.sh):
+        <run_root>/<run_id>/coverage.csv
+        Run identity is recovered by parsing <run_id> = p1_<exp>_<target>_<mode>_r<NN>
+        and reading run_metadata.json:target_name for the canonical target.
+
+    Legacy nested layout (pre-flat, pre-Docker batch driver):
+        <run_root>/<target>/<mode>/r<NN>/<run_id>/coverage.csv
+
+    Both are accepted so older results dirs still aggregate.
+    """
     records: list[RunRecord] = []
+    seen_run_ids: set[str] = set()
+
+    # Flat layout first (the current convention).
+    for coverage_path in sorted(run_root.glob("*/coverage.csv")):
+        run_dir = coverage_path.parent
+        run_id = run_dir.name
+        parts = run_id.split("_")
+        if len(parts) < 5:
+            continue  # not a p1_<exp>_<target>_<mode>_r<NN> id; skip
+        target_guess = parts[2]
+        mode = parts[3]
+        repeat = parse_repeat(parts[4])
+        target = _read_target_from_metadata(run_dir, target_guess)
+        records.append(_record_from_run_dir(run_dir, target, mode, repeat, run_id))
+        seen_run_ids.add(run_id)
+
+    # Legacy nested layout: <root>/<target>/<mode>/r<NN>/<run_id>/coverage.csv
     for coverage_path in sorted(run_root.glob("*/*/r*/*/coverage.csv")):
         rel = coverage_path.relative_to(run_root)
         if len(rel.parts) < 5:
             continue
         target, mode, repeat_dir, run_id = rel.parts[:4]
+        if run_id in seen_run_ids:
+            continue
         run_dir = coverage_path.parent
-        record = RunRecord(
-            target=target,
-            mode=mode,
-            repeat=parse_repeat(repeat_dir),
-            run_id=run_id,
-            run_dir=run_dir,
-        )
-        record.coverage_rows = read_coverage(coverage_path)
-        if not record.coverage_rows:
-            record.notes.append("empty coverage.csv")
-        if not (run_dir / "events.jsonl").exists():
-            record.notes.append("missing events.jsonl")
-        if not (run_dir / "report.md").exists():
-            record.notes.append("missing report.md")
-        read_sqlite(run_dir, record)
-        records.append(record)
+        records.append(_record_from_run_dir(run_dir, target, mode, parse_repeat(repeat_dir), run_id))
+        seen_run_ids.add(run_id)
+
     return records
 
 
 def load_expected_runs(manifest_path: Path | None) -> set[tuple[str, str, str]]:
+    """Parse expected (target, mode, repeat) tuples from a manifest file.
+
+    Accepts two formats:
+      1. The current paper01_preprint.yaml shape:
+           experiments:
+             - target: cjson_parser
+               mode: baseline-afl
+               runs:
+                 - p1_e1_cjson_baseline-afl_r01
+                 - {id: ..., mode: ...}    (E5 per-run-mode style)
+      2. The legacy m6_matrix.json shape with top-level "targets".
+    """
     if manifest_path is None or not manifest_path.exists():
         return set()
-    data = json.loads(manifest_path.read_text())
+
     expected: set[tuple[str, str, str]] = set()
+    text = manifest_path.read_text()
+
+    if manifest_path.suffix in (".yaml", ".yml"):
+        try:
+            import yaml  # local import: only needed for YAML manifests
+        except ImportError:
+            return expected
+        data = yaml.safe_load(text) or {}
+        for exp in data.get("experiments", []):
+            if exp.get("kind") == "microbench":
+                continue  # microbench is tracked separately, not in run table
+            default_target = str(exp.get("target", ""))
+            default_mode = str(exp.get("mode", ""))
+            for run in exp.get("runs", []):
+                if isinstance(run, dict):
+                    run_id = str(run.get("id", ""))
+                    mode = str(run.get("mode", default_mode))
+                else:
+                    run_id = str(run)
+                    mode = default_mode
+                repeat = run_id.rsplit("_r", 1)[-1] if "_r" in run_id else ""
+                expected.add((default_target, mode, repeat))
+        return expected
+
+    # Legacy JSON shape.
+    data = json.loads(text)
     for target_entry in data.get("targets", []):
         target = str(target_entry.get("target", ""))
         for run in target_entry.get("runs", []):
@@ -623,8 +726,9 @@ def write_validity_report(out_dir: Path,
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run-root", default="work_paper01_ai_recipe_mutation",
-                        help="Root containing target/mode/rN/run_ID artifacts.")
+    parser.add_argument("--run-root", default="results/paper01_ai_recipe_mutation/runs",
+                        help="Directory containing run artifacts (flat <run_id>/coverage.csv "
+                             "or legacy nested target/mode/rN/run_id/coverage.csv).")
     parser.add_argument("--out-dir", default="results/paper01_ai_recipe_mutation",
                         help="Output directory for paper tables.")
     parser.add_argument("--manifest", default="",

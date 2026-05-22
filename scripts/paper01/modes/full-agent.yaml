@@ -1,0 +1,23 @@
+mode: full-agent
+description: |
+  Production FuzzPilot configuration. All subsystems enabled:
+    - plateau detector
+    - blackboard + agent runtime (LLM proposals)
+    - micro-campaign validation + promotion
+    - recipe-guided AFL++ custom mutator
+    - optional static-analysis hints (Ghidra)
+  This is the configuration that the paper claims results for.
+
+config_override:
+  mutation_strategy:
+    enabled: true
+  plateau:
+    enabled: true
+  micro_campaign:
+    enabled: true
+  static_analysis:
+    enabled: true
+  model_api:
+    enabled: true
+
+afl_cli_extra: []

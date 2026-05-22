@@ -34,7 +34,7 @@ Implemented pieces:
 - AFL++ custom mutator with recipe-driven operators
 - cJSON, libpng, and synthetic target configs
 - M6 ablation matrix generation
-- Ubuntu/x86_64 Docker smoke support
+- Docker-anywhere smoke support for linux/amd64 and linux/arm64
 
 ## Non-Goals
 

@@ -1,0 +1,9 @@
+run_id,exp,mode,repeat,plateau_ts,promoted_ts,first_new_path_after_plateau_sec
+p1_e1_cjson_baseline-afl_r01,e1,baseline-afl,r01,,,
+p1_e1_cjson_baseline-afl_r02,e1,baseline-afl,r02,,,
+p1_e1_cjson_baseline-afl_r03,e1,baseline-afl,r03,,,
+p1_e1_cjson_baseline-afl_r04,e1,baseline-afl,r04,,,
+p1_e1_cjson_baseline-afl_r05,e1,baseline-afl,r05,,,
+p1_e2_cjson_no-static-analysis_r01,e2,no-static-analysis,r01,,,
+p1_e2_cjson_no-static-analysis_r02,e2,no-static-analysis,r02,,,
+p1_e2_cjson_no-static-analysis_r03,e2,no-static-analysis,r03,,,

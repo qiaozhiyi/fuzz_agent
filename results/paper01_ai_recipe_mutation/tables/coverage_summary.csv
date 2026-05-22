@@ -1,0 +1,2 @@
+target,implementation_mode,paper_mode,repeats_observed,median_paths_total,median_edges,median_bitmap_cvg,unique_crashes_reported_sum,median_execs_per_sec,median_recipe_hit_rate,notes
+cjson_parser,baseline-afl,AFL++ default,5,0,,21.84,0,150327,,edges not present in current telemetry; use bitmap_cvg until edge export exists

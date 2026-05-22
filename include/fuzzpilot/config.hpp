@@ -95,7 +95,6 @@ struct StaticAnalysisConfig {
   std::string backend = "ghidra";
   std::filesystem::path python_bin = "python3";
   std::filesystem::path extractor_script = "./scripts/ghidra/FuzzPilotGhidraExtract.java";
-  std::filesystem::path ida_dir;  // IDADIR environment variable value
   std::filesystem::path ghidra_home;
   std::filesystem::path ghidra_headless = "analyzeHeadless";
   int timeout_sec = 60;

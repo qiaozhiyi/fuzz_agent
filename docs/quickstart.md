@@ -1,6 +1,8 @@
 # Quickstart
 
-This is the shortest path to check a clean checkout.
+This is the shortest path to check a clean checkout through Docker. The host
+only needs Docker Buildx; AFL++, Ghidra, Python packages, and target sources are
+prepared inside the image.
 
 ## Clone
 
@@ -9,70 +11,50 @@ git clone --recurse-submodules https://github.com/qiaozhiyi/fuzz_agent.git
 cd fuzz_agent
 ```
 
-If already cloned:
+Submodules are optional for Docker runs; the image clones pinned cJSON/libpng
+revisions during build.
+
+## Docker Build
+
+```bash
+scripts/fuzzpilot_docker.sh build
+```
+
+## Preflight
+
+```bash
+scripts/fuzzpilot_docker.sh preflight
+```
+
+## Smoke
+
+```bash
+scripts/fuzzpilot_docker.sh smoke
+```
+
+Smoke artifacts are written under `results/docker_smoke/`.
+
+## Paper-Canonical Platform
+
+```bash
+FUZZPILOT_DOCKER_PLATFORM=linux/amd64 scripts/fuzzpilot_docker.sh smoke
+```
+
+## Native Development
+
+Native builds are still useful for editing and unit tests:
 
 ```bash
 git submodule update --init --recursive
-```
-
-## Dependencies
-
-macOS:
-
-```bash
-brew install cmake ninja sqlite afl++ git
-```
-
-Ubuntu:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y afl++ build-essential clang cmake curl git \
-  libcjson-dev libpng-dev libsqlite3-dev ninja-build pkg-config \
-  python3 sqlite3 zlib1g-dev
-```
-
-## Build
-
-```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build
-```
-
-## Test
-
-```bash
 ctest --test-dir build --output-on-failure
 ```
 
-## Config Check
-
-```bash
-./build/fuzzpilot check-config \
-  --config experiments/targets/cjson/config.yaml \
-  --runtime
-```
-
-## AFL++ Command Preview
-
-```bash
-./build/fuzzpilot afl-command \
-  --config experiments/targets/cjson/config.yaml \
-  --output-dir /tmp/fuzzpilot-cjson-afl \
-  --recipe-store /tmp/fuzzpilot-cjson-recipes
-```
-
-Check that the command includes:
-
-- `AFL_CUSTOM_MUTATOR_LIBRARY`
-- `FUZZPILOT_RECIPE_STORE`
-- the target binary
-- `@@` if the target expects a file path
+Do not publish paper numbers from mixed host builds; use Docker for experiment
+data.
 
 ## Fixture Smoke
-
-This does not launch AFL++. It replays checked-in stats and verifies the
-controller path.
 
 ```bash
 ./build/fuzzpilot run \
@@ -100,7 +82,15 @@ Expected files under `build/smoke/fixture/<run_id>/`:
 
 ## Optional Model Smoke
 
-Use an environment variable for the key. Do not put a key in a config file.
+Use an environment variable for the key. Do not put a key in a config file. For
+Docker runs, pass the key through the wrapper:
+
+```bash
+FUZZPILOT_MODEL_API_KEY="<YOUR_API_KEY>" \
+  scripts/fuzzpilot_docker.sh run-batch --exp E1b --repeats 1 --budget-sec 60
+```
+
+For native development:
 
 ```bash
 export FUZZPILOT_MODEL_API_KEY="<YOUR_API_KEY>"

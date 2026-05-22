@@ -18,5 +18,6 @@ build, run local smoke tests, parse AFL++ telemetry, drive model-agent planning
 outside the mutator hot path, run short micro-campaign paths, and write
 SQLite/JSONL artifacts.
 
-The missing work is benchmark-scale evidence: repeated Linux/x86_64 runs,
-ablations, crash replay/deduplication, and result analysis.
+The missing work is benchmark-scale evidence: repeated paper-canonical
+`linux/amd64` Docker runs, ablations, crash replay/deduplication, and result
+analysis.

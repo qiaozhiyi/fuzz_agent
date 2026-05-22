@@ -1,0 +1,16 @@
+{
+  "run_id": "p1_e1_cjson_baseline-afl_r03",
+  "captured_at_utc": "2026-05-22T06:32:07Z",
+  "git_commit": "f0605e2c597e91753246cb9f58b9aa13380da7c1",
+  "git_branch": "main",
+  "git_dirty": true,
+  "config_path": "/work/fuzz_agent/experiments/targets/cjson/config.yaml",
+  "config_sha256": "8a9a4a3edf956d0344ed3c1889c0a45e085b297ed22dc6127176953e461aee4e",
+  "target_name": "cjson_parser",
+  "os": "Linux",
+  "arch": "aarch64",
+  "target_platform": "linux/arm64",
+  "build_platform": "linux/arm64",
+  "aflpp_ref": "v4.21c",
+  "ghidra_version": "11.1.2_PUBLIC"
+}

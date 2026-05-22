@@ -10,7 +10,7 @@ target:
 
 afl:
   base_env:
-    AFL_MAP_SIZE: "4096"
+    AFL_MAP_SIZE: "131072"
     AFL_NO_UI: "1"
     AFL_SKIP_CPUFREQ: "1"
   main_budget_sec: 120
@@ -38,7 +38,6 @@ mutation_strategy:
 static_analysis:
   enabled: false
   backend: "ghidra"
-  ida_dir: ""
   python_bin: "python3"
   ghidra_home: "/opt/ghidra"
   extractor_script: "scripts/ghidra/FuzzPilotGhidraExtract.java"

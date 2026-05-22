@@ -3,7 +3,7 @@
 FuzzPilot is an experimental C/C++ controller for AFL++ fuzzing campaigns. It
 adds telemetry collection, plateau detection, model-backed planning, short
 micro-campaigns, recipe-guided mutation, and optional reverse-engineering
-context from IDA or Ghidra.
+context from Ghidra.
 
 The core design rule is simple: model calls never run in the AFL++ custom mutator
 hot path. The model observes telemetry and proposes strategy between fuzzing
@@ -108,31 +108,51 @@ Install these before building:
 
 Optional but useful:
 
-- Ghidra headless if using `static_analysis.backend=ghidra`
-- IDA Pro 9.x with `idalib` if using `static_analysis.backend=ida`
-- Python environment compatible with the IDA extractor script when using IDA
+- Ghidra headless if using `static_analysis.backend=ghidra` (the only supported backend)
 - `gh` for GitHub PR and CI workflows
 - `jq` or `sqlite3` for inspecting run artifacts
 
-### macOS example
+### macOS example (development only — do not publish numbers from macOS)
 
 ```bash
-brew install cmake ninja sqlite afl++ git
+brew install cmake ninja sqlite afl++ git openjdk
 ```
 
-### Ubuntu example
+### Ubuntu example (native development only; Docker is recommended for experiments)
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y afl++ build-essential clang cmake curl git \
-  libcjson-dev libpng-dev libsqlite3-dev ninja-build pkg-config \
-  python3 sqlite3 zlib1g-dev
+  libpng-dev libsqlite3-dev ninja-build pkg-config \
+  python3 python3-pip sqlite3 zlib1g-dev openjdk-17-jdk-headless
+sudo apt-get install -y python3-matplotlib python3-pandas python3-yaml
+# For Ghidra (required by full-agent ablation):
+sudo FUZZPILOT_GHIDRA_INSTALL_DIR=/opt scripts/install_ghidra_ubuntu.sh
 ```
+
+### Docker (recommended for portable smoke and Paper 1 experiments)
+
+```bash
+scripts/fuzzpilot_docker.sh build
+scripts/fuzzpilot_docker.sh preflight
+scripts/fuzzpilot_docker.sh smoke
+
+FUZZPILOT_MODEL_API_KEY="$KEY" \
+  scripts/fuzzpilot_docker.sh run-batch --exp E1a --parallel 4
+```
+
+The wrapper auto-selects `linux/amd64` or `linux/arm64` from the host
+architecture and only mounts `results/` into the container. Set
+`FUZZPILOT_DOCKER_PLATFORM=linux/amd64` for the paper-canonical platform.
+The image pins AFL++, Ghidra, cJSON, and libpng, then builds all targets inside
+the image, so host submodules and host AFL++ are not required for Docker runs.
 
 ## Clone and submodules
 
-The bundled experiment targets are tracked as Git submodules/gitlinks. Clone with
-submodules when starting from a fresh checkout:
+The bundled experiment target sources are tracked as Git submodules/gitlinks for
+native development. Docker builds clone the pinned target revisions internally,
+so submodule initialization is not required for `scripts/fuzzpilot_docker.sh`.
+Clone with submodules when starting a native checkout:
 
 ```bash
 git clone --recurse-submodules https://github.com/qiaozhiyi/fuzz_agent.git
@@ -151,15 +171,16 @@ Expected target source paths:
 - `experiments/targets/libpng/src`
 
 The checked-in target binaries may have been built on a developer machine and
-are not portable across CPU/OS boundaries. Before Ubuntu/x86_64 long runs,
-rebuild target binaries on the server:
+are not portable across CPU/OS boundaries. Before native long runs, rebuild
+target binaries on that machine:
 
 ```bash
 scripts/build_ubuntu_targets.sh
 ```
 
-If `cJSON` is skipped, initialize submodules first with the command above or
-install `libcjson-dev` so the harness can link against the system package.
+If `cJSON` is skipped in native mode, initialize submodules first with the
+command above or install `libcjson-dev` so the harness can link against the
+system package. Docker builds do this internally.
 
 ## Build
 
@@ -185,30 +206,31 @@ Typical binaries after build:
 - `build/fuzzpilot_process_capture_smoke`
 - `build/fuzzpilot_json_utils_smoke`
 
-## Ubuntu/x86 Docker smoke
+## Portable Docker Smoke
 
-On Apple Silicon, this checks the Ubuntu path under `linux/amd64` so it is close
-to the long-running x86_64 cloud server environment:
+Run the same smoke path on macOS or Linux, amd64 or arm64:
 
 ```bash
-scripts/docker_ubuntu_smoke.sh
+scripts/fuzzpilot_docker.sh smoke
 ```
 
-The script builds `docker/ubuntu/Dockerfile`, compiles into
-`/tmp/fuzzpilot-build` inside the container, runs CTest, verifies both the Linux
-`.so` mutator and the extensionless `libfuzzpilot_mutator` link, and previews the
-cJSON AFL++ command. It also rebuilds `vuln_target`, `cJSON`, and `libpng` in a
-temporary source copy and checks that the rebuilt binaries are ELF/x86-64.
+The wrapper builds `docker/ubuntu/Dockerfile` when needed, runs preflight inside
+the image, validates runtime configs, and launches a short cJSON baseline run.
+Smoke artifacts are written under `results/docker_smoke/` and remain readable on
+the host.
 
-On an x86_64 Ubuntu cloud server, the same Docker smoke works without emulation.
-For native runs, use the Ubuntu packages above, then build with the normal CMake
-commands.
+For paper-comparable data, use the canonical platform:
+
+```bash
+FUZZPILOT_DOCKER_PLATFORM=linux/amd64 scripts/fuzzpilot_docker.sh smoke
+```
 
 ## Ubuntu/x86 Cloud Notes
 
 Use [experiments/README.md](experiments/README.md) when moving to a long-running
-x86_64 Ubuntu server. The important rule is to rebuild all target binaries on
-the server and confirm they are `ELF 64-bit` `x86-64` before starting M6 runs.
+server. The recommended path is still Docker; force
+`FUZZPILOT_DOCKER_PLATFORM=linux/amd64` for paper-comparable runs. Native runs
+must rebuild all target binaries on that machine before starting M6 runs.
 
 ## Test
 
@@ -298,8 +320,8 @@ Config notes:
   `openai_compatible`.
 - `target.dict` and legacy `target.dictionary` are both supported.
 - `model.model_name` and `model_api.model` are both supported.
-- `static_analysis.backend` accepts `ghidra` or `ida`; use `ghidra` on
-  Ubuntu/x86_64 servers and keep `enabled: false` until the backend is installed.
+- `static_analysis.backend` only accepts `ghidra`; keep `enabled: false`
+  until Ghidra headless is installed (see `scripts/install_ghidra_ubuntu.sh`).
 
 ## Quickstart: fixture-only dry run
 
