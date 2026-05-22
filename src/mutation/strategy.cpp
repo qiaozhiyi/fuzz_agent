@@ -153,9 +153,14 @@ std::string stable_seed_hash_hex(const std::vector<unsigned char>& bytes) {
     hash ^= static_cast<uint64_t>(byte);
     hash *= 1099511628211ull;
   }
-  std::ostringstream out;
-  out << std::hex << std::setfill('0') << std::setw(16) << hash;
-  return out.str();
+  // Performance optimization: Avoid std::ostringstream allocations
+  std::string out(16, '0');
+  constexpr char kHex[] = "0123456789abcdef";
+  for (int i = 15; i >= 0; --i) {
+    out[i] = kHex[hash & 0x0f];
+    hash >>= 4;
+  }
+  return out;
 }
 
 std::string stable_seed_hash_hex(const std::filesystem::path& path) {
