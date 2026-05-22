@@ -18,7 +18,12 @@ ARG GHIDRA_VERSION=11.1.2_PUBLIC
 ARG GHIDRA_RELEASE=20240709
 ARG GHIDRA_URL=https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.1.2_build/ghidra_${GHIDRA_VERSION}_${GHIDRA_RELEASE}.zip
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN for i in 1 2 3 4 5; do \
+      apt-get update -o Acquire::Retries=3 -o Acquire::http::No-Cache=true && break; \
+      echo "apt-get update attempt $i failed, retrying after $((i*15))s"; \
+      sleep "$((i * 15))"; \
+    done \
+  && apt-get install -y --no-install-recommends \
     automake \
     bash \
     bison \
