@@ -27,10 +27,20 @@ inline std::string make_id(const std::string& prefix) {
   const auto now = std::chrono::system_clock::now().time_since_epoch();
   const auto micros = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
 
-  std::ostringstream out;
-  out << prefix << "_" << micros << "_p" << current_process_id() << "_" << std::setfill('0')
-      << std::setw(4) << counter.fetch_add(1, std::memory_order_relaxed);
-  return out.str();
+  // Performance optimization: Avoid std::ostringstream allocations
+  const auto cnt = counter.fetch_add(1, std::memory_order_relaxed);
+  std::string out = prefix;
+  out += "_";
+  out += std::to_string(micros);
+  out += "_p";
+  out += std::to_string(current_process_id());
+  out += "_";
+  std::string cnt_str = std::to_string(cnt);
+  if (cnt_str.size() < 4) {
+    out.append(4 - cnt_str.size(), '0');
+  }
+  out += cnt_str;
+  return out;
 }
 
 }  // namespace fuzzpilot
