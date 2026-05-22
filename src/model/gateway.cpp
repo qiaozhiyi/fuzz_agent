@@ -95,6 +95,38 @@ std::string extract_content_field(const std::string& response) {
   return close(fd) == 0;
 }
 
+class ScopedTempFile {
+ public:
+  explicit ScopedTempFile(std::filesystem::path path) : path_(std::move(path)) {}
+  ~ScopedTempFile() {
+    if (!path_.empty()) {
+      std::error_code ec;
+      std::filesystem::remove(path_, ec);
+    }
+  }
+  ScopedTempFile(const ScopedTempFile&) = delete;
+  ScopedTempFile& operator=(const ScopedTempFile&) = delete;
+  ScopedTempFile(ScopedTempFile&& other) noexcept : path_(std::move(other.path_)) {
+    other.path_.clear();
+  }
+  ScopedTempFile& operator=(ScopedTempFile&& other) noexcept {
+    if (this != &other) {
+      if (!path_.empty()) {
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+      }
+      path_ = std::move(other.path_);
+      other.path_.clear();
+    }
+    return *this;
+  }
+  const std::filesystem::path& path() const { return path_; }
+  bool empty() const { return path_.empty(); }
+
+ private:
+  std::filesystem::path path_;
+};
+
 // Create a temp file with an unguessable name via mkstemp(3). The
 // returned path is owned by us (mode 0600, created atomically by the
 // kernel — no TOCTOU window). On failure returns an empty path. The
@@ -288,16 +320,13 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   // `{request_id}_payload.json` scheme allowed a local attacker on a
   // shared host to symlink-hijack the file between write and curl
   // read.
-  const auto payload_path = make_private_tempfile("fuzzpilot.payload.", payload_str);
-  const auto auth_header_path = make_private_tempfile(
-      "fuzzpilot.auth.", std::string("Authorization: Bearer ") + api_key + "\n");
+  ScopedTempFile payload_path(make_private_tempfile("fuzzpilot.payload.", payload_str));
+  ScopedTempFile auth_header_path(make_private_tempfile(
+      "fuzzpilot.auth.", std::string("Authorization: Bearer ") + api_key + "\n"));
   if (payload_path.empty() || auth_header_path.empty()) {
     response.error = "failed to create private model request tempfiles";
     response.error_kind = "spawn_error";
     response.response_hash = stable_text_hash(response.error);
-    std::error_code ec;
-    if (!payload_path.empty()) std::filesystem::remove(payload_path, ec);
-    if (!auth_header_path.empty()) std::filesystem::remove(auth_header_path, ec);
     return response;
   }
 
@@ -309,8 +338,8 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
       "--connect-timeout", "10",
       "--max-time", max_time,
       "-H", "Content-Type: application/json",
-      "-H", "@" + auth_header_path.string(),
-      "-d", "@" + payload_path.string(),
+      "-H", "@" + auth_header_path.path().string(),
+      "-d", "@" + payload_path.path().string(),
       endpoint_,
   };
 
@@ -333,9 +362,6 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
       raw = retry_raw;
     }
   }
-  std::error_code ec;
-  std::filesystem::remove(payload_path, ec);
-  std::filesystem::remove(auth_header_path, ec);
 
   response.full_raw_response = raw;
   response.response_json = extract_content_field(raw);
