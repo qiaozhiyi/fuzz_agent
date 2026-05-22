@@ -12,13 +12,19 @@
 # 所有底层批处理均带 --resume，崩了重跑该脚本会从断点续上。
 #
 # Usage:
-#   scripts/paper01/run_e1a_e2a.sh                # 前台跑，看实时日志
+#   scripts/paper01/run_e1a_e2a.sh                # 前台跑，看实时日志（docker 模式）
+#   scripts/paper01/run_e1a_e2a.sh --host         # native 模式，不走 docker
 #   nohup scripts/paper01/run_e1a_e2a.sh > out.log 2>&1 &   # 后台跑
 #   scripts/paper01/run_e1a_e2a.sh --dry-run      # 只检查 plumbing，不真跑
 #   scripts/paper01/run_e1a_e2a.sh --only E1a     # 只跑 E1a
 #   scripts/paper01/run_e1a_e2a.sh --only E2a     # 只跑 E2a
 #   scripts/paper01/run_e1a_e2a.sh --skip-preflight
 #   scripts/paper01/run_e1a_e2a.sh --skip-aggregate
+#
+# 模式：
+#   默认 docker 模式（兼容现有行为），需要 docker daemon + fuzzpilot:paper01 镜像。
+#   --host：直接在 host 上跑，需要 build/fuzzpilot 已编译 + AFL++ 在 PATH。
+#   不指定 --host 时若检测不到 docker，自动 fallback 到 host 模式并打印提示。
 #
 # Exit codes:
 #   0  全部成功
@@ -31,15 +37,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${REPO_ROOT}"
 
 # --- defaults
-: "${FUZZPILOT_DOCKER_PLATFORM:=linux/arm64}"
-export FUZZPILOT_DOCKER_PLATFORM
-
 E1A_PARALLEL=4
 E2A_PARALLEL=3
 ONLY=""
 DRY_RUN=0
 SKIP_PREFLIGHT=0
 SKIP_AGGREGATE=0
+MODE=""   # "" = auto-detect, "host" = native, "docker" = container
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -49,6 +53,8 @@ while [[ $# -gt 0 ]]; do
     --skip-aggregate)  SKIP_AGGREGATE=1; shift ;;
     --e1a-parallel)    E1A_PARALLEL="$2"; shift 2 ;;
     --e2a-parallel)    E2A_PARALLEL="$2"; shift 2 ;;
+    --host)            MODE="host"; shift ;;
+    --docker)          MODE="docker"; shift ;;
     -h|--help)
       sed -n '2,30p' "${BASH_SOURCE[0]}"
       exit 0 ;;
@@ -58,6 +64,20 @@ while [[ $# -gt 0 ]]; do
       exit 2 ;;
   esac
 done
+
+# Mode auto-detection: prefer docker if daemon reachable, else fall back to host.
+if [[ -z "${MODE}" ]]; then
+  if command -v docker >/dev/null 2>&1 && docker ps >/dev/null 2>&1; then
+    MODE="docker"
+  else
+    MODE="host"
+  fi
+fi
+
+if [[ "${MODE}" == "docker" ]]; then
+  : "${FUZZPILOT_DOCKER_PLATFORM:=linux/arm64}"
+  export FUZZPILOT_DOCKER_PLATFORM
+fi
 
 # --- master log
 LOG_DIR="${REPO_ROOT}/results/paper01_ai_recipe_mutation/runs/_logs"
@@ -76,20 +96,31 @@ hr()  { printf '%s\n' "---------------------------------------------------------
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || { log "ERROR: '$1' not on PATH"; exit 2; }
 }
-need_cmd docker
 need_cmd python3
-[[ -x "${REPO_ROOT}/scripts/fuzzpilot_docker.sh" ]] || {
-  log "ERROR: scripts/fuzzpilot_docker.sh not executable"; exit 2;
-}
-
-if ! docker ps >/dev/null 2>&1; then
-  log "ERROR: docker daemon not running (try opening Docker Desktop)"
-  exit 2
+if [[ "${MODE}" == "docker" ]]; then
+  need_cmd docker
+  [[ -x "${REPO_ROOT}/scripts/fuzzpilot_docker.sh" ]] || {
+    log "ERROR: scripts/fuzzpilot_docker.sh not executable"; exit 2;
+  }
+  if ! docker ps >/dev/null 2>&1; then
+    log "ERROR: docker daemon not running (try opening Docker Desktop)"
+    exit 2
+  fi
+else
+  # host mode preconditions: fuzzpilot binary + afl-fuzz available
+  if [[ ! -x "${REPO_ROOT}/build/fuzzpilot" && ! -x "${REPO_ROOT}/build-cmake/fuzzpilot" ]]; then
+    log "ERROR: build/fuzzpilot not found (build with: cmake -S . -B build -G Ninja && cmake --build build)"
+    exit 2
+  fi
+  need_cmd afl-fuzz
 fi
 
 hr
 log "Paper 1 — E1a + E2a one-button runner"
-log "platform:        ${FUZZPILOT_DOCKER_PLATFORM}"
+log "mode:            ${MODE}"
+if [[ "${MODE}" == "docker" ]]; then
+  log "platform:        ${FUZZPILOT_DOCKER_PLATFORM}"
+fi
 log "e1a parallel:    ${E1A_PARALLEL}"
 log "e2a parallel:    ${E2A_PARALLEL}"
 log "dry-run:         ${DRY_RUN}"
@@ -118,10 +149,18 @@ hr
 
 # --- phase 1: preflight
 if [[ ${SKIP_PREFLIGHT} -eq 0 ]]; then
-  log "PHASE 1/4: in-container preflight"
-  if ! scripts/fuzzpilot_docker.sh preflight; then
-    log "ERROR: preflight failed; fix the above and re-run"
-    exit 1
+  if [[ "${MODE}" == "docker" ]]; then
+    log "PHASE 1/4: in-container preflight"
+    if ! scripts/fuzzpilot_docker.sh preflight; then
+      log "ERROR: preflight failed; fix the above and re-run"
+      exit 1
+    fi
+  else
+    log "PHASE 1/4: host preflight"
+    if ! bash scripts/paper01/preflight.sh --host; then
+      log "ERROR: preflight failed; fix the above and re-run"
+      exit 1
+    fi
   fi
   log "PHASE 1/4: PASS"
   hr
@@ -133,10 +172,17 @@ fi
 run_batch() {
   local exp="$1"
   local par="$2"
-  local args=(run-batch --exp "${exp}" --resume --parallel "${par}")
-  [[ ${DRY_RUN} -eq 1 ]] && args+=(--dry-run)
-  log "command: scripts/fuzzpilot_docker.sh ${args[*]}"
-  scripts/fuzzpilot_docker.sh "${args[@]}"
+  if [[ "${MODE}" == "docker" ]]; then
+    local args=(run-batch --exp "${exp}" --resume --parallel "${par}")
+    [[ ${DRY_RUN} -eq 1 ]] && args+=(--dry-run)
+    log "command: scripts/fuzzpilot_docker.sh ${args[*]}"
+    scripts/fuzzpilot_docker.sh "${args[@]}"
+  else
+    local args=(--exp "${exp}" --resume --parallel "${par}")
+    [[ ${DRY_RUN} -eq 1 ]] && args+=(--dry-run)
+    log "command: bash scripts/paper01/run_batch.sh ${args[*]}"
+    bash scripts/paper01/run_batch.sh "${args[@]}"
+  fi
 }
 
 # --- phase 2: E1a
