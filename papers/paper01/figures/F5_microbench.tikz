@@ -1,0 +1,78 @@
+% F5_microbench.tikz
+% Hand-drawn chart for stable paper layout: 0.65cm = 1M exec/sec.
+
+\begin{tikzpicture}[
+    font=\small,
+    bar/.style={draw=blue!65!black, fill=blue!22, line width=0.6pt},
+    grid/.style={dashed, gray!25, line width=0.4pt},
+    axis/.style={->, line width=0.55pt},
+    err/.style={black, line width=0.75pt},
+]
+
+\def\baseY{0.55}
+\def\unitY{0.65}
+\def\axisLeft{1.35}
+\def\axisRight{11.20}
+\def\barW{0.72}
+
+\node[font=\small] at (6.25,4.35)
+  {Mutator-only \texttt{exec/sec}, $N{=}5$ reps each, SIGSTOP-isolated};
+\node[font=\small, rotate=90] at (0.24,2.22)
+  {Mutator throughput (exec/sec)};
+
+% Axes, ticks, and grid.
+\draw[axis] (\axisLeft,\baseY) -- (\axisRight,\baseY);
+\draw[axis] (\axisLeft,\baseY) -- (\axisLeft,4.00);
+\foreach \m/\lab in {0/0,1/1M,2/2M,3/3M,4/4M,5/5M} {
+  \pgfmathsetmacro{\yy}{\baseY + \m*\unitY}
+  \draw[grid] (\axisLeft,\yy) -- (\axisRight,\yy);
+  \draw[line width=0.45pt] (\axisLeft-0.07,\yy) -- (\axisLeft,\yy);
+  \node[anchor=east, font=\small] at (\axisLeft-0.15,\yy) {\lab};
+}
+
+% #1 x, #2 mean in M, #3 SD in M, #4 value label, #5 config label.
+\def\fpmicrobar#1#2#3#4#5{%
+  \pgfmathsetmacro{\xL}{#1-\barW/2}
+  \pgfmathsetmacro{\xR}{#1+\barW/2}
+  \pgfmathsetmacro{\barTop}{\baseY + #2*\unitY}
+  \pgfmathsetmacro{\errLow}{\baseY + (#2-#3)*\unitY}
+  \pgfmathsetmacro{\errHigh}{\baseY + (#2+#3)*\unitY}
+  \pgfmathsetmacro{\labelY}{\errHigh + 0.15}
+  \filldraw[bar] (\xL,\baseY) rectangle (\xR,\barTop);
+  \draw[err] (#1,\errLow) -- (#1,\errHigh);
+  \draw[err] (#1-0.15,\errLow) -- (#1+0.15,\errLow);
+  \draw[err] (#1-0.15,\errHigh) -- (#1+0.15,\errHigh);
+  \node[anchor=south, font=\small\bfseries] at (#1,\labelY) {#4};
+  \node[anchor=north, font=\small\ttfamily] at (#1,\baseY-0.13) {#5};
+}
+
+\fpmicrobar{2.75}{2.005078}{0.341644}{2{,}005{,}078}{vanilla}
+\fpmicrobar{6.25}{3.222108}{0.958259}{3{,}222{,}108}{fp-empty}
+\fpmicrobar{9.75}{2.800142}{0.673566}{2{,}800{,}142}{fp-active}
+
+% Individual data points (5 reps per config) overlaid as black dots
+% so reviewers can see the actual distribution, not just mean+SD.
+\def\rep#1#2{%
+    \pgfmathsetmacro{\yy}{\baseY + #2*\unitY}
+    \filldraw[black] (#1,\yy) circle (0.06);%
+}
+% vanilla x=2.75
+\rep{2.75}{2.591470}
+\rep{2.75}{1.770420}
+\rep{2.75}{1.755770}
+\rep{2.75}{1.937110}
+\rep{2.75}{1.970620}
+% fp-empty x=6.25
+\rep{6.25}{2.961850}
+\rep{6.25}{3.982240}
+\rep{6.25}{2.080370}
+\rep{6.25}{2.671850}
+\rep{6.25}{4.414230}
+% fp-active x=9.75
+\rep{9.75}{2.645520}
+\rep{9.75}{3.008030}
+\rep{9.75}{3.561610}
+\rep{9.75}{1.746280}
+\rep{9.75}{3.039270}
+
+\end{tikzpicture}

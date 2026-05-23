@@ -1,0 +1,62 @@
+% F2_recipe_lifecycle.tikz
+% Linear flow: Proposal -> schema check -> micro-campaign -> reward
+% -> top-K? -> Promoted. Both "no" paths fan into single Audit log
+% below. No floating annotations (everything is in the caption).
+
+\begin{tikzpicture}[
+    font=\footnotesize,
+    >=Stealth,
+    state/.style={
+        draw, rounded corners=2pt,
+        minimum width=22mm, minimum height=10mm,
+        align=center,
+        fill=blue!10, draw=blue!60!black,
+    },
+    decision/.style={
+        draw, diamond, aspect=2,
+        inner sep=0pt,
+        minimum width=22mm, minimum height=10mm,
+        align=center,
+        fill=yellow!20, draw=orange!70!black,
+    },
+    promoted/.style={
+        draw, rounded corners=6pt,
+        minimum width=24mm, minimum height=10mm,
+        align=center,
+        font=\small\bfseries,
+        fill=green!18, draw=green!50!black,
+    },
+    discarded/.style={
+        draw, rounded corners=6pt,
+        minimum width=24mm, minimum height=10mm,
+        align=center,
+        font=\small\bfseries,
+        fill=red!12, draw=red!60!black,
+    },
+    arr/.style={->, thick},
+    noarr/.style={->, thick, red!70!black},
+]
+
+% --- Main horizontal flow ---
+\node[state]    (proposal) at (0,    0)  {Agent\\proposal};
+\node[decision] (schema)   at (3.5,  0)  {schema\\valid?};
+\node[state]    (micro)    at (7.5,  0)  {Micro-campaign\\($N$~sec)};
+\node[state]    (reward)   at (11.5, 0)  {Reward\\$R{=}\alpha\Delta_E{+}\beta\Delta_P$};
+\node[decision] (rank)     at (15,   0)  {top-$K$?};
+\node[promoted] (promoted) at (18,   0)  {Promoted};
+
+% --- Audit log below (single sink for both "no" branches) ---
+\node[discarded] (audit) at (9, -2.6) {Audit log\\(discarded)};
+
+% --- Forward arrows ---
+\draw[arr] (proposal) -- (schema);
+\draw[arr] (schema)   -- node[above, font=\scriptsize] {yes} (micro);
+\draw[arr] (micro)    -- (reward);
+\draw[arr] (reward)   -- (rank);
+\draw[arr] (rank)     -- node[above, font=\scriptsize] {yes} (promoted);
+
+% --- "no" branches: schema-invalid and below-top-K both fan into Audit log ---
+\draw[noarr] (schema) |- node[pos=0.25, left, font=\scriptsize] {no} (audit);
+\draw[noarr] (rank)   |- node[pos=0.25, right, font=\scriptsize] {no (low reward)} (audit);
+
+\end{tikzpicture}

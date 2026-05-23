@@ -1,0 +1,115 @@
+% F4_plateau_timeline.tikz
+% Per-run timeline for BOTH baseline-afl (E1a, 5 runs) and
+% full-agent (E1b, 5 runs).
+%
+% Layout (top to bottom):
+%   y=10.5 : baseline-afl group header
+%   y=9..5 : baseline rows r01..r05
+%   y=4.0  : group separator (full-agent header here)
+%   y=3..-1: full-agent rows r01..r05
+%   y=-2.0 : x-axis tick labels
+%   y=-2.8 : "Wall-clock (seconds)" centered
+%   y=-3.4 : legend (single row)
+%
+% Data (verified from fuzzer_stats start_time/last_find):
+%   E1a r01: lf=11130, plateau=3314
+%   E1a r02: lf=10473, plateau=3970
+%   E1a r03: lf=13258, plateau=1185
+%   E1a r04: lf=11911, plateau=2532
+%   E1a r05: lf=13907, plateau=539
+%   E1b r01: lf=13606, plateau=835
+%   E1b r02: lf=11216, plateau=3226
+%   E1b r03: lf=13059, plateau=1384
+%   E1b r04: lf=14205, plateau=238
+%   E1b r05: lf=12827, plateau=1610
+% Medians: E1a 11911/2532, E1b 13059/1384. Plateau reduction 45.3%.
+
+\begin{tikzpicture}[
+    font=\small,
+    >=Stealth,
+    e1abar/.style={fill=blue!28, draw=blue!65!black, line width=0.5pt},
+    e1bbar/.style={fill=orange!35, draw=orange!75!black, line width=0.5pt},
+    plateaubar/.style={fill=red!15, pattern=north east lines, pattern color=red!45,
+                        draw=red!65!black, line width=0.5pt},
+    medianline/.style={dashed, line width=0.9pt},
+]
+
+\def\xscale{0.00065}
+\def\yspacing{0.50}
+\def\barH{0.38}
+\def\labW{1.3}
+\def\xrightedge{\labW + 14400 * \xscale}
+
+% --- Vertical tick grid + x labels ---
+\foreach \t/\lab in {0/0, 3000/3k, 6000/6k, 9000/9k, 12000/12k, 14400/14.4k} {
+    \pgfmathsetmacro{\xx}{\labW + \t * \xscale}
+    \draw[gray!40, line width=0.3pt] (\xx, {-1.6*\yspacing}) -- (\xx, {11.2*\yspacing});
+    \node[anchor=north, font=\small] at (\xx, {-1.6*\yspacing}) {\lab};
+}
+\node[font=\small] at ({\labW + 7200*\xscale}, {-3.2*\yspacing})
+    {Wall-clock (seconds)};
+
+% --- Group headers ---
+\node[anchor=west, font=\small\bfseries, blue!70!black]
+    at (0, {10.5*\yspacing}) {\texttt{baseline-afl} ($N{=}5$)};
+\node[anchor=west, font=\small\bfseries, orange!85!black]
+    at (0, {4.0*\yspacing}) {\texttt{full-agent} ($N{=}5$)};
+
+% --- Per-run drawing macro ---
+% args: rid-label / row-y / last_find / run_time / style
+\newcommand{\drawrun}[5]{%
+    \node[anchor=east, font=\small\ttfamily] at ({\labW - 0.10}, {#2*\yspacing + \barH/2}) {#1};
+    \pgfmathsetmacro{\xlf}{\labW + #3 * \xscale}
+    \pgfmathsetmacro{\xrt}{\labW + #4 * \xscale}
+    \draw[#5] ({\labW}, {#2*\yspacing}) rectangle ({\xlf}, {#2*\yspacing + \barH});
+    \draw[plateaubar] ({\xlf}, {#2*\yspacing}) rectangle ({\xrt}, {#2*\yspacing + \barH});
+    \node[anchor=west, font=\scriptsize, gray!50!black]
+        at ({\xrt + 0.08}, {#2*\yspacing + \barH/2})
+        {$\Delta{=}\,$\pgfmathprintnumber[fixed,precision=0,1000 sep={,}]{\inteval{#4-#3}}};
+}
+
+% --- baseline-afl rows (y=9 top to y=5 bottom) ---
+\drawrun{r01}{9}{11130}{14444}{e1abar}
+\drawrun{r02}{8}{10473}{14443}{e1abar}
+\drawrun{r03}{7}{13258}{14443}{e1abar}
+\drawrun{r04}{6}{11911}{14443}{e1abar}
+\drawrun{r05}{5}{13907}{14446}{e1abar}
+
+% --- full-agent rows (y=3 top to y=-1 bottom) ---
+\drawrun{r01}{3}{13606}{14441}{e1bbar}
+\drawrun{r02}{2}{11216}{14442}{e1bbar}
+\drawrun{r03}{1}{13059}{14443}{e1bbar}
+\drawrun{r04}{0}{14205}{14443}{e1bbar}
+\drawrun{r05}{-1}{12827}{14437}{e1bbar}
+
+% --- Median markers (vertical dashed lines for each group) ---
+\pgfmathsetmacro{\xmA}{\labW + 11911 * \xscale}
+\pgfmathsetmacro{\xmB}{\labW + 13059 * \xscale}
+\draw[medianline, blue!70!black]
+    ({\xmA}, {4.6*\yspacing}) -- ({\xmA}, {10.3*\yspacing});
+\draw[medianline, orange!80!black]
+    ({\xmB}, {-1.4*\yspacing}) -- ({\xmB}, {3.8*\yspacing});
+
+\node[anchor=south, font=\scriptsize, blue!70!black]
+    at ({\xmA}, {10.3*\yspacing})
+    {E1a median 11{,}911\,s};
+\node[anchor=south east, font=\scriptsize, orange!85!black, align=right]
+    at ({\xmB - 0.10}, {-2.3*\yspacing})
+    {E1b median 13{,}059\,s\\($+19$\,min, $-45\%$ plateau)};
+
+% --- Legend (bottom, single row, well clear of run rows) ---
+\def\legendY{-4.4*\yspacing}
+\node[e1abar, minimum width=0.40cm, minimum height=0.18cm]
+    at (0.4, \legendY) {};
+\node[anchor=west, font=\scriptsize] at (0.55, \legendY)
+    {productive (\texttt{baseline-afl})};
+\node[e1bbar, minimum width=0.40cm, minimum height=0.18cm]
+    at (4.6, \legendY) {};
+\node[anchor=west, font=\scriptsize] at (4.75, \legendY)
+    {productive (\texttt{full-agent})};
+\node[plateaubar, minimum width=0.40cm, minimum height=0.18cm]
+    at (8.4, \legendY) {};
+\node[anchor=west, font=\scriptsize] at (8.55, \legendY)
+    {plateau (no new edges)};
+
+\end{tikzpicture}

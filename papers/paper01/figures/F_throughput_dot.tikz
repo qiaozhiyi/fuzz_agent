@@ -1,0 +1,69 @@
+% F_throughput_dot.tikz
+% Dot plot of execs_per_sec per run.
+% E1a (baseline-afl): r01=13049, r02=12958, r03=13108, r04=12826, r05=13854
+% E1b (full-agent):   r01=13816, r02=13542, r03=13540, r04=13949, r05=15597
+%
+% Median ratio E1b/E1a = 13816/13049 = 1.0587x  (above 0.85 gate).
+% Even the slowest E1b rep (13540) is above all E1a reps except r05.
+
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.8\textwidth,
+    height=5.6cm,
+    xmin=0.3, xmax=2.7,
+    ymin=12500, ymax=16000,
+    ylabel={\texttt{execs\_per\_sec}},
+    ylabel style={font=\small},
+    xtick={1, 2},
+    xticklabels={\texttt{baseline-afl} ($N{=}5$), \texttt{full-agent} ($N{=}5$)},
+    xticklabel style={font=\small},
+    yticklabel style={font=\small},
+    ymajorgrids=true,
+    grid style={dashed, gray!25, line width=0.4pt},
+    axis lines=left,
+    scaled y ticks=false,
+    yticklabel={\pgfmathprintnumber[fixed,precision=0,1000 sep={,}]{\tick}},
+    title={\small End-to-end throughput per run (RQ2 part (a))},
+    title style={yshift=2pt},
+    clip=false,
+]
+% Baseline dots
+\addplot+[
+    only marks,
+    mark=*,
+    mark size=2.6pt,
+    mark options={fill=blue!55!black, draw=black, line width=0.4pt},
+] coordinates {
+    (1, 12826) (1, 12958) (1, 13049) (1, 13108) (1, 13854)
+};
+
+% Full-agent dots
+\addplot+[
+    only marks,
+    mark=*,
+    mark size=2.6pt,
+    mark options={fill=orange!75!black, draw=black, line width=0.4pt},
+] coordinates {
+    (2, 13540) (2, 13542) (2, 13816) (2, 13949) (2, 15597)
+};
+
+% Median bars
+\draw[blue!70!black, line width=2pt]
+    (axis cs:0.78, 13049) -- (axis cs:1.22, 13049);
+\node[anchor=west, font=\scriptsize\bfseries, blue!70!black]
+    at (axis cs:1.25, 13049) {median 13{,}049};
+
+\draw[orange!85!black, line width=2pt]
+    (axis cs:1.78, 13816) -- (axis cs:2.22, 13816);
+\node[anchor=west, font=\scriptsize\bfseries, orange!85!black]
+    at (axis cs:2.25, 13816) {median 13{,}816};
+
+% Acceptance gate reference line (0.85 * E1a median = 11092)
+% This is BELOW our y range, so we annotate it textually instead.
+\node[anchor=south, font=\scriptsize, gray!55!black, align=center]
+    at (axis cs:1.5, 15700)
+    {median ratio E1b\,/\,E1a $= 1.059\times$\quad
+     (acceptance gate $\geq 0.85$ passed)};
+
+\end{axis}
+\end{tikzpicture}

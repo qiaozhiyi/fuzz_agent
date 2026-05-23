@@ -1,0 +1,120 @@
+% F1_architecture.tikz
+% Keep cross-boundary edges vertical while routing control-path edges
+% around nodes so labels never sit on top of component text.
+
+\begin{tikzpicture}[
+    font=\footnotesize,
+    >=Stealth,
+    box/.style={
+        draw, rounded corners=2pt,
+        minimum width=24mm, minimum height=10mm,
+        align=center, fill=white, line width=0.5pt,
+    },
+    hotbox/.style={box, fill=orange!18, draw=orange!70!black},
+    ctlbox/.style={box, fill=blue!10,   draw=blue!60!black},
+    extbox/.style={box, fill=gray!12,   draw=gray!60!black},
+    arr/.style={->, thick, gray!55!black, line width=0.5pt},
+    biarr/.style={<->, thick, gray!55!black, line width=0.5pt},
+    crossarr/.style={->, very thick, red!70!black, line width=1.1pt},
+    edgelbl/.style={font=\scriptsize, inner sep=1.2pt,
+                    fill=white, fill opacity=0.9, text opacity=1},
+    tinylbl/.style={font=\tiny, inner sep=1pt,
+                    fill=white, fill opacity=0.92, text opacity=1},
+]
+
+% ============================================================
+% Region backgrounds + outside titles
+% ============================================================
+\begin{scope}[on background layer]
+  \node[rounded corners=4pt, fill=blue!5,
+        minimum width=176mm, minimum height=60mm,
+        anchor=center]
+    (ctlregion) at (85mm, 35mm) {};
+  \node[rounded corners=4pt, fill=orange!10,
+        minimum width=176mm, minimum height=22mm,
+        anchor=center]
+    (hotregion) at (85mm, -10mm) {};
+\end{scope}
+
+\node[anchor=south, font=\small\bfseries, blue!60!black]
+  at (ctlregion.north) {Control path \;—\; LLM lives here};
+\node[anchor=north, font=\small\bfseries, orange!70!black]
+  at (hotregion.south) {Hot path \;—\; native code, no model};
+
+% ============================================================
+% Nodes
+% ============================================================
+% Hot row (y = -10)
+\node[hotbox] (target)  at ( 13mm, -10mm) {Target binary};
+\node[hotbox] (afl)     at ( 51mm, -10mm) {AFL++ runner};
+\node[hotbox] (mutator) at ( 89mm, -10mm) {Native mutator\\(7 ops)};
+\node[hotbox] (rstore)  at (127mm, -10mm) {Recipe store};
+
+% Control row mid (y = 22) -- aligned with hot columns 2,3,4 + col 5
+\node[ctlbox] (telem)   at ( 51mm,  22mm) {Telemetry};
+\node[ctlbox] (plateau) at ( 89mm,  22mm) {Plateau\\detector};
+\node[ctlbox] (agents)  at (127mm,  22mm) {Agents\\(9 roles)};
+\node[ctlbox] (model)   at (164mm,  22mm) {Model client};
+
+% Control row top (y = 50)
+\node[ctlbox] (bb)      at (127mm,  50mm) {Blackboard};
+\node[ctlbox] (micro)   at (164mm,  50mm) {Micro-campaign\\runner};
+
+% Ghidra: top-left of control region (does not conflict with any column)
+\node[extbox] (ghidra)  at ( 13mm,  50mm) {Ghidra\\headless};
+
+% ============================================================
+% Hot-path internal edges (all stay in hot region)
+% ============================================================
+% The widened columns leave room for labels at arrow midpoints.
+\draw[biarr]
+    (target.east) -- node[midway, above, tinylbl] {fork+exec}
+    (afl.west);
+\draw[biarr]
+    (afl.east) -- node[midway, above, tinylbl] {in / out}
+    (mutator.west);
+\draw[arr]
+    (rstore.west) -- node[midway, above, tinylbl] {load}
+    (mutator.east);
+
+% ============================================================
+% Control-path internal edges
+% ============================================================
+% Top row Ghidra -> Blackboard  (long, but no node in between because the
+% gap at y=50 between col1 and col4 is empty)
+\draw[arr] (ghidra) -- node[above, edgelbl] {static\_context.json} (bb);
+
+% Blackboard -> Agents (vertical down, col 4)
+\draw[arr] (bb) -- (agents);
+
+% Telemetry -> Plateau -> Agents (left-to-right in mid row)
+\draw[arr] (telem)   -- (plateau);
+\draw[arr] (plateau) -- (agents);
+
+% Agents <-> Model  (mid row, short right)
+\draw[biarr] (agents.east) -- node[above, edgelbl, font=\tiny] {req/resp} (model.west);
+
+% Agents <-> Micro-campaign. Route above the model node instead of
+% elbowing through its center.
+\draw[biarr]
+    (agents.north east)
+      .. controls (143mm, 36mm) and (151mm, 43mm) ..
+      node[pos=0.62, right, edgelbl] {try / reward}
+    (micro.south west);
+
+% ============================================================
+% THE TWO cross-boundary edges (both straight vertical, isolated columns)
+% ============================================================
+% (1) stats: AFL (45,-10) -> Telemetry (45,22), column 45, no node between
+\draw[crossarr, red!55!black, dashed, line width=1pt]
+    (afl.north) --
+    node[right, font=\scriptsize\bfseries] {\,stats}
+    (telem.south);
+
+% (2) promote: Agents (105,22) -> Recipe (105,-10), column 105, no node between
+\draw[crossarr]
+    (agents.south) --
+    node[right, font=\scriptsize\bfseries] {\,promote (write-only)}
+    (rstore.north);
+
+\end{tikzpicture}

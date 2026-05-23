@@ -1,0 +1,95 @@
+% F3_coverage.tikz
+% Zoomed y-axis (264..272) so the 268 vs 269 step is visible.
+% Early ramp (180 -> 260+ in <60s) is summarized in the caption
+% rather than plotted (would compress the interesting range).
+
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\textwidth,
+    height=6.8cm,
+    xmin=0, xmax=14400,
+    ymin=263.5, ymax=271,
+    xlabel={Wall-clock (seconds)},
+    ylabel={Edges discovered},
+    xlabel style={font=\small},
+    ylabel style={font=\small},
+    xticklabel style={font=\small},
+    yticklabel style={font=\small},
+    scaled x ticks=false,
+    xtick={0,2000,4000,6000,8000,10000,12000,14400},
+    xticklabels={0, 2\,000, 4\,000, 6\,000, 8\,000, 10\,000, 12\,000, 14\,400},
+    ytick={264,266,268,269,270},
+    yticklabels={264,266,268,269,270},
+    ymajorgrids=true,
+    xmajorgrids=true,
+    grid style={dashed, gray!25, line width=0.4pt},
+    axis lines=left,
+    legend pos=south east,
+    legend style={
+        font=\small,
+        fill=white, draw=gray!50,
+        nodes={inner sep=2pt},
+    },
+    title={\small Coverage on cJSON (zoomed; \emph{first 60\,s ramp} 180$\rightarrow$260+ omitted)},
+    title style={yshift=2pt},
+    clip=true,
+]
+
+% Ceiling line at 269
+\draw[red!50!black, dashed, line width=0.8pt]
+    (axis cs:0, 269) -- (axis cs:14400, 269);
+\node[anchor=south east, font=\scriptsize, red!50!black]
+    at (axis cs:14400, 269) {ceiling = 269 (cJSON max)};
+
+% --- baseline-afl median ---
+\addplot[
+    color=blue!75!black,
+    line width=1.2pt,
+    mark=none,
+] coordinates {
+    (60,266) (120,267) (240,267) (360,267)
+    (600,267) (840,268) (1080,268) (1320,268)
+    (1680,268) (2040,268) (2400,268) (2760,268)
+    (3120,268) (3480,268) (3840,268) (4200,269)
+    (4560,269) (5280,269) (6000,269) (7000,269)
+    (8000,269) (9000,269) (10000,269) (11000,269)
+    (12000,269) (13000,269) (14000,269) (14400,269)
+};
+\addlegendentry{\texttt{baseline-afl} median (5 reps)}
+
+% --- full-agent median ---
+\addplot[
+    color=orange!85!black,
+    line width=1.4pt,
+    mark=none,
+    dash pattern=on 5pt off 2pt,
+] coordinates {
+    (60,265) (120,266) (240,267) (600,267) (960,268)
+    (1320,268) (1680,268) (2040,268) (2400,268)
+    (2760,268) (3120,268) (3480,268) (3840,268)
+    (4200,268) (4560,268) (4920,268) (5280,268)
+    (5640,268) (6000,268) (6360,268) (6720,268)
+    (7080,268) (7440,268) (7800,268) (8160,268)
+    (8520,268) (8880,268) (9240,269) (9600,269)
+    (10000,269) (11000,269) (12000,269) (13000,269)
+    (14000,269) (14400,269)
+};
+\addlegendentry{\texttt{full-agent} median (5 reps)}
+
+% Plateau onset markers
+\draw[blue!70!black, dashed, line width=0.7pt]
+    (axis cs:11911, 264) -- (axis cs:11911, 268.5);
+\node[anchor=south, font=\scriptsize, blue!70!black, rotate=90]
+    at (axis cs:11911, 266.4) {E1a last\_find};
+
+\draw[orange!85!black, dashed, line width=0.7pt]
+    (axis cs:13059, 264) -- (axis cs:13059, 268.5);
+\node[anchor=south, font=\scriptsize, orange!85!black, rotate=90]
+    at (axis cs:13059, 266.4) {E1b last\_find};
+
+% Annotation: full-agent stays at 268 longer
+\node[anchor=south, font=\scriptsize, orange!85!black, align=center]
+    at (axis cs:5500, 267.8) {full-agent stays at 268\\$\sim 5$k\,s longer before climbing};
+
+\end{axis}
+\end{tikzpicture}

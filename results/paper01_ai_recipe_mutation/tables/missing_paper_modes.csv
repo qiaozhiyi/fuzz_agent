@@ -2,4 +2,3 @@ paper_mode,status,implementation_gap
 Random recipe,missing results,no first-class random-recipe ablation in current CLI
 Rule recipe,missing results,
 AI recipe direct,missing results,no first-class direct-promotion ablation in current CLI
-AI recipe validated,missing results,

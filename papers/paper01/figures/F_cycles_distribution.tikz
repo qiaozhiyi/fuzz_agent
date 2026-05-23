@@ -1,0 +1,68 @@
+% F_cycles_distribution.tikz
+% Dot plot of cycles_done per run.
+% E1a (baseline-afl): r01=797, r02=800, r03=702, r04=569, r05=797
+% E1b (full-agent):   r01=122, r02=141, r03=144, r04=126, r05=140
+%
+% Striking 5.7x median difference: baseline 797 vs full-agent 140.
+% Same execs_done budget (~188-225M); the recipe-guided mutator's
+% per-cycle work expands so AFL++ touches each queue item far more
+% before recycling the queue.
+
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.8\textwidth,
+    height=5.6cm,
+    xmin=0.3, xmax=2.7,
+    ymin=0, ymax=900,
+    ylabel={AFL++ \texttt{cycles\_done}},
+    ylabel style={font=\small},
+    xtick={1, 2},
+    xticklabels={\texttt{baseline-afl} ($N{=}5$), \texttt{full-agent} ($N{=}5$)},
+    xticklabel style={font=\small},
+    yticklabel style={font=\small},
+    ymajorgrids=true,
+    grid style={dashed, gray!25, line width=0.4pt},
+    axis lines=left,
+    title={\small Cycles completed in 14{,}400\,s per run},
+    title style={yshift=2pt},
+    clip=false,
+]
+% Baseline dots
+\addplot+[
+    only marks,
+    mark=*,
+    mark size=2.6pt,
+    mark options={fill=blue!55!black, draw=black, line width=0.4pt},
+] coordinates {
+    (1, 569) (1, 702) (1, 797) (1, 797) (1, 800)
+};
+
+% Full-agent dots
+\addplot+[
+    only marks,
+    mark=*,
+    mark size=2.6pt,
+    mark options={fill=orange!75!black, draw=black, line width=0.4pt},
+] coordinates {
+    (2, 122) (2, 126) (2, 140) (2, 141) (2, 144)
+};
+
+% Median bars
+\draw[blue!70!black, line width=2pt]
+    (axis cs:0.78, 797) -- (axis cs:1.22, 797);
+\node[anchor=west, font=\scriptsize\bfseries, blue!70!black]
+    at (axis cs:1.25, 797) {median 797};
+
+\draw[orange!85!black, line width=2pt]
+    (axis cs:1.78, 140) -- (axis cs:2.22, 140);
+\node[anchor=west, font=\scriptsize\bfseries, orange!85!black]
+    at (axis cs:2.25, 140) {median 140};
+
+% Annotation: 5.7x ratio
+\draw[<->, gray!60!black, line width=0.6pt]
+    (axis cs:2.5, 140) -- (axis cs:2.5, 797);
+\node[anchor=west, font=\scriptsize, gray!60!black, align=left]
+    at (axis cs:2.55, 470) {$5.7\times$ fewer cycles\\(more work per cycle)};
+
+\end{axis}
+\end{tikzpicture}

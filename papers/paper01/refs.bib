@@ -1,0 +1,127 @@
+% refs.bib --- FuzzPilot Paper 1 references
+%
+% Two entries (semanticaware2025, malf2025) keep author = {Anonymous}
+% because the arXiv abstract page used at preprint time listed no
+% author byline; we conservatively keep "Anonymous" rather than guess
+% and will reconcile against the proceedings/journal version for the
+% venue submission.
+
+% ----------------------------------------------------------------------
+% Baseline / infrastructure
+% ----------------------------------------------------------------------
+
+@misc{aflplusplus,
+  author       = {Andrea Fioraldi and Dominik Maier and Heiko Eißfeldt and
+                  Marc Heuse},
+  title        = {{AFL++}: Combining Incremental Steps of Fuzzing Research},
+  howpublished = {USENIX Workshop on Offensive Technologies (WOOT)},
+  year         = {2020},
+  url          = {https://aflplus.plus/},
+  note         = {Software v4.21c used in this paper.}
+}
+
+% ----------------------------------------------------------------------
+% In-loop LLM fuzzers
+% ----------------------------------------------------------------------
+
+@article{wang2024llamafuzz,
+  title   = {{LLAMAFUZZ}: Large Language Model Enhanced Greybox Fuzzing},
+  author  = {Hongxiang Wang and Xiangwei Xu and Xiaofei Xie and others},
+  journal = {arXiv preprint arXiv:2406.07714},
+  year    = {2024},
+  note    = {Latest revision March 2026.},
+  url     = {https://arxiv.org/abs/2406.07714}
+}
+
+@article{liu2024fuzzcoder,
+  title   = {{FuzzCoder}: Byte-level Fuzzing Test via Large Language Model},
+  author  = {Liqun Liu and others},
+  journal = {arXiv preprint arXiv:2409.01944},
+  year    = {2024},
+  url     = {https://arxiv.org/abs/2409.01944}
+}
+
+@article{xia2024fuzz4all,
+  title   = {{Fuzz4All}: Universal Fuzzing with Large Language Models},
+  author  = {Chunqiu Steven Xia and Matteo Paltenghi and Jia Le Tian and
+             Michael Pradel and Lingming Zhang},
+  journal = {arXiv preprint arXiv:2308.04748},
+  year    = {2024},
+  note    = {Originally posted 2023; updated 2024.},
+  url     = {https://arxiv.org/abs/2308.04748}
+}
+
+@article{semanticaware2025,
+  title   = {Semantic-Aware Fuzzing: An Empirical Framework for
+             LLM-Guided, Reasoning-Driven Input Mutation},
+  author  = {Anonymous},
+  journal = {arXiv preprint arXiv:2509.19533},
+  year    = {2025},
+  url     = {https://arxiv.org/abs/2509.19533}
+}
+
+% ----------------------------------------------------------------------
+% Off-hot-path / closest prior
+% ----------------------------------------------------------------------
+
+@inproceedings{liu2025g2fuzz,
+  title     = {Low-Cost and Comprehensive Non-textual Input Fuzzing with
+               {LLM}-Synthesized Input Generators},
+  author    = {Liu, K. and others},
+  booktitle = {Proceedings of the 34th USENIX Security Symposium
+               (USENIX Security '25)},
+  year      = {2025},
+  note      = {Also arXiv:2501.19282. Code at
+               \url{https://github.com/G2FUZZ/G2FUZZ}.},
+  url       = {https://arxiv.org/abs/2501.19282}
+}
+
+% ----------------------------------------------------------------------
+% Hybrid static + LLM
+% ----------------------------------------------------------------------
+
+@article{lin2025hybrid,
+  title   = {Hybrid Fuzzing with {LLM}-Guided Input Mutation and
+             Semantic Feedback},
+  author  = {Shiyin Lin},
+  journal = {arXiv preprint arXiv:2511.03995},
+  year    = {2025},
+  url     = {https://arxiv.org/abs/2511.03995}
+}
+
+% ----------------------------------------------------------------------
+% LLM-synthesized mutators for compilers
+% ----------------------------------------------------------------------
+
+@inproceedings{ou2024metamut,
+  title     = {The {Mutators} Reloaded: Fuzzing Compilers with Large
+               Language Model Generated Mutators},
+  author    = {Ou, Conghua and others},
+  booktitle = {Proceedings of the 29th International Conference on
+               Architectural Support for Programming Languages and
+               Operating Systems (ASPLOS '24)},
+  year      = {2024},
+  url       = {https://connglli.github.io/pdfs/metamut_asplos24.pdf}
+}
+
+@article{ye2025mut4all,
+  title   = {{Mut4All}: Fuzzing Compilers via {LLM}-Synthesized Mutators
+             Learned from Bug Reports},
+  author  = {Ye, J. and others},
+  journal = {arXiv preprint arXiv:2507.19275},
+  year    = {2025},
+  url     = {https://arxiv.org/abs/2507.19275}
+}
+
+% ----------------------------------------------------------------------
+% Multi-agent fuzz frameworks
+% ----------------------------------------------------------------------
+
+@article{malf2025,
+  title   = {{MALF}: A Multi-Agent {LLM} Framework for Intelligent
+             Fuzzing of Industrial Control Protocols},
+  author  = {Anonymous},
+  journal = {arXiv preprint arXiv:2510.02694},
+  year    = {2025},
+  url     = {https://arxiv.org/abs/2510.02694}
+}
