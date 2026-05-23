@@ -1,0 +1,194 @@
+# Paper 1 venue manifest (multi-target, deep agent capability showcase).
+#
+# Extends paper01_preprint.yaml (which is cJSON-only) by adding three deep
+# structured-text / binary-schema targets:
+#   * libxml2 — XML parser, ~30k edges, AFLSmart/Nautilus/Superion comparator
+#   * sqlite3 — SQL parser/VM, ~150k edges, OSS-Fuzz flagship
+#   * openssl_x509 — ASN.1 + X.509 parser, ~80k edges, binary+deep-schema
+#
+# Stage-1 (pilot) repeats: N=5 main / N=3 ablations / 24h budget per Klees et al.
+#   — runs in ~3 weeks single-host wall (4-way parallel).
+# Stage-2 (full): N=20 main / N=10 ablations / 24h — gated on Stage-1 results
+#   showing LLM contribution.
+#
+# Convention: run_id = p1_<exp>_<target_short>_<mode>_r<NN>
+#   where target_short ∈ {cjson, libxml2, sqlite3, openssl}.
+
+paper: "paper01_ai_recipe_mutation"
+version: 2
+stage: "venue_stage1_pilot"
+defaults:
+  budget_sec: 86400   # 24h per Magma/OSS-Fuzz convention
+  out_root: "results/paper01_ai_recipe_mutation/runs"
+  metadata_script: "scripts/capture_run_metadata.sh"
+
+# ---------------------------------------------------------------------------
+# cJSON cells (already complete from preprint; re-listed for one-shot
+# aggregator validation against the venue matrix). Budget is the
+# preprint 4h, not 24h — these runs are frozen.
+# ---------------------------------------------------------------------------
+experiments_cjson_preprint:
+  - id: E1a
+    target: cjson_parser
+    mode: baseline-afl
+    repeats: 5
+    budget_sec: 14400
+  - id: E1b
+    target: cjson_parser
+    mode: full-agent
+    repeats: 5
+    budget_sec: 14400
+  - id: E2a
+    target: cjson_parser
+    mode: rule-only
+    repeats: 3
+    budget_sec: 14400
+  - id: E2b
+    target: cjson_parser
+    mode: no-mutator
+    repeats: 3
+    budget_sec: 14400
+  - id: E2c
+    target: cjson_parser
+    mode: no-static-analysis
+    repeats: 3
+    budget_sec: 14400
+  - id: E4a
+    target: cjson_parser
+    mode: baseline-afl-dict
+    repeats: 3
+    budget_sec: 14400
+  - id: E4b
+    target: cjson_parser
+    mode: baseline-afl-cmplog
+    repeats: 3
+    budget_sec: 14400
+
+# ---------------------------------------------------------------------------
+# Venue Stage-1 PILOT: 3 new targets × 5 modes (main: baseline + full-agent,
+# ablations: rule-only / no-mutator / no-static-analysis). N=5 / N=3 / 24h.
+# ---------------------------------------------------------------------------
+
+experiments_venue_stage1:
+
+  # ------- libxml2 -------
+  - id: V1a_libxml2_baseline
+    description: "libxml2 baseline AFL++ (pilot, no dict, no cmplog)"
+    target: libxml2_parser
+    target_config: "experiments/targets/libxml2/config.yaml"
+    mode: baseline-afl
+    repeats: 5
+    budget_sec: 86400
+  - id: V1b_libxml2_full_agent
+    description: "libxml2 full FuzzPilot pipeline (LLM + recipe + Ghidra)"
+    target: libxml2_parser
+    target_config: "experiments/targets/libxml2/config.yaml"
+    mode: full-agent
+    repeats: 5
+    budget_sec: 86400
+  - id: V2a_libxml2_rule_only
+    target: libxml2_parser
+    target_config: "experiments/targets/libxml2/config.yaml"
+    mode: rule-only
+    repeats: 3
+    budget_sec: 86400
+  - id: V2b_libxml2_no_mutator
+    target: libxml2_parser
+    target_config: "experiments/targets/libxml2/config.yaml"
+    mode: no-mutator
+    repeats: 3
+    budget_sec: 86400
+  - id: V2c_libxml2_no_static_analysis
+    target: libxml2_parser
+    target_config: "experiments/targets/libxml2/config.yaml"
+    mode: no-static-analysis
+    repeats: 3
+    budget_sec: 86400
+
+  # ------- sqlite3 -------
+  - id: V1a_sqlite3_baseline
+    description: "sqlite3 baseline AFL++ (pilot)"
+    target: sqlite3_parser
+    target_config: "experiments/targets/sqlite3/config.yaml"
+    mode: baseline-afl
+    repeats: 5
+    budget_sec: 86400
+  - id: V1b_sqlite3_full_agent
+    target: sqlite3_parser
+    target_config: "experiments/targets/sqlite3/config.yaml"
+    mode: full-agent
+    repeats: 5
+    budget_sec: 86400
+  - id: V2a_sqlite3_rule_only
+    target: sqlite3_parser
+    target_config: "experiments/targets/sqlite3/config.yaml"
+    mode: rule-only
+    repeats: 3
+    budget_sec: 86400
+  - id: V2b_sqlite3_no_mutator
+    target: sqlite3_parser
+    target_config: "experiments/targets/sqlite3/config.yaml"
+    mode: no-mutator
+    repeats: 3
+    budget_sec: 86400
+  - id: V2c_sqlite3_no_static_analysis
+    target: sqlite3_parser
+    target_config: "experiments/targets/sqlite3/config.yaml"
+    mode: no-static-analysis
+    repeats: 3
+    budget_sec: 86400
+
+  # ------- openssl X.509 / ASN.1 -------
+  - id: V1a_openssl_baseline
+    description: "openssl X.509 baseline AFL++ (pilot)"
+    target: openssl_x509_parser
+    target_config: "experiments/targets/openssl_x509/config.yaml"
+    mode: baseline-afl
+    repeats: 5
+    budget_sec: 86400
+  - id: V1b_openssl_full_agent
+    target: openssl_x509_parser
+    target_config: "experiments/targets/openssl_x509/config.yaml"
+    mode: full-agent
+    repeats: 5
+    budget_sec: 86400
+  - id: V2a_openssl_rule_only
+    target: openssl_x509_parser
+    target_config: "experiments/targets/openssl_x509/config.yaml"
+    mode: rule-only
+    repeats: 3
+    budget_sec: 86400
+  - id: V2b_openssl_no_mutator
+    target: openssl_x509_parser
+    target_config: "experiments/targets/openssl_x509/config.yaml"
+    mode: no-mutator
+    repeats: 3
+    budget_sec: 86400
+  - id: V2c_openssl_no_static_analysis
+    target: openssl_x509_parser
+    target_config: "experiments/targets/openssl_x509/config.yaml"
+    mode: no-static-analysis
+    repeats: 3
+    budget_sec: 86400
+
+# ---------------------------------------------------------------------------
+# Wall-time budget summary (Stage-1 pilot, single 4-core host, 4-way parallel)
+# ---------------------------------------------------------------------------
+# 3 targets × 5 main runs × 24h     = 360 CPU-h
+# 3 targets × 9 ablation runs × 24h = 648 CPU-h
+# Subtotal: 1008 CPU-h
+# /4 (parallel) = 252 wall hours ≈ 10.5 days
+#
+# Stage-2 (gated on Stage-1 LLM contribution showing on at least one target):
+# 3 targets × 20 main × 24h         = 1440 CPU-h
+# 3 targets × 30 ablation × 24h     = 2160 CPU-h
+# Subtotal: 3600 CPU-h /4 = 900 wall hours ≈ 37.5 days.
+# Total Stage-1 + Stage-2 = 48 days on a single 4-core host.
+# Multi-host or budget-truncation strategy is documented in §10 of paper01.tex.
+
+# ---------------------------------------------------------------------------
+# Fairness baselines (E4-style) — added per target after Stage-1 main results.
+# Each target gets baseline-afl-dict (with the target's Ghidra-derived dict)
+# and baseline-afl-cmplog. N=3 / 24h each. Not enumerated yet — added when
+# the per-target Ghidra dictionary is extracted (scripts/paper01/extract_ghidra_dict.py).
+# ---------------------------------------------------------------------------

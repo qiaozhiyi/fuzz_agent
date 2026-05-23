@@ -2270,10 +2270,34 @@ sensitivity sweep (e.g., $N \in \{10,20,40,80\}$\,s and
 $K_{\text{cand}}\in\{2,4,8\}$ at $N{=}3$ each) is wired into the
 CLI and is part of the venue-paper matrix.
 
-\paragraph{Multi-target generalization.}
+\paragraph{Multi-target generalization (venue rollout plan).}
 We do not run on Magma's full benchmark suite in this preprint, and
 we do not claim generalization across target families. The venue
-paper will add libxml2, sqlite3, and openssl to the matrix.
+paper adds three deeper structured-text / binary-schema targets that
+exercise components of FuzzPilot that cJSON's 269-edge ceiling does
+\emph{not}: \texttt{libxml2} (XML parser, ${\sim}30$k edges,
+AFLSmart/Nautilus/Superion comparator), \texttt{sqlite3}
+(SQL parser/VM, ${\sim}150$k edges, OSS-Fuzz flagship), and
+\texttt{openssl\_x509} (ASN.1 + X.509 parser, ${\sim}80$k edges,
+binary + deep-schema). The venue evaluation matrix
+(\texttt{experiments/manifests/paper01\_venue.yaml}) follows
+Klees~et~al.~\cite{klees2018evaluating} at $N{\geq}20$ main runs
+and $N{\geq}10$ ablation runs per target, $24$\,h budget per run
+(Magma/OSS-Fuzz convention). A Stage-1 pilot
+($N{=}5$ main / $N{=}3$ ablations, $24$\,h budget) is currently in
+flight on the experiment host with the harnesses
+(\texttt{libxml2\_fuzzer}, \texttt{sqlite3\_fuzzer},
+\texttt{x509\_fuzzer}) and their per-target Ghidra dictionaries
+checked into the repository; the Stage-1 outcome gates whether
+the Stage-2 full-Klees matrix runs on all three targets or
+focuses on the subset where the LLM proposal layer shows a
+non-null contribution. The choice to ship the preprint at
+cJSON-only is deliberate: it lets reviewers verify the
+infrastructure (audit, gate, mutator, micro-campaign) end-to-end
+on a target small enough to read every artifact, before we burn
+$\sim$1{,}000 CPU-hours per target on the Stage-2 matrix.
+\emph{No preprint claim depends on the venue targets};
+their data lands in v2.
 
 \paragraph{Platform.}
 The development platform is macOS/arm64 (with a Docker linux/arm64
