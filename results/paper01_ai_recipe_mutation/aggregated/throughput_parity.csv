@@ -1,6 +1,11 @@
 run_id,mode,execs_per_sec
-p1_e1_cjson_baseline-afl_r01,baseline-afl,151060.71
-p1_e1_cjson_baseline-afl_r02,baseline-afl,150247.4
-p1_e1_cjson_baseline-afl_r03,baseline-afl,150296.8
-p1_e1_cjson_baseline-afl_r04,baseline-afl,150329.93
-p1_e1_cjson_baseline-afl_r05,baseline-afl,168708.85
+p1_e1_cjson_baseline-afl_r01,baseline-afl,13049.33
+p1_e1_cjson_baseline-afl_r02,baseline-afl,12957.77
+p1_e1_cjson_baseline-afl_r03,baseline-afl,13108.41
+p1_e1_cjson_baseline-afl_r04,baseline-afl,12826.13
+p1_e1_cjson_baseline-afl_r05,baseline-afl,13854.1
+p1_e1_cjson_full-agent_r01,full-agent,13815.95
+p1_e1_cjson_full-agent_r02,full-agent,13541.78
+p1_e1_cjson_full-agent_r03,full-agent,13540.23
+p1_e1_cjson_full-agent_r04,full-agent,13948.72
+p1_e1_cjson_full-agent_r05,full-agent,15597.36

@@ -1,120 +1,261 @@
 % F1_architecture.tikz
-% Keep cross-boundary edges vertical while routing control-path edges
-% around nodes so labels never sit on top of component text.
-
+% FuzzPilot end-to-end architecture, rewritten for safe edge routing.
+%
+% Layout invariants:
+%   - Node columns:    x in {50, 87, 123, 160}.
+%   - Edge corridors:  x in {32, 69, 105, 141, 178}. Each corridor sits
+%     strictly between (or outside) node columns; no edge ever travels
+%     a corridor that coincides with a node column.
+%   - Stripe y-centers (top->bottom): 195, 160, 123, 83, 44.
+%   - All numbered badges sit in stripe-gap whitespace, never on top
+%     of a node or on top of a short same-stripe edge.
+%
+% Total drawing height ~ 180 mm so the caption fits on the same page.
+% Wrap with \resizebox{\textwidth}{!}{...} at the call site.
 \begin{tikzpicture}[
+    x=1mm, y=1mm,
     font=\footnotesize,
     >=Stealth,
+    %
+    % ---- node styles --------------------------------------------------
     box/.style={
-        draw, rounded corners=2pt,
-        minimum width=24mm, minimum height=10mm,
+        draw, rounded corners=1.5pt,
         align=center, fill=white, line width=0.5pt,
+        inner sep=1.4pt, font=\small,
     },
-    hotbox/.style={box, fill=orange!18, draw=orange!70!black},
-    ctlbox/.style={box, fill=blue!10,   draw=blue!60!black},
-    extbox/.style={box, fill=gray!12,   draw=gray!60!black},
-    arr/.style={->, thick, gray!55!black, line width=0.5pt},
-    biarr/.style={<->, thick, gray!55!black, line width=0.5pt},
-    crossarr/.style={->, very thick, red!70!black, line width=1.1pt},
-    edgelbl/.style={font=\scriptsize, inner sep=1.2pt,
-                    fill=white, fill opacity=0.9, text opacity=1},
-    tinylbl/.style={font=\tiny, inner sep=1pt,
-                    fill=white, fill opacity=0.92, text opacity=1},
+    extbox/.style={box, minimum width=28mm, minimum height=14mm,
+                   fill=gray!10,    draw=gray!60!black},
+    ctlbox/.style={box, minimum width=27mm, minimum height=18mm,
+                   fill=blue!7,     draw=blue!55!black},
+    artbox/.style={box, minimum width=29mm, minimum height=11mm,
+                   fill=green!8,    draw=green!50!black,
+                   font=\scriptsize\ttfamily},
+    hotbox/.style={box, minimum width=27mm, minimum height=16mm,
+                   fill=orange!13,  draw=orange!65!black},
+    outbox/.style={box, minimum width=29mm, minimum height=11mm,
+                   fill=violet!7,   draw=violet!55!black,
+                   font=\scriptsize\ttfamily},
+    %
+    % ---- arrow styles -------------------------------------------------
+    arr/.style   ={->,  semithick, gray!55!black, line width=0.5pt},
+    biarr/.style ={<->, semithick, gray!55!black, line width=0.5pt},
+    cross/.style ={->,  very thick, red!75!black, line width=1.2pt},
+    %
+    % ---- label / badge styles ----------------------------------------
+    edgelbl/.style ={font=\scriptsize, inner sep=1.4pt,
+                     fill=white, fill opacity=0.93, text opacity=1,
+                     rounded corners=1pt},
+    edgelblt/.style={font=\tiny, inner sep=1.2pt,
+                     fill=white, fill opacity=0.93, text opacity=1,
+                     rounded corners=1pt},
+    badge/.style   ={circle, inner sep=0.4pt, minimum size=3.6mm,
+                     fill=red!78!black, text=white, font=\tiny\bfseries,
+                     draw=red!78!black, line width=0.3pt},
+    striplbl/.style ={font=\small\bfseries, anchor=east,
+                      text width=20mm, align=right},
+    striplbls/.style={font=\scriptsize\itshape, anchor=east,
+                      gray!50!black, text width=20mm, align=right},
 ]
 
-% ============================================================
-% Region backgrounds + outside titles
-% ============================================================
+% ====================================================================
+% (A) Stripe backgrounds (drawn under everything else)
+% ====================================================================
 \begin{scope}[on background layer]
-  \node[rounded corners=4pt, fill=blue!5,
-        minimum width=176mm, minimum height=60mm,
-        anchor=center]
-    (ctlregion) at (85mm, 35mm) {};
-  \node[rounded corners=4pt, fill=orange!10,
-        minimum width=176mm, minimum height=22mm,
-        anchor=center]
-    (hotregion) at (85mm, -10mm) {};
+  \node[fill=gray!4,   rounded corners=2pt,
+        minimum width=158mm, minimum height=18mm, anchor=center]
+    at (105, 195) {};
+  \node[fill=blue!3,   rounded corners=2pt,
+        minimum width=158mm, minimum height=22mm, anchor=center]
+    at (105, 160) {};
+  \node[fill=green!3,  rounded corners=2pt,
+        minimum width=158mm, minimum height=14mm, anchor=center]
+    at (105, 123) {};
+  \node[fill=orange!4, rounded corners=2pt,
+        minimum width=158mm, minimum height=20mm, anchor=center]
+    at (105,  83) {};
+  \node[fill=violet!3, rounded corners=2pt,
+        minimum width=158mm, minimum height=14mm, anchor=center]
+    at (105,  44) {};
 \end{scope}
 
-\node[anchor=south, font=\small\bfseries, blue!60!black]
-  at (ctlregion.north) {Control path \;—\; LLM lives here};
-\node[anchor=north, font=\small\bfseries, orange!70!black]
-  at (hotregion.south) {Hot path \;—\; native code, no model};
+% ====================================================================
+% (B) Stripe titles (left of each stripe, outside drawing band)
+% ====================================================================
+\node[striplbl]  at (24, 198) {External\\tools};
+\node[striplbls] at (24, 190) {Ghidra, LLM};
 
-% ============================================================
-% Nodes
-% ============================================================
-% Hot row (y = -10)
-\node[hotbox] (target)  at ( 13mm, -10mm) {Target binary};
-\node[hotbox] (afl)     at ( 51mm, -10mm) {AFL++ runner};
-\node[hotbox] (mutator) at ( 89mm, -10mm) {Native mutator\\(7 ops)};
-\node[hotbox] (rstore)  at (127mm, -10mm) {Recipe store};
+\node[striplbl]  at (24, 164) {Controller};
+\node[striplbls] at (24, 156) {Python,\\off-hot-path};
 
-% Control row mid (y = 22) -- aligned with hot columns 2,3,4 + col 5
-\node[ctlbox] (telem)   at ( 51mm,  22mm) {Telemetry};
-\node[ctlbox] (plateau) at ( 89mm,  22mm) {Plateau\\detector};
-\node[ctlbox] (agents)  at (127mm,  22mm) {Agents\\(9 roles)};
-\node[ctlbox] (model)   at (164mm,  22mm) {Model client};
+\node[striplbl]  at (24, 125) {Artifacts};
+\node[striplbls] at (24, 119) {JSON, validated};
 
-% Control row top (y = 50)
-\node[ctlbox] (bb)      at (127mm,  50mm) {Blackboard};
-\node[ctlbox] (micro)   at (164mm,  50mm) {Micro-campaign\\runner};
+\node[striplbl]  at (24,  87) {Hot path};
+\node[striplbls] at (24,  79) {native AFL++};
 
-% Ghidra: top-left of control region (does not conflict with any column)
-\node[extbox] (ghidra)  at ( 13mm,  50mm) {Ghidra\\headless};
+\node[striplbl]  at (24,  46) {Outputs};
+\node[striplbls] at (24,  40) {per-run logs};
 
-% ============================================================
-% Hot-path internal edges (all stay in hot region)
-% ============================================================
-% The widened columns leave room for labels at arrow midpoints.
-\draw[biarr]
-    (target.east) -- node[midway, above, tinylbl] {fork+exec}
-    (afl.west);
-\draw[biarr]
-    (afl.east) -- node[midway, above, tinylbl] {in / out}
-    (mutator.west);
+% ====================================================================
+% (C) Nodes  -- 18 total
+% ====================================================================
+% External (y=195)
+\node[extbox] (ghidra) at ( 50, 195)
+  {Ghidra headless\\[-1pt]{\scriptsize binary $\to$ JSON}};
+\node[extbox] (model)  at (160, 195)
+  {Model client\\[-1pt]{\scriptsize LLM API, $T{=}0$}};
+
+% Controller (y=160)
+\node[ctlbox] (plateau) at ( 50, 160)
+  {Plateau\\detector\\[-1pt]{\scriptsize $W,\theta_e,\theta_p$}};
+\node[ctlbox] (bb)      at ( 87, 160)
+  {Blackboard\\[-1pt]{\scriptsize snapshot+ctx}};
+\node[ctlbox] (agents)  at (123, 160)
+  {Agents\\[-1pt]{\scriptsize 9 roles}};
+\node[ctlbox] (micro)   at (160, 160)
+  {$\mu$-campaign\\runner\\[-1pt]{\scriptsize $N{=}20\,$s, $K{=}4$}};
+
+% Artifacts (y=123)
+\node[artbox] (sctx) at ( 50, 123) {static\_context.json};
+\node[artbox] (prop) at ( 87, 123) {proposal.json};
+\node[artbox] (rec)  at (123, 123) {recipe.json};
+\node[artbox] (main) at (160, 123) {main\_recipes/};
+
+% Hot path (y=83)
+\node[hotbox] (afl)    at ( 50,  83)
+  {AFL++ runner\\[-1pt]{\scriptsize fork+exec}};
+\node[hotbox] (corpus) at ( 87,  83)
+  {Corpus\\[-1pt]{\scriptsize queue}};
+\node[hotbox] (mut)    at (123,  83)
+  {Custom mutator\\[-1pt]{\scriptsize 7-op, in-loop}};
+\node[hotbox] (tgt)    at (160,  83)
+  {Target binary\\[-1pt]{\scriptsize (cJSON)}};
+
+% Outputs (y=44)
+\node[outbox] (stats) at ( 50,  44) {fuzzer\_stats};
+\node[outbox] (cov)   at ( 87,  44) {coverage.csv};
+\node[outbox] (evts)  at (123,  44) {events.jsonl};
+\node[outbox] (audit) at (160,  44) {audit log};
+
+% Outputs caption-style sublabel (instead of fan-out arrows, which
+% would cross the hot-path stripe and clutter the figure).
+\node[font=\tiny\itshape, gray!55!black, anchor=north]
+  at (105, 36) {written per run by AFL++ (stats) and the controller (cov, events, audit)};
+
+% ====================================================================
+% (D) Hot-path internal edges (same stripe; never crossed by any
+% other edge in this layout)
+% ====================================================================
+\draw[biarr] (afl.east)    -- node[edgelblt, midway, above] {queue}    (corpus.west);
+\draw[biarr] (corpus.east) -- node[edgelblt, midway, above] {sample}   (mut.west);
+\draw[biarr] (mut.east)    -- node[edgelblt, midway, above] {bytes}    (tgt.west);
+
+% ====================================================================
+% (E) Numbered edges (1..9).  Red corridors: L0=32, L4=178.  Grey
+% corridors:  L1=69, L2=105, L3=141.  Node columns: 50, 87, 123, 160.
+% ====================================================================
+
+% ---- (1) Ghidra -> static_context.json --------- corridor L1=69 -----
+% External -> Artifacts.  Goes Ghidra.east -> right to L1 -> down ->
+% left into sctx.east.  L1=69 sits between sctx (east=64) and prop
+% (west=72), missing the Plateau detector node entirely.
 \draw[arr]
-    (rstore.west) -- node[midway, above, tinylbl] {load}
-    (mutator.east);
+   (ghidra.east) -- (69, 195) -- (69, 123) -- (sctx.east);
+\node[edgelbl]  at (76, 180) {extract};
+\node[badge]    at (69, 178) {1};
 
-% ============================================================
-% Control-path internal edges
-% ============================================================
-% Top row Ghidra -> Blackboard  (long, but no node in between because the
-% gap at y=50 between col1 and col4 is empty)
-\draw[arr] (ghidra) -- node[above, edgelbl] {static\_context.json} (bb);
+% ---- (2) static_context.json -> Blackboard --- corridor x=50 then 87
+% Artifacts -> Controller.  sctx is in col1, bb is in col2.  Use an
+% L-bend through the stripe gap at y=144 (well below ctl, well above
+% art).
+\draw[arr]
+   (sctx.north) -- (50, 144) -- (87, 144) -- (bb.south);
+\node[edgelbl] at (68, 147) {load};
+\node[badge]   at (60, 144) {2};
 
-% Blackboard -> Agents (vertical down, col 4)
-\draw[arr] (bb) -- (agents);
+% ---- (3) AFL++ -> Plateau detector ----- RED telemetry, corridor L0=32
+% Hot -> Controller.  Strictly left of all node columns.
+\draw[cross]
+   (afl.west) -- (32, 83) -- (32, 160) -- (plateau.west);
+\node[edgelbl, text=red!75!black, align=left] at (37, 110)
+   {\textbf{telemetry}\\\scriptsize stats+cov};
+\node[badge] at (32, 122) {3};
 
-% Telemetry -> Plateau -> Agents (left-to-right in mid row)
-\draw[arr] (telem)   -- (plateau);
-\draw[arr] (plateau) -- (agents);
+% ---- (4) Plateau -> Agents ------ above-stripe elbow, corridor y=176
+% Same stripe (Controller).  Elbow up to y=176 (in ext-ctl gap, with
+% External stripe starting at y=187), so it never overlaps the
+% Blackboard node sitting between them.
+\draw[arr]
+   (plateau.north) -- (50, 176) -- (123, 176) -- (agents.north);
+\node[edgelbl] at (87, 178) {wakes};
+\node[badge]   at (105, 176) {4};
 
-% Agents <-> Model  (mid row, short right)
-\draw[biarr] (agents.east) -- node[above, edgelbl, font=\tiny] {req/resp} (model.west);
+% ---- (5) Blackboard -> Agents ----- short same-stripe edge ---------
+% Edge is 9 mm long; badge is placed below the edge (in stripe
+% whitespace), not on the arrow.
+\draw[arr] (bb.east) -- (agents.west);
+\node[edgelbl] at (105, 163) {context};
+\node[badge]   at (105, 156) {5};
 
-% Agents <-> Micro-campaign. Route above the model node instead of
-% elbowing through its center.
+% ---- (6) Agents -> Model -- corridor L3=141 (diagonal stays clear)
 \draw[biarr]
-    (agents.north east)
-      .. controls (143mm, 36mm) and (151mm, 43mm) ..
-      node[pos=0.62, right, edgelbl] {try / reward}
-    (micro.south west);
+   (agents.north east) -- (model.south west);
+\node[edgelbl] at (148, 184) {prompt / reply};
+\node[badge]   at (140, 178) {6};
 
-% ============================================================
-% THE TWO cross-boundary edges (both straight vertical, isolated columns)
-% ============================================================
-% (1) stats: AFL (45,-10) -> Telemetry (45,22), column 45, no node between
-\draw[crossarr, red!55!black, dashed, line width=1pt]
-    (afl.north) --
-    node[right, font=\scriptsize\bfseries] {\,stats}
-    (telem.south);
+% ---- (7) Agents -> proposal -> recipe ------------------------------
+% (a) Agents.SW -> prop.NE: diagonal across the ctl->art gap.
+% (b) prop.east -> rec.west: short same-stripe edge (8 mm).
+\draw[arr] (agents.south west) -- (prop.north east);
+\node[edgelbl] at (101, 142) {emit};
+\draw[arr]
+   (prop.east) -- node[edgelblt, midway, above=0.3mm] {validate}
+   (rec.west);
+\node[badge]   at (110, 138) {7};
 
-% (2) promote: Agents (105,22) -> Recipe (105,-10), column 105, no node between
-\draw[crossarr]
-    (agents.south) --
-    node[right, font=\scriptsize\bfseries] {\,promote (write-only)}
-    (rstore.north);
+% ---- (8) recipe -> micro-campaign runner ----- diagonal in ctl/art gap
+\draw[arr] (rec.north east) -- (micro.south west);
+\node[edgelbl] at (148, 142) {try};
+\node[badge]   at (140, 138) {8};
+
+% ---- (9) recipe -> main_recipes (promote) ; main -> mutator (reload, RED)
+% Promote: short same-stripe arrow in Artifacts.
+\draw[arr]
+   (rec.east) -- node[edgelblt, midway, above=0.3mm] {promote}
+   (main.west);
+% Reload: artifact -> hot, routed through stripe-gap corridor x in
+% range [main.south_x=160 .. mut.north_x=123] via y=108.  Stays below
+% the Artifacts stripe (bottom at y=116) and above the Hot stripe
+% (top at y=93).
+\draw[cross]
+   (main.south) -- (160, 108) -- (123, 108) -- (mut.north);
+\node[edgelbl, text=red!75!black, align=left] at (130, 113)
+   {\textbf{reload}\\\scriptsize write-only};
+\node[badge]   at (152, 108) {9};
+
+% ====================================================================
+% (F) Top banner (the invariant) + bottom Legend
+% ====================================================================
+\node[anchor=center, font=\small\bfseries,
+      rounded corners=1.5pt, draw=red!75!black, line width=0.3pt,
+      fill=red!7, inner sep=2pt, text=red!75!black]
+  at (105, 213) {Invariant: no LLM call appears on the AFL++ per-mutation hot path.};
+
+\begin{scope}[shift={(40, 23)}]
+  \node[anchor=west, font=\scriptsize\bfseries] at (0, 4) {Legend};
+  % Grey solid
+  \draw[arr] (0, 1.5) -- (10, 1.5);
+  \node[anchor=west, font=\scriptsize] at (11, 1.5)
+    {within-region flow};
+  % Red thick
+  \draw[cross] (55, 1.5) -- (67, 1.5);
+  \node[anchor=west, font=\scriptsize] at (68, 1.5)
+    {cross-boundary (only ${\scriptstyle\textcolor{red!75!black}{\bf 3}}$ up,
+     ${\scriptstyle\textcolor{red!75!black}{\bf 9}}$ down)};
+  % Numbered badge
+  \node[badge] at (5, -2) {n};
+  \node[anchor=west, font=\scriptsize] at (11, -2)
+    {numbered step (\S\ref{sec:design}/\S\ref{sec:plateau})};
+\end{scope}
 
 \end{tikzpicture}

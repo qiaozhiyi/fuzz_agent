@@ -1,5 +1,78 @@
-git repository unavailable in runtime image
-commit: f0605e2c597e91753246cb9f58b9aa13380da7c1
-branch: main
-dirty: true
-target_platform: linux/arm64
+## main...origin/main
+ M experiments/targets/cjson/cjson_fuzzer
+ M experiments/targets/libpng/libpng_fuzzer
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_fp-active_r01.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_fp-active_r02.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_fp-active_r03.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_fp-active_r04.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_fp-active_r05.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_fp-empty_r01.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_fp-empty_r02.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_fp-empty_r03.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_fp-empty_r04.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_fp-empty_r05.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_vanilla_r01.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_vanilla_r02.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_vanilla_r03.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_vanilla_r04.json
+ M results/paper01_ai_recipe_mutation/microbench/p1_e3_microbench_vanilla_r05.json
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/coverage.csv
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/events.jsonl
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/fuzzer_stats
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/git.patch
+ M results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/git_status.txt
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/main_launch.sh
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/report.md
+ M results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/run_metadata.json
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r02/coverage.csv
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r02/events.jsonl
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r02/fuzzer_stats
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r02/git.patch
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r02/git_status.txt
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r02/main_launch.sh
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r02/report.md
+ M results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r02/run_metadata.json
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r03/coverage.csv
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r03/events.jsonl
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r03/fuzzer_stats
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r03/git.patch
+ M results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r03/git_status.txt
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r03/main_launch.sh
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r03/report.md
+ M results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r03/run_metadata.json
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r04/coverage.csv
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r04/events.jsonl
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r04/fuzzer_stats
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r04/git.patch
+ M results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r04/git_status.txt
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r04/main_launch.sh
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r04/report.md
+ M results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r04/run_metadata.json
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r05/coverage.csv
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r05/events.jsonl
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r05/fuzzer_stats
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r05/git.patch
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r05/git_status.txt
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r05/main_launch.sh
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r05/report.md
+ D results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r05/run_metadata.json
+?? experiments/targets/libpng/seeds/upstream_basn0g01.png
+?? experiments/targets/libpng/seeds/upstream_basn0g02.png
+?? experiments/targets/libpng/seeds/upstream_basn0g04.png
+?? experiments/targets/libpng/seeds/upstream_basn0g08.png
+?? experiments/targets/libpng/seeds/upstream_basn0g16.png
+?? experiments/targets/libpng/seeds/upstream_basn2c08.png
+?? experiments/targets/libpng/seeds/upstream_basn2c16.png
+?? experiments/targets/libpng/seeds/upstream_basn3p01.png
+?? experiments/targets/libpng/seeds/upstream_basn3p02.png
+?? experiments/targets/libpng/seeds/upstream_basn3p04.png
+?? experiments/targets/libpng/seeds/upstream_basn3p08.png
+?? experiments/targets/libpng/seeds/upstream_basn4a08.png
+?? experiments/targets/libpng/seeds/upstream_basn4a16.png
+?? experiments/targets/libpng/seeds/upstream_basn6a08.png
+?? experiments/targets/libpng/seeds/upstream_basn6a16.png
+?? experiments/targets/libpng/seeds/upstream_ftbbn0g01.png
+?? experiments/targets/libpng/seeds/upstream_ftbbn0g02.png
+?? experiments/targets/libpng/seeds/upstream_ftbbn0g04.png
+?? experiments/targets/libpng/seeds/upstream_ftbbn2c16.png
+?? experiments/targets/libpng/seeds/upstream_ftbbn3p08.png

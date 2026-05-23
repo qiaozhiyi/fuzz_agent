@@ -50,12 +50,14 @@
 % Median bars
 \draw[blue!70!black, line width=2pt]
     (axis cs:0.78, 13049) -- (axis cs:1.22, 13049);
-\node[anchor=west, font=\scriptsize\bfseries, blue!70!black]
+\node[anchor=south west, font=\scriptsize\bfseries, blue!70!black,
+      inner sep=1pt]
     at (axis cs:1.25, 13049) {median 13{,}049};
 
 \draw[orange!85!black, line width=2pt]
     (axis cs:1.78, 13816) -- (axis cs:2.22, 13816);
-\node[anchor=west, font=\scriptsize\bfseries, orange!85!black]
+\node[anchor=south west, font=\scriptsize\bfseries, orange!85!black,
+      inner sep=1pt]
     at (axis cs:2.25, 13816) {median 13{,}816};
 
 % Acceptance gate reference line (0.85 * E1a median = 11092)

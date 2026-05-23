@@ -1,0 +1,16 @@
+{
+  "run_id": "p1_e2_cjson_rule-only_r01",
+  "captured_at_utc": "2026-05-23T02:27:05Z",
+  "git_commit": "85223d844711c704130608f58200a0b5a18862fe",
+  "git_branch": "main",
+  "git_dirty": true,
+  "config_path": "/root/fuzz_agent/experiments/targets/cjson/config.yaml",
+  "config_sha256": "8a9a4a3edf956d0344ed3c1889c0a45e085b297ed22dc6127176953e461aee4e",
+  "target_name": "cjson_parser",
+  "os": "Linux",
+  "arch": "x86_64",
+  "target_platform": "unknown",
+  "build_platform": "unknown",
+  "aflpp_ref": "unknown",
+  "ghidra_version": "unknown"
+}

@@ -1,6 +1,6 @@
 # FuzzPilot MVP Run Report
 
-Run ID: `run_1779372432474522_p195_0000`
+Run ID: `run_1779445180202788_p25947_0000`
 
 Project: `cJSON_fuzz`
 
@@ -10,15 +10,15 @@ Ablation mode: `baseline-afl`
 
 Plateau ID: ``
 
-Main AFL launch plan: `/work/fuzz_agent/results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/work/run_1779372432474522_p195_0000/main_launch.sh`
+Main AFL launch plan: `/root/fuzz_agent/results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/work/run_1779445180202788_p25947_0000/main_launch.sh`
 
-Main AFL PID: `207`
+Main AFL PID: `25954`
 
-Coverage CSV: `/work/fuzz_agent/results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/work/run_1779372432474522_p195_0000/coverage.csv`
+Coverage CSV: `/root/fuzz_agent/results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/work/run_1779445180202788_p25947_0000/coverage.csv`
 
-Agent replay log: `/work/fuzz_agent/results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/work/run_1779372432474522_p195_0000/agent_decisions.jsonl`
+Agent replay log: `/root/fuzz_agent/results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/work/run_1779445180202788_p25947_0000/agent_decisions.jsonl`
 
-Agent memory: `/work/fuzz_agent/results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/work/run_1779372432474522_p195_0000/agent_memory.jsonl`
+Agent memory: `/root/fuzz_agent/results/paper01_ai_recipe_mutation/runs/p1_e1_cjson_baseline-afl_r01/work/run_1779445180202788_p25947_0000/agent_memory.jsonl`
 
 Winner intervention: ``
 
@@ -28,7 +28,7 @@ Promoted recipe index: ``
 
 ## Coverage
 
-- samples=`120` execs_delta=`18136185` paths_delta=`0` crashes=`0`
+- samples=`14400` execs_delta=`187840945` paths_delta=`0` crashes=`0`
 
 ## Agent Decisions
 

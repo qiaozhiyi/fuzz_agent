@@ -1,0 +1,211 @@
+{"run_id":"run_1779474106370186_p139040_0000","agent":"CoordinatorAgent","key":"plateau_1779488551733601_p139040_0002:CoordinatorAgent:2ecb26aac9aa0d76","reward_hint":0.000000,"memory":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "string_length",
+            "type": "Length",
+            "target_begin": 0,
+            "target_end": 4
+          },
+          {
+            "name": "checksum",
+            "type": "Checksum",
+            "target_begin": 8,
+            "target_end": 12
+          }
+        ],
+        "data_flow_mapping": {
+          "sink_offsets": [0, 4, 8, 12],
+          "rationale": "Focus on offsets that reach parsing sinks based on static analysis"
+        },
+        "cfg_constraints": {
+          "unreached_branch_magic": "0xDEADBEEF",
+          "rationale": "Probe magic values to trigger unreached branches"
+        }
+      }
+    },
+    {
+      "action": "seed_focus_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "magic_header",
+            "type": "Magic",
+            "target_begin": 0,
+            "target_end": 4
+          }
+        ],
+        "data_flow_mapping": {
+          "sink_offsets": [0],
+          "rationale": "Mutate magic header to explore new paths"
+        },
+        "cfg_constraints": {
+          "unreached_branch_magic": "0xCAFEBABE",
+          "rationale": "Target specific magic values for uncovered branches"
+        }
+      }
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "nested_length",
+            "type": "Length",
+            "target_begin": 16,
+            "target_end": 20
+          }
+        ],
+        "data_flow_mapping": {
+          "sink_offsets": [16],
+          "rationale": "Target nested length fields that affect control flow"
+        },
+        "cfg_constraints": {
+          "unreached_branch_magic": "0x0D0E0A0D",
+          "rationale": "Use magic values to satisfy conditional checks"
+        }
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "seed_001",
+      "mutations": [
+        {
+          "offset": 0,
+          "size": 4,
+          "value": "0xDEADBEEF"
+        },
+        {
+          "offset": 8,
+          "size": 4,
+          "value": "0x00000000"
+        }
+      ]
+    },
+    {
+      "seed_id": "seed_002",
+      "mutations": [
+        {
+          "offset": 0,
+          "size": 4,
+          "value": "0xCAFEBABE"
+        }
+      ]
+    },
+    {
+      "seed_id": "seed_003",
+      "mutations": [
+        {
+          "offset": 16,
+          "size": 4,
+          "value": "0x0D0E0A0D"
+        }
+      ]
+    }
+  ]
+}}
+{"run_id":"run_1779474106370186_p139040_0000","agent":"PlateauDiagnosisAgent","key":"plateau_1779488551733601_p139040_0002:PlateauDiagnosisAgent:a40a19a1dcb3e8c0","reward_hint":0.000000,"memory":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Coverage stalled at 23.21% bitmap with 269 edges. No new paths in 10s window. Static analysis not available, but corpus count is 604 with only 60 favored seeds. Likely cause: sparse dictionary or structural barrier. Probing dictionary may reveal missing magic values for unreached branches."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Only 60 favored seeds out of 604. Focus on seeds that have high edge coverage but are not favored. Use AFL's seed selection to prioritize seeds that cover rare edges."
+    }
+  ]
+}}
+{"run_id":"run_1779474106370186_p139040_0000","agent":"SchedulerAgent","key":"plateau_1779488551733601_p139040_0002:SchedulerAgent:c554567acf32e809","reward_hint":0.000000,"memory":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reasoning": "Plateau detected with zero new paths/edges in 10s window. Static context empty, so no structural metadata to leverage. Reallocate energy to under-explored seeds by focusing on seeds with low coverage contribution. Propose favored-set adjustment to prioritize seeds that have not been heavily mutated.",
+      "target_seeds": [],
+      "energy_boost": 1.5,
+      "duration_sec": 20
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "favored_set_adjustment",
+      "params": {
+        "boost_unfavored": true,
+        "boost_factor": 1.5,
+        "duration_sec": 20
+      }
+    }
+  ]
+}}
+{"run_id":"run_1779474106370186_p139040_0000","agent":"CmpAgent","key":"plateau_1779488551733601_p139040_0002:CmpAgent:562a5539fcc524c4","reward_hint":0.000000,"memory":{
+  "agent": "CmpAgent",
+  "interventions": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Plateau detected with zero new paths/edges in 10s window. Static analysis context empty, so no structural metadata. Propose generic recipe to break plateau by focusing on comparison bottlenecks.",
+      "recipe": {
+        "name": "cmp_magic_break",
+        "fields": [
+          {
+            "name": "magic1",
+            "type": "Magic",
+            "target_begin": "0x00",
+            "target_end": "0x04",
+            "value": "0xDEADBEEF"
+          },
+          {
+            "name": "magic2",
+            "type": "Magic",
+            "target_begin": "0x10",
+            "target_end": "0x14",
+            "value": "0xCAFEBABE"
+          }
+        ],
+        "mutations": [
+          {
+            "offset": 0,
+            "size": 4,
+            "value": "0xDEADBEEF"
+          },
+          {
+            "offset": 16,
+            "size": 4,
+            "value": "0xCAFEBABE"
+          }
+        ]
+      }
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106370186_p139040_0000","agent":"MutatorAgent","key":"plateau_1779488551733601_p139040_0002:MutatorAgent:3c3f3dd4c4e9fe5c","reward_hint":0.000000,"memory":{
+  "agent": "MutatorAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106370186_p139040_0000","agent":"DictionaryAgent","key":"plateau_1779488551733601_p139040_0002:DictionaryAgent:0667976b5d02d9c5","reward_hint":0.000000,"memory":{"raw":"{\n  \"agent\": \"DictionaryAgent\",\n  \"interventions\": [\n    {\n      \"action\": \"dictionary_probe\",\n      \"reason\": \"Plateau detected with no new edges or paths. Static analysis context is empty, but cjson is a JSON parser. Propose structural dictionary entries for JSON tokens and common magic numbers to trigger new parsing paths.\",\n      \"dictionary_entries\": [\n        {\n          \"value\": \"{\",\n          \"type\": \"ASCII_TOKEN\",\n          \"description\": \"JSON object start\"\n        },\n        {\n          \"value\": \"}\",\n          \"type\": \"ASCII_TOKEN\",\n          \"description\": \"JSON object end\"\n        },\n        {\n          \"value\": \"[\",\n          \"type\": \"ASCII_TOKEN\",\n          \"description\": \"JSON array start\"\n        },\n        {\n          \"value\": \"]\",\n          \"type\": \"ASCII_TOKEN\",\n          \"description\": \"JSON array end\"\n        },\n        {\n          \"value\": \"\\\"\",\n          \"type\": \"ASCII_TOKEN\",\n          \"description\": \"JSON string delimiter\"\n        },\n        {\n          \"value\": \":\",\n          \"type\": \"ASCII_TOKEN\",\n          \"description\": \"JSON key-value separator\"\n        },\n        {\n          \"value\": \",\",\n          \"type\": \"ASCII_TOKEN\",\n          \"description\": \"JSON element separator\"\n        },\n        {\n          \"value\": \"true\",\n          \"type\": \"ASCII_TOKEN\",\n          \"description\": \"JSON boolean true\"\n        },\n        {\n          \"value\": \"false\",\n          \"type\": \"ASCII_TOKEN\",\n          \"description\": \"JSON boolean false\"\n        },\n        {\n          \"value\": \"null\",\n          \"type\": \"ASCII_TOKEN\",\n          \"description\": \"JSON null\"\n        },\n        {\n          \"value\": \"0x0A\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Newline character\"\n        },\n        {\n          \"value\": \"0x09\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Tab character\"\n        },\n        {\n          \"value\": \"0x5C\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Backslash escape\"\n        },\n        {\n          \"value\": \"0x22\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Double quote\"\n        },\n        {\n          \"value\": \"0x2F\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Forward slash\"\n        },\n        {\n          \"value\": \"0x62\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Backspace escape\"\n        },\n        {\n          \"value\": \"0x66\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Form feed escape\"\n        },\n        {\n          \"value\": \"0x6E\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Newline escape\"\n        },\n        {\n          \"value\": \"0x72\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Carriage return escape\"\n        },\n        {\n          \"value\": \"0x74\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Tab escape\"\n        },\n        {\n          \"value\": \"0x75\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Unicode escape\"\n        },\n        {\n          \"value\": \"0x2D\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Minus sign for negative numbers\"\n        },\n        {\n          \"value\": \"0x2E\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Decimal point\"\n        },\n        {\n          \"value\": \"0x45\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Exponent 'E'\"\n        },\n        {\n          \"value\": \"0x65\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Exponent 'e'\"\n        },\n        {\n          \"value\": \"0x30\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Digit '0'\"\n        },\n        {\n          \"value\": \"0x31\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Digit '1'\"\n        },\n        {\n          \"value\": \"0x32\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Digit '2'\"\n        },\n        {\n          \"value\": \"0x33\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Digit '3'\"\n        },\n        {\n          \"value\": \"0x34\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Digit '4'\"\n        },\n        {\n          \"value\": \"0x35\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Digit '5'\"\n        },\n        {\n          \"value\": \"0x36\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Digit '6'\"\n        },\n        {\n          \"value\": \"0x37\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Digit '7'\"\n        },\n        {\n          \"value\": \"0x38\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Digit '8'\"\n        },\n        {\n          \"value\": \"0x39\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Digit '9'\"\n        },\n        {\n          \"value\": \"0x61\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Lowercase 'a' for hex\"\n        },\n        {\n          \"value\": \"0x62\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Lowercase 'b' for hex\"\n        },\n        {\n          \"value\": \"0x63\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Lowercase 'c' for hex\"\n        },\n        {\n          \"value\": \"0x64\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Lowercase 'd' for hex\"\n        },\n        {\n          \"value\": \"0x65\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Lowercase 'e' for hex\"\n        },\n        {\n          \"value\": \"0x66\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Lowercase 'f' for hex\"\n        },\n        {\n          \"value\": \"0x41\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Uppercase 'A' for hex\"\n        },\n        {\n          \"value\": \"0x42\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Uppercase 'B' for hex\"\n        },\n        {\n          \"value\": \"0x43\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Uppercase 'C' for hex\"\n        },\n        {\n          \"value\": \"0x44\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Uppercase 'D' for hex\"\n        },\n        {\n          \"value\": \"0x45\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Uppercase 'E' for hex\"\n        },\n        {\n          \"value\": \"0x46\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Uppercase 'F' for hex\"\n        },\n        {\n          \"value\": \"0x2B\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Plus sign for exponent\"\n        },\n        {\n          \"value\": \"0x20\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Space character\"\n        },\n        {\n          \"value\": \"0x0D\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Carriage return\"\n        },\n        {\n          \"value\": \"0x0A\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Line feed\"\n        },\n        {\n          \"value\": \"0x09\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Horizontal tab\"\n        },\n        {\n          \"value\": \"0x5C\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Backslash\"\n        },\n        {\n          \"value\": \"0x2F\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Slash\"\n        },\n        {\n          \"value\": \"0x22\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Double quote\"\n        },\n        {\n          \"value\": \"0x62\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Backspace\"\n        },\n        {\n          \"value\": \"0x66\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Form feed\"\n        },\n        {\n          \"value\": \"0x6E\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Newline\"\n        },\n        {\n          \"value\": \"0x72\",\n          \"type\": \"MAGIC_NUMBER\",\n          \"description\": \"Carriage return\"\n        },\n        {\n         "}}
+{"run_id":"run_1779474106370186_p139040_0000","agent":"FormatAgent","key":"plateau_1779488551733601_p139040_0002:FormatAgent:cb36b653b645535b","reward_hint":0.000000,"memory":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106370186_p139040_0000","agent":"CorpusAgent","key":"plateau_1779488551733601_p139040_0002:CorpusAgent:600a180a23a251f0","reward_hint":0.000000,"memory":{
+  "agent": "CorpusAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106370186_p139040_0000","agent":"ResultAnalysisAgent","key":"plateau_1779488551733601_p139040_0002:ResultAnalysisAgent:3520465021590d91","reward_hint":0.000000,"memory":{
+    "plateau_id": "plateau_1779488551733601_p139040_0002",
+    "observation": "All micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward. No new paths, edges, crashes, or recipe hits. The main campaign is in a plateau with 0 new paths/edges/crashes in the last 10 seconds. Bitmap coverage is 23.21%, stability 99.26%, and cycles without finds is 1. The target is cjson_fuzzer with persistent mode. Static analysis context is empty, so no structural metadata available.",
+    "recommendation": "Since all interventions failed to produce any reward, the current plateau is likely due to coverage saturation or lack of seed diversity. Consider switching to a different target or restarting with a fresh seed corpus. No intervention should be promoted. Keep the default control as the winner (though reward is zero)."
+  }}

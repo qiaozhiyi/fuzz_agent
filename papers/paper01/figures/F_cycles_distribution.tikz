@@ -50,12 +50,14 @@
 % Median bars
 \draw[blue!70!black, line width=2pt]
     (axis cs:0.78, 797) -- (axis cs:1.22, 797);
-\node[anchor=west, font=\scriptsize\bfseries, blue!70!black]
+\node[anchor=south west, font=\scriptsize\bfseries, blue!70!black,
+      inner sep=1pt]
     at (axis cs:1.25, 797) {median 797};
 
 \draw[orange!85!black, line width=2pt]
     (axis cs:1.78, 140) -- (axis cs:2.22, 140);
-\node[anchor=west, font=\scriptsize\bfseries, orange!85!black]
+\node[anchor=south west, font=\scriptsize\bfseries, orange!85!black,
+      inner sep=1pt]
     at (axis cs:2.25, 140) {median 140};
 
 % Annotation: 5.7x ratio

@@ -1,0 +1,289 @@
+{"id":"agent_decision_1779488549689355_p139049_0011","run_id":"run_1779474106841217_p139049_0000","plateau_id":"plateau_1779488549605347_p139049_0002","agent":"CoordinatorAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"06131c9385d038ce","response_hash":"26f604a8c3e7af43","latency_ms":4492,"input_tokens":997,"output_tokens":627,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_string_length",
+            "type": "Length",
+            "target_begin": "0x0",
+            "target_end": "0x100"
+          }
+        ],
+        "data_flow_mapping": {
+          "offset": 0,
+          "sink": "cJSON_Parse"
+        },
+        "cfg_constraints": []
+      },
+      "rationale": "Plateau indicates stagnation; dictionary probe can introduce new string patterns to trigger edge coverage in JSON parsing."
+    },
+    {
+      "action": "seed_focus_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_key_magic",
+            "type": "Magic",
+            "target_begin": "0x0",
+            "target_end": "0x100"
+          }
+        ],
+        "data_flow_mapping": {
+          "offset": 8,
+          "sink": "cJSON_GetObjectItem"
+        },
+        "cfg_constraints": [
+          {
+            "branch": "unreached_branch_1",
+            "magic_value": "0xDEADBEEF"
+          }
+        ]
+      },
+      "rationale": "Focus on seeds that may contain specific magic values to reach uncovered branches in object item lookup."
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_checksum",
+            "type": "Checksum",
+            "target_begin": "0x0",
+            "target_end": "0x100"
+          }
+        ],
+        "data_flow_mapping": {
+          "offset": 16,
+          "sink": "cJSON_Validate"
+        },
+        "cfg_constraints": []
+      },
+      "rationale": "Per-seed recipe mutation can systematically alter checksum fields to bypass validation checks and explore new paths."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "seed_001",
+      "mutations": [
+        {
+          "field": "json_string_length",
+          "type": "Length",
+          "value": "0x80"
+        }
+      ]
+    },
+    {
+      "seed_id": "seed_002",
+      "mutations": [
+        {
+          "field": "json_key_magic",
+          "type": "Magic",
+          "value": "0xDEADBEEF"
+        }
+      ]
+    },
+    {
+      "seed_id": "seed_003",
+      "mutations": [
+        {
+          "field": "json_checksum",
+          "type": "Checksum",
+          "value": "0x12345678"
+        }
+      ]
+    }
+  ]
+}}
+{"id":"agent_decision_1779488554182154_p139049_0013","run_id":"run_1779474106841217_p139049_0000","plateau_id":"plateau_1779488549605347_p139049_0002","agent":"PlateauDiagnosisAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"15c613ed43c22678","response_hash":"166e346deca82a28","latency_ms":2127,"input_tokens":1012,"output_tokens":170,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Coverage stalled at 23.21% bitmap with 269 edges. Static analysis not available, but structural barriers likely due to missing magic values or checksums. Dictionary probe can discover new tokens to bypass cmp gates.",
+      "confidence": 0.7
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Corpus has 598 seeds, but only 60 favored. Many seeds may be redundant. Per-seed recipe probe can identify which seeds are most productive and focus mutation effort.",
+      "confidence": 0.6
+    }
+  ]
+}}
+{"id":"agent_decision_1779488556309390_p139049_0015","run_id":"run_1779474106841217_p139049_0000","plateau_id":"plateau_1779488549605347_p139049_0002","agent":"SchedulerAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"8d8f95bfbd36864f","response_hash":"7cc1a2923c308015","latency_ms":1635,"input_tokens":992,"output_tokens":117,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Plateau detected with zero new paths/edges in 10s window. Static analysis context empty, so no structural metadata to leverage. Focus on under-explored seeds to break coverage plateau.",
+      "parameters": {
+        "seed_ids": [],
+        "focus_mode": "under_explored",
+        "sample_count": 10
+      }
+    }
+  ],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779488557944897_p139049_0017","run_id":"run_1779474106841217_p139049_0000","plateau_id":"plateau_1779488549605347_p139049_0002","agent":"CmpAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"472a0eba9dde28c4","response_hash":"0ca9d684e8756d92","latency_ms":1046,"input_tokens":990,"output_tokens":25,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "CmpAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779488558991573_p139049_0019","run_id":"run_1779474106841217_p139049_0000","plateau_id":"plateau_1779488549605347_p139049_0002","agent":"MutatorAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"f94deaa87048c9fb","response_hash":"3c3f3dd4c4e9fe5c","latency_ms":965,"input_tokens":993,"output_tokens":25,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "MutatorAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779488559957053_p139049_0021","run_id":"run_1779474106841217_p139049_0000","plateau_id":"plateau_1779488549605347_p139049_0002","agent":"DictionaryAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"b0b75f8790dd521f","response_hash":"8b45330b48560f68","latency_ms":5353,"input_tokens":991,"output_tokens":801,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "DictionaryAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "dictionary_entries": [
+          {
+            "type": "magic",
+            "value": "0x7B2274797065223A224F626A65637422",
+            "comment": "JSON object start with type field"
+          },
+          {
+            "type": "magic",
+            "value": "0x5B5D",
+            "comment": "Empty JSON array"
+          },
+          {
+            "type": "magic",
+            "value": "0x7B7D",
+            "comment": "Empty JSON object"
+          },
+          {
+            "type": "magic",
+            "value": "0x226E756C6C22",
+            "comment": "JSON null string"
+          },
+          {
+            "type": "magic",
+            "value": "0x74727565",
+            "comment": "JSON true"
+          },
+          {
+            "type": "magic",
+            "value": "0x66616C7365",
+            "comment": "JSON false"
+          },
+          {
+            "type": "magic",
+            "value": "0x2D31",
+            "comment": "Negative integer -1"
+          },
+          {
+            "type": "magic",
+            "value": "0x302E30",
+            "comment": "Float 0.0"
+          },
+          {
+            "type": "magic",
+            "value": "0x224022",
+            "comment": "String with special char @"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C5C",
+            "comment": "Double backslash escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C22",
+            "comment": "Escaped quote"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C2F",
+            "comment": "Escaped slash"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C62",
+            "comment": "Backspace escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C66",
+            "comment": "Form feed escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C6E",
+            "comment": "Newline escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C72",
+            "comment": "Carriage return escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C74",
+            "comment": "Tab escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C7530303030",
+            "comment": "Unicode escape \\u0000"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C7530444130",
+            "comment": "Unicode escape \\u0DA0 (Sinhala)"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C7530444130",
+            "comment": "Unicode escape \\u0DA0 (Sinhala)"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C7530444130",
+            "comment": "Unicode escape \\u0DA0 (Sinhala)"
+          }
+        ]
+      }
+    }
+  ],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779488565311031_p139049_0023","run_id":"run_1779474106841217_p139049_0000","plateau_id":"plateau_1779488549605347_p139049_0002","agent":"FormatAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"7432c50e5a741961","response_hash":"cb36b653b645535b","latency_ms":913,"input_tokens":987,"output_tokens":24,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779488566224569_p139049_0025","run_id":"run_1779474106841217_p139049_0000","plateau_id":"plateau_1779488549605347_p139049_0002","agent":"CorpusAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"766c0da0a3af2aeb","response_hash":"356961df41dc1b5f","latency_ms":2095,"input_tokens":991,"output_tokens":149,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "CorpusAgent",
+  "interventions": [
+    {
+      "action": "default_control",
+      "reason": "Plateau detected with no new paths or edges in 10 seconds. Corpus has 598 seeds, many likely redundant. Recommend deduplication and minimization to reduce corpus size and focus fuzzing on diverse seeds."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Corpus has 598 seeds but only 60 favored. Many seeds may be redundant. Focus on seeds that cover unique edges or paths to maximize coverage per execution.",
+      "seed_ids": []
+    }
+  ]
+}}
+{"id":"agent_decision_1779488650013168_p139049_0052","run_id":"run_1779474106841217_p139049_0000","plateau_id":"plateau_1779488549605347_p139049_0002","agent":"ResultAnalysisAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"995dff37a28b36f1","response_hash":"d6e50cbfcbcb2e5d","latency_ms":2270,"input_tokens":1525,"output_tokens":156,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "ResultAnalysisAgent",
+  "memory_patch": {
+    "type": "micro_campaign_summary",
+    "content": "All four micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward. No new paths, edges, crashes, or recipe hits. The plateau persists. No intervention outperformed the baseline. Recommend revisiting mutation strategy or seed quality.",
+    "timestamp": 1779488650
+  },
+  "critique": "All micro-campaigns failed to produce any positive reward. The plateau indicates a stagnation in coverage. The static analysis context was empty, so no structural mutations could be guided. Future actions should consider deeper static analysis or alternative mutation strategies."
+}}

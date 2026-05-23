@@ -90,17 +90,33 @@ def locate_fuzzer_stats(run_dir: Path) -> Path:
 
 
 def read_jsonl(path: Path) -> list[dict]:
+    """Stream-parse JSON objects from a file.
+
+    Tolerates pretty-printed multi-line objects (e.g. agent_decisions.jsonl
+    where the ``proposal`` payload is indented across many lines). Falls back
+    to skipping malformed regions instead of dropping the whole stream.
+    """
     if not path.exists():
         return []
-    rows = []
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
+    text = path.read_text()
+    decoder = json.JSONDecoder()
+    rows: list[dict] = []
+    idx = 0
+    n = len(text)
+    while idx < n:
+        while idx < n and text[idx] in (" ", "\t", "\n", "\r"):
+            idx += 1
+        if idx >= n:
+            break
         try:
-            rows.append(json.loads(line))
+            obj, end = decoder.raw_decode(text, idx)
+            rows.append(obj)
+            idx = end
         except json.JSONDecodeError:
-            pass
+            nl = text.find("\n", idx)
+            if nl == -1:
+                break
+            idx = nl + 1
     return rows
 
 
@@ -135,10 +151,16 @@ def cmd_t1(args):
         plateau_events = sum(1 for e in events if e.get("event") == "plateau_detected")
         proposals = len(decisions)
         promotions = sum(1 for e in events if e.get("event") == "promotion")
-        schema_valid = [d.get("schema_valid", False) for d in decisions]
-        schema_valid_rate = (sum(schema_valid) / len(schema_valid)) if schema_valid else ""
-        fallback = sum(1 for d in decisions if d.get("fallback"))
-        fallback_rate = (fallback / len(decisions)) if decisions else ""
+        # Only count decision records that *carry* a schema_valid field — those
+        # are the LLM-call records. Other records (telemetry, status pings)
+        # were previously coerced to False via .get(default=False).
+        llm_calls = [d for d in decisions if "schema_valid" in d]
+        schema_valid_rate = (
+            sum(1 for d in llm_calls if d.get("schema_valid")) / len(llm_calls)
+            if llm_calls else ""
+        )
+        fallback = sum(1 for d in llm_calls if d.get("fallback_used") or d.get("fallback"))
+        fallback_rate = (fallback / len(llm_calls)) if llm_calls else ""
 
         rows.append({
             "run_id": run_dir.name,

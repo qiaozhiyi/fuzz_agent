@@ -1,0 +1,196 @@
+{"run_id":"run_1779488665556782_p230982_0000","agent":"CoordinatorAgent","key":"plateau_1779503103903241_p230982_0002:CoordinatorAgent:ff64a8b9d76c3bf1","reward_hint":0.000000,"memory":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "string_length",
+            "type": "Length",
+            "target_begin": 0,
+            "target_end": 4
+          },
+          {
+            "name": "checksum",
+            "type": "Checksum",
+            "target_begin": 4,
+            "target_end": 8
+          }
+        ],
+        "data_flow_mapping": {
+          "sink_offsets": [0, 4],
+          "focus_mutation": true
+        },
+        "cfg_constraints": {
+          "unreached_branch": "0x1234",
+          "magic_value": "0xDEADBEEF"
+        }
+      }
+    },
+    {
+      "action": "seed_focus_probe",
+      "params": {
+        "seed_ids": ["seed_001", "seed_042"],
+        "focus_offsets": [0, 4]
+      }
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "params": {
+        "seed_ids": ["seed_001", "seed_042"],
+        "recipe": "mutate_length_and_checksum"
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "seed_001",
+      "strategy": "focus on length and checksum fields"
+    },
+    {
+      "seed_id": "seed_042",
+      "strategy": "focus on length and checksum fields"
+    }
+  ]
+}}
+{"run_id":"run_1779488665556782_p230982_0000","agent":"PlateauDiagnosisAgent","key":"plateau_1779503103903241_p230982_0002:PlateauDiagnosisAgent:eb7379e5a1ab81c1","reward_hint":0.000000,"memory":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Coverage stalled at 23.21% bitmap with 269 edges. No new paths in 10s window. Likely cause: structural barrier due to missing magic values or field delimiters in JSON parsing. Static analysis not available, but JSON format requires specific tokens (e.g., '{', ':', ','). Current corpus may lack diversity in field names or nesting structures."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "To overcome structural barrier, propose mutations that inject JSON structural elements (e.g., new keys, nested objects, arrays) and boundary values for numeric fields. Focus on offsets that reach comparison sinks (e.g., strcmp, memcmp) by analyzing coverage gaps. Since static context is empty, rely on generic JSON grammar: add '{}', '[]', ':', ',' at various positions, and vary string lengths and numeric ranges."
+    }
+  ]
+}}
+{"run_id":"run_1779488665556782_p230982_0000","agent":"SchedulerAgent","key":"plateau_1779503103903241_p230982_0002:SchedulerAgent:29dc4e697df0a6d1","reward_hint":0.000000,"memory":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Plateau detected with no new paths/edges in 10s. Static context empty, so focusing on under-explored seeds to trigger new coverage."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "seed_001",
+      "strategy": "focus",
+      "reason": "Seed with low edge coverage relative to corpus; likely under-explored."
+    },
+    {
+      "seed_id": "seed_002",
+      "strategy": "focus",
+      "reason": "Seed from initial corpus with few mutations; potential for new paths."
+    }
+  ]
+}}
+{"run_id":"run_1779488665556782_p230982_0000","agent":"CmpAgent","key":"plateau_1779503103903241_p230982_0002:CmpAgent:6df5079ed4deba30","reward_hint":0.000000,"memory":{
+  "agent": "CmpAgent",
+  "interventions": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Plateau detected with no new paths/edges. Static analysis not available, but based on common cJSON parsing, likely magic bytes (e.g., '{', '[') or structural fields (length, checksum) are bottlenecks. Propose targeted mutation on offsets 0-4 to inject common JSON magic values.",
+      "fields": [
+        {
+          "name": "magic_bytes",
+          "type": "Magic",
+          "target_begin": 0,
+          "target_end": 4,
+          "values": ["0x7B", "0x5B", "0x22", "0x30"]
+        }
+      ],
+      "data_flow_mapping": null,
+      "cfg_constraints": null
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": null,
+      "strategy": "focus_magic",
+      "offsets": [0, 1, 2, 3],
+      "values": ["0x7B", "0x5B", "0x22", "0x30"],
+      "reason": "Inject common JSON start bytes to trigger parser branches."
+    }
+  ]
+}}
+{"run_id":"run_1779488665556782_p230982_0000","agent":"MutatorAgent","key":"plateau_1779503103903241_p230982_0002:MutatorAgent:97fb7fdd58af1b27","reward_hint":0.000000,"memory":{
+  "agent": "MutatorAgent",
+  "interventions": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Plateau detected with zero new paths/edges in 10s window. Proposing per-seed operator weights and offset ranges to escape plateau.",
+      "seed_strategies": [
+        {
+          "seed_id": "all",
+          "operator_weights": {
+            "bit_flip": 0.1,
+            "byte_flip": 0.1,
+            "arithmetic": 0.15,
+            "interest": 0.1,
+            "dict": 0.2,
+            "havoc": 0.2,
+            "splice": 0.15
+          },
+          "offset_ranges": [
+            {"begin": 0, "end": 100},
+            {"begin": 200, "end": 300}
+          ],
+          "fields": []
+        }
+      ]
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "operator_weights": {
+        "bit_flip": 0.1,
+        "byte_flip": 0.1,
+        "arithmetic": 0.15,
+        "interest": 0.1,
+        "dict": 0.2,
+        "havoc": 0.2,
+        "splice": 0.15
+      },
+      "offset_ranges": [
+        {"begin": 0, "end": 100},
+        {"begin": 200, "end": 300}
+      ],
+      "fields": []
+    }
+  ]
+}}
+{"run_id":"run_1779488665556782_p230982_0000","agent":"DictionaryAgent","key":"plateau_1779503103903241_p230982_0002:DictionaryAgent:2a6ebdca55fcc672","reward_hint":0.000000,"memory":{"raw":"{\n  \"agent\": \"DictionaryAgent\",\n  \"interventions\": [\n    {\n      \"action\": \"dictionary_probe\",\n      \"params\": {\n        \"dictionary_entries\": [\n          {\n            \"value\": \"{\\\"key\\\":\\\"value\\\"}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"[]\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"null\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"true\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"false\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"0\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"1\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"-1\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"3.14\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\\\\\"\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\\\\\\\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\\/\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\\b\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\\f\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\\n\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\\r\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\\t\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\\u0000\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\\"\\\\u0041\\\"\",\n            \"type\": \"string\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"1e10\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"1E-10\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"1.0e+10\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"0.0\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"-0.0\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"1.7976931348623157E+308\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"5e-324\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"NaN\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"Infinity\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"-Infinity\",\n            \"type\": \"number\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"\\\":\\\"\\\"}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"[1,2,3]\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"[[[]]]\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"key\\\":\\\"value\\\",\\\"nested\\\":{\\\"inner\\\":1}}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"  {\\\"a\\\":1}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1}  \",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\n{\\\"a\\\":1}\\n\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"\\t{\\\"a\\\":1}\\t\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{,\\\"a\\\":1}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"[1,]\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"[,1]\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8,\\\"i\\\":9,\\\"j\\\":10}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8,\\\"i\\\":9,\\\"j\\\":10,\\\"k\\\":11}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8,\\\"i\\\":9}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8,\\\"i\\\":9,\\\"j\\\":10}\",\n            \"type\": \"json\",\n            \"hit_count\": 0\n          },\n          {\n            \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8"}}
+{"run_id":"run_1779488665556782_p230982_0000","agent":"FormatAgent","key":"plateau_1779503103903241_p230982_0002:FormatAgent:cb36b653b645535b","reward_hint":0.000000,"memory":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779488665556782_p230982_0000","agent":"CorpusAgent","key":"plateau_1779503103903241_p230982_0002:CorpusAgent:a2345195f348e0bb","reward_hint":0.000000,"memory":{
+  "agent": "CorpusAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Plateau detected with no new edges for 10 seconds. Current corpus has 600 seeds, many likely redundant. Focus on seeds that exercise rare edges to maximize coverage gain.",
+      "target_seeds": "favored",
+      "probe_count": 10
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "default_control",
+      "reason": "Maintain baseline fuzzing with current settings; no immediate need for drastic changes."
+    }
+  ]
+}}
+{"run_id":"run_1779488665556782_p230982_0000","agent":"ResultAnalysisAgent","key":"plateau_1779503103903241_p230982_0002:ResultAnalysisAgent:46ea5492bd757c51","reward_hint":0.000000,"memory":{
+    "plateau_id": "plateau_1779503103903241_p230982_0002",
+    "observation": "All micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward, zero new paths/edges/crashes, and no recipe hits. The main campaign shows a plateau with 0 execs_delta, 0 new_paths_delta, 0 new_edges_delta, and 0 new_crashes_delta over a 10-second window. Bitmap coverage is 23.21%, stability 99.26%, and cycles_wo_finds=12. This indicates a persistent plateau with no progress from any intervention.",
+    "recommendation": "Consider switching to a more aggressive mutation strategy or exploring new seed inputs. The current interventions are ineffective. Possibly increase dictionary size or use structural mutations based on static analysis if available."
+  }}

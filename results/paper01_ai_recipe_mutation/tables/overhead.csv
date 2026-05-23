@@ -1,3 +1,5 @@
 target,implementation_mode,paper_mode,repeats_observed,exec_sec_median,relative_exec_sec_delta_vs_baseline,median_recipe_hit_rate,notes
 cjson_parser,baseline-afl,AFL++ default,5,13055.6,0,,relative throughput delta; isolate lookup overhead with a dedicated mutator benchmark before making RQ4 claims
 cjson_parser,full-agent,AI recipe validated,5,13812.2,0.0579522,,relative throughput delta; isolate lookup overhead with a dedicated mutator benchmark before making RQ4 claims
+cjson_parser,no-mutator,Mutator disabled ablation,3,12712.2,-0.0263014,,relative throughput delta; isolate lookup overhead with a dedicated mutator benchmark before making RQ4 claims
+cjson_parser,rule-only,Rule recipe,3,13516.4,0.0352945,,relative throughput delta; isolate lookup overhead with a dedicated mutator benchmark before making RQ4 claims

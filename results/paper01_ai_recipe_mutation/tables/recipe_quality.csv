@@ -1,2 +1,3 @@
 target,recipe_source,candidates,promoted,promotion_rate,median_reward,median_hit_rate,median_new_paths,median_new_edges,unique_crashes_reported_sum
 cjson_parser,AI,20,0,0,0,,0,0,0
+cjson_parser,rule,0,0,,,,,,0

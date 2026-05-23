@@ -1,0 +1,217 @@
+{"run_id":"run_1779517826980444_p318617_0000","agent":"CoordinatorAgent","key":"plateau_1779532307541070_p318617_0001:CoordinatorAgent:ad13dfe4f81afb85","reward_hint":0.000000,"memory":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "rationale": "Plateau detected with zero new paths/edges in 10s window. Static analysis not available, but dictionary probing can introduce new string tokens to trigger deeper parsing logic in cjson.",
+      "params": {}
+    },
+    {
+      "action": "seed_focus_probe",
+      "rationale": "Corpus has 616 seeds with only 57 favored. Focusing on non-favored seeds may uncover new coverage by exploring underrepresented inputs.",
+      "params": {}
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "rationale": "With 622 cycles done and 37 cycles without finds, per-seed recipe mutation can systematically apply targeted mutations to each seed to break the plateau.",
+      "params": {}
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779517826980444_p318617_0000","agent":"PlateauDiagnosisAgent","key":"plateau_1779532307541070_p318617_0001:PlateauDiagnosisAgent:b41103808ee2d947","reward_hint":0.000000,"memory":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Corpus saturation likely: 616 corpus items, 622 cycles, 37 cycles without finds, edges at 23.21% bitmap coverage. Static analysis not available, but structural mutation via dictionary may trigger new paths.",
+      "fields": [
+        {
+          "name": "length_field",
+          "type": "Length",
+          "target_begin": "0x0",
+          "target_end": "0x4"
+        },
+        {
+          "name": "magic_field",
+          "type": "Magic",
+          "value": "0x7B2274657374223A",
+          "target_begin": "0x0",
+          "target_end": "0x8"
+        }
+      ],
+      "data_flow_mapping": {
+        "offset": 0,
+        "size": 4,
+        "sink": "parse_buffer"
+      },
+      "cfg_constraints": [
+        {
+          "branch": "0x401234",
+          "magic_value": "0xDEADBEEF"
+        }
+      ]
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "mutate_length_and_magic",
+      "reason": "Corpus saturation likely; mutate length fields to trigger different parsing paths and magic values to reach constrained branches."
+    }
+  ]
+}}
+{"run_id":"run_1779517826980444_p318617_0000","agent":"SchedulerAgent","key":"plateau_1779532307541070_p318617_0001:SchedulerAgent:0bc0d3f4fbd41ee5","reward_hint":0.000000,"memory":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "params": {
+        "reason": "Plateau detected with zero new paths/edges in 10s window. Static context empty; no structural metadata to leverage. Propose focusing on seeds that are under-explored based on AFL's favored count (57/616) and variable bytes (2).",
+        "seed_ids": [],
+        "focus_strategy": "favor_unexplored"
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "",
+      "strategy": "favor_unexplored",
+      "rationale": "Only 57 favored seeds out of 616 corpus; 2 variable bytes indicate limited diversity. Focus on non-favored seeds to explore new paths."
+    }
+  ]
+}}
+{"run_id":"run_1779517826980444_p318617_0000","agent":"CmpAgent","key":"plateau_1779532307541070_p318617_0001:CmpAgent:0ca9d684e8756d92","reward_hint":0.000000,"memory":{
+  "agent": "CmpAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779517826980444_p318617_0000","agent":"MutatorAgent","key":"plateau_1779532307541070_p318617_0001:MutatorAgent:7b476dc9d2b5e394","reward_hint":0.000000,"memory":{
+  "agent": "MutatorAgent",
+  "interventions": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Plateau detected with zero new paths/edges in 10s window. Static context empty, so fallback to generic per-seed recipe mutation to escape plateau.",
+      "seed_strategies": [
+        {
+          "seed_id": "all",
+          "operator_weights": {
+            "bit_flip": 0.15,
+            "byte_flip": 0.15,
+            "arithmetic": 0.1,
+            "interest": 0.1,
+            "dict": 0.1,
+            "havoc": 0.2,
+            "splice": 0.1,
+            "overwrite": 0.05,
+            "insert": 0.05
+          },
+          "offset_ranges": [
+            {"begin": 0, "end": 1024}
+          ]
+        }
+      ]
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "operator_weights": {
+        "bit_flip": 0.15,
+        "byte_flip": 0.15,
+        "arithmetic": 0.1,
+        "interest": 0.1,
+        "dict": 0.1,
+        "havoc": 0.2,
+        "splice": 0.1,
+        "overwrite": 0.05,
+        "insert": 0.05
+      },
+      "offset_ranges": [
+        {"begin": 0, "end": 1024}
+      ]
+    }
+  ]
+}}
+{"run_id":"run_1779517826980444_p318617_0000","agent":"DictionaryAgent","key":"plateau_1779532307541070_p318617_0001:DictionaryAgent:55462296afb2b140","reward_hint":0.000000,"memory":{
+  "agent": "DictionaryAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "dictionary_entries": [
+          {
+            "value": "0x00000000",
+            "type": "magic",
+            "context": "null bytes often trigger edge cases in parsers"
+          },
+          {
+            "value": "0xFFFFFFFF",
+            "type": "magic",
+            "context": "max uint32 may cause overflow or boundary checks"
+          },
+          {
+            "value": "0x7FFFFFFF",
+            "type": "magic",
+            "context": "max positive int32 for signed comparisons"
+          },
+          {
+            "value": "0x80000000",
+            "type": "magic",
+            "context": "min negative int32 for signed comparisons"
+          },
+          {
+            "value": "0x41414141",
+            "type": "magic",
+            "context": "common pattern for buffer overflow testing"
+          },
+          {
+            "value": "0x0A",
+            "type": "token",
+            "context": "newline character, often used as delimiter"
+          },
+          {
+            "value": "0x00",
+            "type": "token",
+            "context": "null terminator for strings"
+          },
+          {
+            "value": "0x20",
+            "type": "token",
+            "context": "space character"
+          },
+          {
+            "value": "0x22",
+            "type": "token",
+            "context": "double quote, common in JSON"
+          },
+          {
+            "value": "0x5C",
+            "type": "token",
+            "context": "backslash, escape character"
+          }
+        ]
+      }
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779517826980444_p318617_0000","agent":"FormatAgent","key":"plateau_1779532307541070_p318617_0001:FormatAgent:cb36b653b645535b","reward_hint":0.000000,"memory":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779517826980444_p318617_0000","agent":"CorpusAgent","key":"plateau_1779532307541070_p318617_0001:CorpusAgent:4d2c683eccf40d8f","reward_hint":0.000000,"memory":{
+  "agent": "CorpusAgent",
+  "interventions": [
+    {
+      "action": "default_control",
+      "reason": "Plateau detected with no new edges for 10 seconds. No static context available. Proceeding with default control to allow AFL to continue its normal operation."
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779517826980444_p318617_0000","agent":"ResultAnalysisAgent","key":"plateau_1779532307541070_p318617_0001:ResultAnalysisAgent:54c5943e4b56ba02","reward_hint":0.000000,"memory":{
+    "type": "memory_patch",
+    "content": "All micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward. No new paths, edges, crashes, or recipe hits. The plateau persists with no progress. Consider switching to a different mutation strategy or target configuration."
+  }}

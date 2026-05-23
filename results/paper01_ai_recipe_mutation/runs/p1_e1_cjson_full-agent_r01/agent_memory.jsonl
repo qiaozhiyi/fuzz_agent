@@ -1,0 +1,285 @@
+{"run_id":"run_1779474106841217_p139049_0000","agent":"CoordinatorAgent","key":"plateau_1779488549605347_p139049_0002:CoordinatorAgent:26f604a8c3e7af43","reward_hint":0.000000,"memory":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_string_length",
+            "type": "Length",
+            "target_begin": "0x0",
+            "target_end": "0x100"
+          }
+        ],
+        "data_flow_mapping": {
+          "offset": 0,
+          "sink": "cJSON_Parse"
+        },
+        "cfg_constraints": []
+      },
+      "rationale": "Plateau indicates stagnation; dictionary probe can introduce new string patterns to trigger edge coverage in JSON parsing."
+    },
+    {
+      "action": "seed_focus_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_key_magic",
+            "type": "Magic",
+            "target_begin": "0x0",
+            "target_end": "0x100"
+          }
+        ],
+        "data_flow_mapping": {
+          "offset": 8,
+          "sink": "cJSON_GetObjectItem"
+        },
+        "cfg_constraints": [
+          {
+            "branch": "unreached_branch_1",
+            "magic_value": "0xDEADBEEF"
+          }
+        ]
+      },
+      "rationale": "Focus on seeds that may contain specific magic values to reach uncovered branches in object item lookup."
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_checksum",
+            "type": "Checksum",
+            "target_begin": "0x0",
+            "target_end": "0x100"
+          }
+        ],
+        "data_flow_mapping": {
+          "offset": 16,
+          "sink": "cJSON_Validate"
+        },
+        "cfg_constraints": []
+      },
+      "rationale": "Per-seed recipe mutation can systematically alter checksum fields to bypass validation checks and explore new paths."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "seed_001",
+      "mutations": [
+        {
+          "field": "json_string_length",
+          "type": "Length",
+          "value": "0x80"
+        }
+      ]
+    },
+    {
+      "seed_id": "seed_002",
+      "mutations": [
+        {
+          "field": "json_key_magic",
+          "type": "Magic",
+          "value": "0xDEADBEEF"
+        }
+      ]
+    },
+    {
+      "seed_id": "seed_003",
+      "mutations": [
+        {
+          "field": "json_checksum",
+          "type": "Checksum",
+          "value": "0x12345678"
+        }
+      ]
+    }
+  ]
+}}
+{"run_id":"run_1779474106841217_p139049_0000","agent":"PlateauDiagnosisAgent","key":"plateau_1779488549605347_p139049_0002:PlateauDiagnosisAgent:166e346deca82a28","reward_hint":0.000000,"memory":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Coverage stalled at 23.21% bitmap with 269 edges. Static analysis not available, but structural barriers likely due to missing magic values or checksums. Dictionary probe can discover new tokens to bypass cmp gates.",
+      "confidence": 0.7
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Corpus has 598 seeds, but only 60 favored. Many seeds may be redundant. Per-seed recipe probe can identify which seeds are most productive and focus mutation effort.",
+      "confidence": 0.6
+    }
+  ]
+}}
+{"run_id":"run_1779474106841217_p139049_0000","agent":"SchedulerAgent","key":"plateau_1779488549605347_p139049_0002:SchedulerAgent:7cc1a2923c308015","reward_hint":0.000000,"memory":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Plateau detected with zero new paths/edges in 10s window. Static analysis context empty, so no structural metadata to leverage. Focus on under-explored seeds to break coverage plateau.",
+      "parameters": {
+        "seed_ids": [],
+        "focus_mode": "under_explored",
+        "sample_count": 10
+      }
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106841217_p139049_0000","agent":"CmpAgent","key":"plateau_1779488549605347_p139049_0002:CmpAgent:0ca9d684e8756d92","reward_hint":0.000000,"memory":{
+  "agent": "CmpAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106841217_p139049_0000","agent":"MutatorAgent","key":"plateau_1779488549605347_p139049_0002:MutatorAgent:3c3f3dd4c4e9fe5c","reward_hint":0.000000,"memory":{
+  "agent": "MutatorAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106841217_p139049_0000","agent":"DictionaryAgent","key":"plateau_1779488549605347_p139049_0002:DictionaryAgent:8b45330b48560f68","reward_hint":0.000000,"memory":{
+  "agent": "DictionaryAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "dictionary_entries": [
+          {
+            "type": "magic",
+            "value": "0x7B2274797065223A224F626A65637422",
+            "comment": "JSON object start with type field"
+          },
+          {
+            "type": "magic",
+            "value": "0x5B5D",
+            "comment": "Empty JSON array"
+          },
+          {
+            "type": "magic",
+            "value": "0x7B7D",
+            "comment": "Empty JSON object"
+          },
+          {
+            "type": "magic",
+            "value": "0x226E756C6C22",
+            "comment": "JSON null string"
+          },
+          {
+            "type": "magic",
+            "value": "0x74727565",
+            "comment": "JSON true"
+          },
+          {
+            "type": "magic",
+            "value": "0x66616C7365",
+            "comment": "JSON false"
+          },
+          {
+            "type": "magic",
+            "value": "0x2D31",
+            "comment": "Negative integer -1"
+          },
+          {
+            "type": "magic",
+            "value": "0x302E30",
+            "comment": "Float 0.0"
+          },
+          {
+            "type": "magic",
+            "value": "0x224022",
+            "comment": "String with special char @"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C5C",
+            "comment": "Double backslash escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C22",
+            "comment": "Escaped quote"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C2F",
+            "comment": "Escaped slash"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C62",
+            "comment": "Backspace escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C66",
+            "comment": "Form feed escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C6E",
+            "comment": "Newline escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C72",
+            "comment": "Carriage return escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C74",
+            "comment": "Tab escape"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C7530303030",
+            "comment": "Unicode escape \\u0000"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C7530444130",
+            "comment": "Unicode escape \\u0DA0 (Sinhala)"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C7530444130",
+            "comment": "Unicode escape \\u0DA0 (Sinhala)"
+          },
+          {
+            "type": "magic",
+            "value": "0x5C7530444130",
+            "comment": "Unicode escape \\u0DA0 (Sinhala)"
+          }
+        ]
+      }
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106841217_p139049_0000","agent":"FormatAgent","key":"plateau_1779488549605347_p139049_0002:FormatAgent:cb36b653b645535b","reward_hint":0.000000,"memory":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106841217_p139049_0000","agent":"CorpusAgent","key":"plateau_1779488549605347_p139049_0002:CorpusAgent:356961df41dc1b5f","reward_hint":0.000000,"memory":{
+  "agent": "CorpusAgent",
+  "interventions": [
+    {
+      "action": "default_control",
+      "reason": "Plateau detected with no new paths or edges in 10 seconds. Corpus has 598 seeds, many likely redundant. Recommend deduplication and minimization to reduce corpus size and focus fuzzing on diverse seeds."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Corpus has 598 seeds but only 60 favored. Many seeds may be redundant. Focus on seeds that cover unique edges or paths to maximize coverage per execution.",
+      "seed_ids": []
+    }
+  ]
+}}
+{"run_id":"run_1779474106841217_p139049_0000","agent":"ResultAnalysisAgent","key":"plateau_1779488549605347_p139049_0002:ResultAnalysisAgent:d6e50cbfcbcb2e5d","reward_hint":0.000000,"memory":{
+    "type": "micro_campaign_summary",
+    "content": "All four micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward. No new paths, edges, crashes, or recipe hits. The plateau persists. No intervention outperformed the baseline. Recommend revisiting mutation strategy or seed quality.",
+    "timestamp": 1779488650
+  }}

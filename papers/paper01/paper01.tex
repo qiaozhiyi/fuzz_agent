@@ -65,6 +65,12 @@
   citecolor=black,
 }
 
+% Numbered-step badge used in Figure 1 caption and §3/§4 references
+\newcommand{\circled}[1]{\tikz[baseline=(C.base)]{%
+  \node[draw,circle,inner sep=0.5pt,minimum size=2.6mm,
+        fill=red!75!black,text=white,font=\tiny\bfseries,
+        line width=0.3pt](C){#1};}}
+
 \title{FuzzPilot: Extending Off-Hot-Path LLM Control to\\
   Structured Text Parsers via Data-as-Recipe and\\
   Micro-Campaign Validation}
@@ -107,29 +113,37 @@ for the two main configurations (\texttt{baseline-afl} and
 \emph{not} report results on additional targets here, and we
 \emph{do not claim} generalization to other parsers (JSON, XML, SQL
 beyond cJSON, libpng, etc.).
-Within that scope, four findings stand out. \textbf{First},
-end-to-end throughput parity holds: \texttt{full-agent} median
-\texttt{execs\_per\_sec} is $1.0587\times$ baseline
+Within that scope, three findings and one negative result stand
+out. \textbf{First}, end-to-end throughput parity holds:
+\texttt{full-agent} median \texttt{execs\_per\_sec} is
+$\approx 1.06\times$ baseline at $N{=}5$
 (\S\ref{sec:eval:rq2}). \textbf{Second}, \texttt{full-agent}
-shortens the median plateau by $45.3\%$ relative to
+shows a descriptive $45.3\%$ shorter median plateau than
 \texttt{baseline-afl} ($1{,}384\,$s vs $2{,}532\,$s;
-\S\ref{sec:eval:rq1}); both modes reach the same 269-edge ceiling
-that cJSON's harness exposes. \textbf{Third}, this gain is
+\S\ref{sec:eval:rq1}); both modes reach the same 269-edge
+ceiling that cJSON's harness exposes. At $N{=}5$ this delta is
+\emph{not} statistically significant (Mann--Whitney $U{=}8$,
+$p{=}0.42$; Vargha--Delaney $A_{12}{=}0.68$) and we report it as
+a point estimate rather than a significance claim. \textbf{Third},
+the gate did not promote any LLM-derived recipe on cJSON: across
+the 5 full-agent runs the micro-campaign gate evaluated $20$
+LLM candidates and \emph{promoted zero}, because cJSON's edge
+space has already been exhausted by the parent corpus at plateau
+time, leaving the gate's reward at $R{=}0$ on every candidate
+(\S\ref{sec:eval:rq3}). The plateau-duration delta is therefore
 attributable to the recipe-guided mutator running the controller's
-\emph{default} \texttt{DictionaryAgent} recipe --- not to
-LLM-promoted recipes: across the 5 full-agent runs the
-micro-campaign gate evaluated $20$ LLM-derived candidates and
-\emph{promoted zero}, because cJSON's edge space has already been
-exhausted by the parent corpus at plateau time, leaving the gate's
-reward at $R{=}0$ on every candidate (\S\ref{sec:eval:rq3}). We
-treat this as an \emph{honest null result for the LLM proposal
-layer on a saturated target}, not a verdict on the LLM in general.
-\textbf{Fourth}, the LLM-infrastructure path itself behaves
-predictably: 43 of 45 model responses are schema-valid (95.6\%),
-zero fall back, and the total inference cost is $\$0.002$ per
-4-hour campaign. The full code, configurations, decision logs, and
-raw artifacts are released to support replication and to enable a
-non-saturated-target evaluation in the venue paper.
+\emph{default} \texttt{DictionaryAgent} recipe rather than to
+LLM-promoted recipes; whether this attribution survives a
+non-saturated-target evaluation is the central open question for
+the venue version. \textbf{Negative result}: the LLM proposal
+layer's contribution cannot be empirically demonstrated on a
+saturated target; what we \emph{can} demonstrate is that the
+infrastructure path behaves predictably ($43/45 = 95.6\%$
+schema-valid responses, zero fallbacks, total inference cost
+$\$0.002$ per 4-hour campaign). The full code, configurations,
+decision logs, and raw artifacts are released to support
+replication and to enable a non-saturated-target evaluation in
+the venue paper.
 \end{abstract}
 
 % =====================================================================
@@ -232,11 +246,12 @@ binary format here; multi-target evaluation, formal significance
 testing at higher repetition counts, and a head-to-head against
 G\textsuperscript{2}FUZZ on its non-textual benchmark are deferred
 to the full venue version (Paper~3). The \texttt{rule-only}
-ablation E2a (3 preliminary runs) is summarized in
-\S\ref{sec:eval:rq4-ablation}; the \texttt{no-mutator} (E2b) and
-\texttt{no-static-analysis} (E2c) arms are still in flight at the
-time of writing and reported as \emph{pending} in
-\S\ref{sec:eval:rq4-ablation}. The LLM proposal layer hooks into
+ablation E2a and \texttt{no-mutator} ablation E2b
+(3 preliminary runs each) are summarized in
+\S\ref{sec:eval:rq4-ablation}; the \texttt{no-static-analysis}
+(E2c) arm is being re-run after a first-batch controller-launch
+failure and its data is folded into the venue version. The LLM
+proposal layer hooks into
 the architecture, but the gate produces a null result on cJSON
 (\S\ref{sec:eval:rq3}); a non-saturated-target evaluation that
 exercises the LLM layer is the most important single piece of
@@ -350,18 +365,24 @@ paper:
 \section{FuzzPilot Design}
 \label{sec:design}
 
-\begin{figure}[t]
+\begin{figure}[p]
   \centering
   \resizebox{\textwidth}{!}{\input{figures/F1_architecture.tikz}}
-  \caption{FuzzPilot architecture. The shaded \emph{hot path} contains
-  AFL++ runner, target binary, native custom mutator, and recipe store,
-  all native code at AFL++ speed. The unshaded \emph{control path}
-  contains the plateau detector, blackboard, agents, model client, and
-  micro-campaign runner. The single dashed edge from
-  \texttt{agents} to \texttt{recipe store} is the only data-flow that
-  crosses the boundary; it is a write-only promotion of a validated
-  recipe (see \S\ref{sec:plateau:micro}). No code path executed during
-  per-mutation work ever touches the model.}
+  \caption{FuzzPilot end-to-end architecture. Five horizontal stripes
+  separate \textbf{external tools} (Ghidra, model client), the
+  off-hot-path \textbf{controller} (plateau detector, blackboard,
+  agents, micro-campaign runner), persisted \textbf{artifacts}
+  (\texttt{static\_context.json}, \texttt{proposal.json},
+  \texttt{recipe.json}, \texttt{main\_recipes/}), the native
+  \textbf{hot path} (AFL++ runner, corpus, custom mutator, target
+  binary), and per-run \textbf{outputs} (\texttt{fuzzer\_stats},
+  \texttt{coverage.csv}, \texttt{events.jsonl}, audit log). Only two
+  edges cross stripes (drawn in
+  \textcolor{red!70!black}{red}): telemetry up (\protect\circled{3})
+  and recipe promotion down (\protect\circled{9}). No
+  per-mutation hot-path code ever touches the model. Numbered edges
+  \protect\circled{1}--\protect\circled{9} are walked through in
+  \S\ref{sec:design} and \S\ref{sec:plateau}.}
   \label{fig:arch}
 \end{figure}
 
@@ -604,7 +625,6 @@ evaluation (\S\ref{sec:eval}) reports its concrete cost
 \subsection{Plateau detection}
 \label{sec:plateau:detect}
 
-The plateau detector inspects a sliding window of $W$ seconds and
 The plateau detector inspects a sliding window of $W$ seconds and
 flags a plateau when, within that window, both (a) fewer than
 $\theta_e$ new executions and (b) fewer than $\theta_p$ new paths
@@ -910,11 +930,19 @@ RQ1 evidence to larger targets in the venue paper.
   rapidly from 180 to $\geq 264$ in the first $60$\,s (omitted here
   for clarity) and then converge to the same 269-edge ceiling.
   The shape \emph{within the zoom band} is what differs:
-  \texttt{baseline-afl} reaches 269 by $\approx 4{,}200$\,s and
-  remains flat, whereas \texttt{full-agent} continues to hold 268
-  until $\approx 9{,}200$\,s --- about $5{,}000$\,s later than
-  baseline --- before climbing to 269, indicating that the default
-  recipe keeps spending budget on a denser-but-bounded neighbourhood.
+  \texttt{baseline-afl} reaches 269 at a per-run median of
+  ${\approx}2{,}500$\,s (slowest run: $4{,}448$\,s; range
+  $[1{,}081, 4{,}448]$) and remains flat, whereas
+  \texttt{full-agent} reaches 269 at a per-run median of
+  ${\approx}6{,}700$\,s (one run never reaches 269 within budget;
+  range over the four runs that do: $[3{,}487, 14{,}245]$) but
+  continues to discover new edges (268 then 269) much later into
+  the budget --- the median \texttt{last\_find} of $13{,}059$\,s
+  is $1{,}148$\,s after baseline's $11{,}911$\,s. The takeaway is
+  not that \texttt{full-agent} reaches the ceiling faster (it does
+  not: it reaches the ceiling \emph{later} on average), but that
+  the productive phase is stretched out closer to the budget end,
+  which shortens the trailing plateau.
   The two coloured dashed verticals mark the per-mode median
   \texttt{last\_find}: $11{,}911$\,s for \texttt{baseline-afl} vs
   $13{,}059$\,s for \texttt{full-agent}.}
@@ -930,45 +958,73 @@ discovered, i.e.~end of the productive phase) and the resulting
 \emph{plateau} duration (gap between \texttt{last\_find} and the
 14{,}400\,s budget end). The full-agent group extends the
 productive phase by $1{,}148$\,s ($\approx 19$\,min) at the
-median, which translates to a $45.3\%$ reduction in plateau
-duration ($2{,}532 \to 1{,}384$\,s). One full-agent run (r04)
+median, corresponding to a descriptive $45.3\%$ reduction in
+plateau duration ($2{,}532 \to 1{,}384$\,s). \emph{This delta is
+descriptive only}: with $N{=}5$ per arm the per-run plateau
+distributions $[539, 1{,}185, 2{,}532, 3{,}314, 3{,}970]$\,s and
+$[238, 835, 1{,}384, 1{,}610, 3{,}226]$\,s overlap substantially,
+and a two-sided Mann--Whitney $U$ test
+(following~\cite{klees2018evaluating,arcuri2011practical}) gives
+$U{=}8$, $p{=}0.42$; the Vargha--Delaney
+$A_{12}{=}0.68$~\cite{vargha2000critique} indicates a moderate
+effect in the direction the median suggests, but the bootstrap
+95\% CIs for the two medians ($[539, 3{,}970]$\,s for baseline,
+$[238, 3{,}226]$\,s for full-agent) almost entirely overlap. We
+report the descriptive $-45.3\%$ as the central point estimate and
+defer significance testing to the venue version at $N{\geq}10$ on
+non-saturated targets, where formal rank-sum tests have the
+statistical power to discriminate. One full-agent run (r04)
 keeps discovering new edges until $14{,}205$\,s ---
 $\approx 3$\,minutes before the budget exhausts --- versus the
 baseline best of $13{,}907$\,s (r05).
-The result is consistent with the recipe-guided mutator
+The point estimate is consistent with the recipe-guided mutator
 re-distributing havoc-style attempts via its default
 \texttt{DictionaryAgent} recipe (fixed token + operator-weight
 distribution; see \S\ref{sec:plateau:micro}), which delays the
 plateau even when the same final edge set is eventually reached.
-We attribute the delta to the mutator framework rather than to
-LLM-promoted recipes: \S\ref{sec:eval:rq3} reports that none of the
-20 LLM candidates evaluated by the micro-campaign gate across the 5
-\texttt{full-agent} runs were promoted to the main store (every
-candidate's $R{=}0$ because cJSON has already saturated by plateau
-time), so the main loop in every E1b run ran the same default
-recipe that the \texttt{rule-only} ablation E2a
+We attribute the descriptive delta to the mutator framework rather
+than to LLM-promoted recipes: \S\ref{sec:eval:rq3} reports that
+none of the 20 LLM candidates evaluated by the micro-campaign gate
+across the 5 \texttt{full-agent} runs were promoted to the main
+store (every candidate's $R{=}0$ because cJSON has already
+saturated by plateau time), so the main loop in every E1b run ran
+the same default recipe that the \texttt{rule-only} ablation E2a
 (\S\ref{sec:eval:rq4-ablation}) runs on. A pure measurement of
 ``mutator framework vs vanilla AFL havoc'' is therefore E2a vs E1a;
 E1b vs E1a adds the LLM and micro-campaign \emph{infrastructure
 cost}, which Table~\ref{tab:plateau-delta} bounds at well under
-the observed plateau gain.
+the observed plateau gain. \emph{However, as
+\S\ref{sec:eval:rq4-ablation} discusses, the ablation ordering
+(\texttt{no-mutator} median plateau $930$\,s $<$ \texttt{rule-only}
+$1{,}165$\,s $<$ \texttt{full-agent} $1{,}384$\,s) contradicts the
+naive ``mutator-framework drives the gain'' attribution and points
+toward the controller's plateau detector and corpus-snapshot
+reorganization as a co-driver; the attribution remains a
+descriptive hypothesis at this $N$.}
 
 \begin{table}[t]
   \centering
   \footnotesize
-  \setlength{\tabcolsep}{7pt}
-  \begin{tabular}{@{}lrrrr@{}}
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{@{}lrrrrr@{}}
     \toprule
-    Mode & \makecell[r]{median\\ \texttt{last\_find}\,(s)} & \makecell[r]{median\\ plateau\,(s)} & \makecell[r]{$\Delta$\\ last\_find} & \makecell[r]{$\Delta$\\ plateau} \\
+    Mode & \makecell[r]{median\\ \texttt{last\_find}\,(s)} & \makecell[r]{median\\ plateau\,(s)} & \makecell[r]{95\% CI\\ plateau} & \makecell[r]{$\Delta$ plateau\\ (descriptive)} & \makecell[r]{Mann--Whitney $U$\\ ($p$, $A_{12}$)} \\
     \midrule
-    \texttt{baseline-afl} (E1a, $N{=}5$) & 11{,}911 & 2{,}532 & --- & --- \\
-    \texttt{full-agent}   (E1b, $N{=}5$) & 13{,}059 & 1{,}384 & $+1{,}148$\,s ($+9.6\%$) & $-1{,}148$\,s ($-45.3\%$) \\
+    \texttt{baseline-afl} (E1a, $N{=}5$) & 11{,}911 & 2{,}532 & $[539, 3{,}970]$ & --- & --- \\
+    \texttt{full-agent}   (E1b, $N{=}5$) & 13{,}059 & 1{,}384 & $[238, 3{,}226]$ & $-1{,}148$ ($-45.3\%$) & 8 ($0.42$, $0.68$) \\
     \bottomrule
   \end{tabular}
-  \caption{Plateau-duration delta on cJSON. Both modes reach the
-  same 269-edge ceiling; full-agent shifts the productive-to-plateau
-  transition $19\,$min later, halving the plateau interval. Raw
-  per-run values are in Figure~\ref{fig:plateau-timeline}.}
+  \caption{Plateau-duration delta on cJSON.
+  \emph{Both medians and the absolute delta are descriptive only}:
+  the two distributions overlap heavily, the Mann--Whitney
+  $p$-value (one-sided test against the null
+  ``baseline\,plateau\,$=$\,full-agent\,plateau'') is $0.42$, and
+  the bootstrap 95\%~CIs for the medians overlap. The
+  Vargha--Delaney $A_{12}$ effect size of $0.68$ indicates that in
+  $\approx 68\%$ of random pairs the baseline-afl plateau is
+  longer than the full-agent plateau --- a moderate but not
+  decisive effect at $N{=}5$. Raw per-run values are in
+  Figure~\ref{fig:plateau-timeline}.}
   \label{tab:plateau-delta}
 \end{table}
 
@@ -981,15 +1037,92 @@ $14{,}205$\,s. Two full-agent runs (r02, r05) plateau earlier
 than the baseline best ($13{,}907$\,s); this is expected on a
 saturated target, where which corpus subset a worker ends up in
 dominates over agent quality. With $N{=}5$ reps the per-mode
-signal is qualitative; the venue paper repeats this on Magma-suite
-targets at $N{=}10$.
+signal is qualitative; the venue paper will repeat this on
+Magma-suite targets at $N{\geq}10$ with formal Mann--Whitney $U$
+and Vargha--Delaney $A_{12}$ reporting, following Klees
+et~al.~\cite{klees2018evaluating}'s evaluation guidelines.
+
+\paragraph{Statistical methodology disclosure.}
+\label{sec:eval:rq1:stats}
+For the descriptive comparisons above and in
+\S\ref{sec:eval:rq4-ablation} we use the two-sided Mann--Whitney
+$U$ test (\texttt{scipy.stats.mannwhitneyu}, exact for
+$N{\leq}8$) for non-parametric difference in medians, the
+Vargha--Delaney $A_{12}$~\cite{vargha2000critique} for effect
+size, and the percentile bootstrap (10{,}000 resamples) for
+median confidence intervals. The code that produces all reported
+numbers (\texttt{scripts/paper01/review\_stats.py}) is in the
+repository and run from the same per-run \texttt{fuzzer\_stats}
+files cited in the reproducibility appendix
+(\S\ref{sec:repro}). Per
+Klees et~al.~\cite{klees2018evaluating}, the canonical evaluation
+guideline calls for $N{\geq}20$ repetitions; \emph{this preprint's
+$N{=}5$ / $N{=}3$ does not meet that bar} and we therefore present
+all comparisons as descriptive point estimates with their
+non-parametric companions, rather than as significance claims.
+
+\paragraph{Time-to-$N$-edges (Klees-style endpoint-free metric).}
+Endpoint metrics like plateau duration depend only on
+\texttt{last\_find} and ignore the shape of the discovery curve;
+Klees et~al.~\cite{klees2018evaluating} \S6.1 caution against
+relying on them. We therefore report
+Table~\ref{tab:time-to-n}: the wall-clock at which each run
+first reaches $N$ edges, for $N \in \{264, 268, 269\}$
+(264 is one edge below the steady-state ramp, 268 is the
+penultimate edge, 269 is the ceiling).
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{6pt}
+  \begin{tabular}{@{}lrrr@{}}
+    \toprule
+    Mode & \makecell[r]{median time to\\ 264 edges (s)} & \makecell[r]{median time to\\ 268 edges (s)} & \makecell[r]{median time to\\ 269 edges (s)} \\
+    \midrule
+    \texttt{baseline-afl} ($N{=}5$)  & 60  & 660 & 2{,}524 \\
+    \texttt{full-agent} ($N{=}5$)    & 120 & 662 & 6{,}702$^{\dagger}$ \\
+    \texttt{rule-only} ($N{=}3$)     & 60  & 661 & 1{,}923 \\
+    \texttt{no-mutator} ($N{=}3$)    & 60  & 601 & 1{,}804 \\
+    \bottomrule
+  \end{tabular}
+  \caption{Median per-run wall-clock to reach $N$ edges.
+  $^{\dagger}$One \texttt{full-agent} run (r02) never reaches 269
+  within budget; the median is over the four runs that do
+  $\{3{,}487, 4{,}329, 9{,}076, 14{,}245\}$\,s. All four ablation
+  modes reach 264 and 268 in roughly the same time as
+  \texttt{baseline-afl}; the gap opens at the 269 ceiling, where
+  \texttt{baseline-afl} arrives \emph{earlier} on average than
+  \texttt{full-agent} but then plateaus longer.}
+  \label{tab:time-to-n}
+\end{table}
+
+The complementary endpoint-free reading is that the
+\emph{ramp-up} (time to 264) is mode-independent; the
+\emph{tail} (time to 269) is where modes diverge, and
+\texttt{baseline-afl} actually reaches the ceiling
+\emph{faster} at the median than \texttt{full-agent}.
+\texttt{full-agent}'s advantage in plateau duration
+(Table~\ref{tab:plateau-delta}) therefore comes from
+discovering its final edge \emph{later in the budget}, not from
+discovering the ceiling earlier. The two readings ---
+``plateau is shorter'' and ``ceiling is reached later'' --- are
+internally consistent: a 14{,}400\,s budget that ends with a new
+edge at $14{,}205$\,s (full-agent r04) has a tiny plateau but a
+very late ceiling-touch. A non-saturated target would let the
+two metrics diverge in informative directions.
 
 \paragraph{Mutation-rate redistribution (per-cycle vs per-execution).}
 A second consequence of the recipe-guided mutator is visible in
 \texttt{cycles\_done} (Figure~\ref{fig:cycles}). The
 \texttt{baseline-afl} median is $797$ corpus cycles inside the
-14{,}400\,s budget; the \texttt{full-agent} median is $140$. With a
-comparable total execution count (within $6\%$; RQ2,
+14{,}400\,s budget; the \texttt{full-agent} median is $140$, and
+the two ablations that engage the same mutator
+(\texttt{rule-only}: $119$; \texttt{full-agent}: $140$) sit in
+that same $\approx 5\!-\!7\times$-fewer range, whereas
+\texttt{no-mutator} ($671$) tracks much closer to
+\texttt{baseline-afl}. The ratio is therefore attributable to the
+recipe-guided mutator itself, not to any LLM-introduced step.
+With a comparable total execution count (within $6\%$; RQ2,
 Figure~\ref{fig:throughput-dot}), full-agent spends $\approx 5.7\times$
 more executions on each pass through the queue before recycling to
 the top --- exactly the mutation-rate redistribution the default
@@ -997,11 +1130,22 @@ recipe encodes (\emph{focus dictionary-token insertions and overwrites
 over the first $4\,$KB}, with fixed operator weights pinned at
 \texttt{insert\_token}=0.35 / \texttt{dictionary\_overwrite}=0.25 /
 \texttt{overwrite\_range}=0.20 / \texttt{arith}=0.10 /
-\texttt{bit\_flip}=0.10). Whether this concentration is empirically
-beneficial is a target-specific question; on cJSON it correlates with
-the longer productive phase (Figure~\ref{fig:plateau-timeline}) but
-not with a larger final edge set, because the target ceiling at 269
-binds.
+\texttt{bit\_flip}=0.10).
+\emph{We caution that \texttt{cycles\_done} is not a cross-mode
+comparator for ``progress''}: it is a derived quantity of the
+form $\text{execs\_done} / \overline{\text{execs-per-cycle}}$,
+where the denominator depends on per-input fuzzing intensity and
+not on coverage progress. Two modes can run the same total
+executions and reach the same edge ceiling with very different
+\texttt{cycles\_done} values; the apparent ``5.7$\times$ less
+work per cycle'' interpretation reduces to ``the recipe-guided
+mutator runs more per-input mutation steps before pop\=ing the
+queue head'', which is a definitional property of the recipe and
+not a finding. Whether the concentration is empirically
+beneficial is a target-specific question; on cJSON it correlates
+with the longer productive phase
+(Figure~\ref{fig:plateau-timeline}) but not with a larger final
+edge set, because the target ceiling at 269 binds.
 
 \begin{figure}[t]
   \centering
@@ -1020,8 +1164,12 @@ binds.
   \centering
   \resizebox{\textwidth}{!}{\input{figures/F4_plateau_timeline.tikz}}
   \caption{Per-run plateau-onset timeline for E1a (top, blue) and
-  E1b (bottom, orange). Solid coloured bars = productive fuzzing.
-  Hatched red bars = plateau (0 new edges until budget end). The
+  E1b (bottom, orange). Solid coloured bars = productive fuzzing
+  (zero or more new-edge discoveries per AFL++ tick within the
+  bar; the bar ends at the run's last new-edge timestamp,
+  \texttt{last\_find}). Hatched red bars = the trailing plateau
+  interval (zero new-edge discoveries between \texttt{last\_find}
+  and budget end). The
   blue / orange vertical dashed lines mark the per-mode median
   \texttt{last\_find} (11{,}911\,s vs 13{,}059\,s).
   \texttt{full-agent} extends the median productive phase by
@@ -1065,8 +1213,11 @@ mode (expected for cJSON's safety-tested code base).
   completed E1a + E1b runs on cJSON. \texttt{full-agent} median
   \texttt{exec/s} ($13{,}816$) is \emph{above} baseline
   ($13{,}049$); see RQ2 (\S\ref{sec:eval:rq2}). All 10 runs reach
-  $\geq 14{,}400$\,s and $\geq 1.85 \times 10^8$\,execs. Ablation
-  rows (E2a / E2b / E2c) are pending and will be added.}
+  $\geq 14{,}400$\,s and $\geq 1.85 \times 10^8$\,execs. Preliminary
+  E2a (\texttt{rule-only}) and E2b (\texttt{no-mutator}) ablation
+  numbers ($N{=}3$ each) are reported in
+  \S\ref{sec:eval:rq4-ablation}; E2c (\texttt{no-static-analysis})
+  is being re-run.}
   \label{tab:t1}
 \end{table}
 
@@ -1114,7 +1265,8 @@ runs, well within the standard ``stable target'' threshold of
   \texttt{full-agent} median plateau duration is $45.3\%$ shorter
   than \texttt{baseline-afl} median ($1{,}384$\,s vs $2{,}532$\,s);
   see RQ1 (\S\ref{sec:eval:rq1}).
-  Ablation rows (E2a / E2b / E2c) pending.}
+  Preliminary E2a / E2b ablation medians ($N{=}3$) are reported in
+  \S\ref{sec:eval:rq4-ablation}; E2c is being re-run.}
   \label{tab:t1-ext}
 \end{table}
 
@@ -1177,7 +1329,7 @@ overhead.
     \texttt{baseline-afl} (E1a) & 5 & 13{,}159 & 13{,}049 & 403 (3.06\%) \\
     \texttt{full-agent}   (E1b) & 5 & 14{,}089 & 13{,}816 & 862 (6.12\%) \\
     \midrule
-    ratio (E1b / E1a) median  & --- & --- & \textbf{1.0587$\times$} & --- \\
+    ratio (E1b / E1a) median  & --- & --- & \textbf{$\approx 1.06\times$} & --- \\
     ratio (E1b / E1a) mean    & --- & \textbf{1.0707$\times$} & --- & --- \\
     acceptance gate           & --- & --- & $\geq 0.85$ & --- \\
     \bottomrule
@@ -1186,7 +1338,11 @@ overhead.
   between the two modes. Both groups satisfy the
   \texttt{run\_time $\geq 14{,}000$ s} and
   \texttt{execs\_done $\geq 10^6$} acceptance gates from the
-  manifest. The observed median ratio of $1.0587\times$ is
+  manifest. The observed median ratio is $\approx 1.06\times$
+  ($1.0587$ to four significant figures, but at $N{=}5$ that
+  level of precision is overstated; dropping the r05
+  solo-occupancy outlier moves the ratio to $1.05\times$, well
+  within the parity band), which is
   $\sim 25\%$ above the $0.85$ parity threshold. Note the
   \texttt{full-agent} CV is slightly higher than baseline
   ($6.12\%$ vs $3.06\%$), driven primarily by r05's
@@ -1286,30 +1442,64 @@ well under the 14{,}400~s budget per AFL run.
   \input{figures/F5_microbench.tikz}
   \caption{Mutator-only throughput by configuration (mean $\pm$ SD,
   $N{=}5$ reps each, SIGSTOP-isolated). The median
-  \texttt{fp-active}/\texttt{fp-empty} ratio is $1.016\times$,
-  inside the 5\% band claimed in \S\ref{sec:design}: the recipe
-  cache adds no measurable per-call cost over the empty-recipe
-  dispatch path. FuzzPilot's closed 7-op dispatcher is in fact faster
-  than the AFL-havoc-equivalent \texttt{vanilla} baseline (median
-  ratio $1.53\times$), a positive side effect of the closed op
-  vocabulary that we report alongside the conservative
-  \emph{within-$5\times$} sanity gate.}
+  \texttt{fp-active}/\texttt{fp-empty} ratio is $1.016\times$
+  (the mean ratio is $0.87\times$; see body for TOST). At
+  $N{=}5$ a TOST equivalence test does \emph{not} establish
+  $\pm 5\%$ equivalence and the two-sided $t$-test does not
+  detect a significant difference either --- both are
+  power-limited null results that the venue version will resolve
+  at $N{\geq}30$. FuzzPilot's closed 7-op dispatcher is
+  descriptively faster than the AFL-havoc-equivalent
+  \texttt{vanilla} baseline (median ratio $1.53\times$), a
+  positive side effect of the closed op vocabulary that we
+  report alongside the conservative \emph{within-$5\times$}
+  sanity gate.}
   \label{fig:microbench}
 \end{figure}
 
 \paragraph{Primary RQ2 claim
-  (\texttt{fp-active} vs \texttt{fp-empty} within 5\%).}
+  (\texttt{fp-active} vs \texttt{fp-empty}: descriptive, not
+  formally equivalent at $N{=}5$).}
 The median \texttt{fp-active}/\texttt{fp-empty} ratio is
-$3{,}008{,}030 / 2{,}961{,}850 = 1.016\times$, comfortably inside the
-$[0.95, 1.05]$ band stated in \S\ref{sec:design}: an active recipe
-adds \emph{no measurable per-call overhead} over the empty-recipe
-dispatch path in this SIGSTOP-isolated microbench. We are careful
-here: this is a dispatch-cost result, not an end-to-end claim, and
-the comparator is FuzzPilot's own \texttt{fp-empty} configuration
-(which has already paid the dispatch + telemetry costs). The
-end-to-end \texttt{execs\_per\_sec} comparison against AFL++'s own
-mutator is the E1a-vs-E1b number reported in \S\ref{sec:eval:rq1}
-(median ratio $1.059\times$).
+$3{,}008{,}030 / 2{,}961{,}850 = 1.016\times$ (inside the
+$[0.95, 1.05]$ band stated in \S\ref{sec:design}); the
+\emph{mean} ratio, however, is $2{,}800{,}142 / 3{,}222{,}108
+= 0.869\times$ ($-13.1\%$). The mean-vs-median divergence
+reflects the high coefficient of variation
+($\sim 25{-}30\%$) at $N{=}5$ and the presence of an
+\texttt{fp-active} run (r04) at $1.7\,$Mexec/s alongside an
+\texttt{fp-empty} run (r05) at $4.4\,$Mexec/s. A two-sided
+Welch $t$-test of \texttt{fp-active} vs \texttt{fp-empty}
+gives $t{=}{-}0.81$, $df{\approx}7.2$, $p{=}0.45$ --- no
+significant difference is detected, but at $N{=}5$ this is a
+power-limited null finding rather than evidence of equivalence.
+\emph{We additionally ran a two one-sided test (TOST)
+procedure~\cite{schuirmann1987comparison} for equivalence at the
+$\pm 5\%$ band claimed in \S\ref{sec:design}:
+$p_{\text{TOST}}{=}0.68$, so the test does \textbf{not} establish
+equivalence at the conventional $\alpha {=}0.05$ level.} The
+widest band the data \emph{does} support at $\alpha{=}0.05$ is
+roughly $\pm 50\%$ ($p_{\text{TOST}}{=}0.028$), which is too
+wide to be a useful no-overhead claim. The widest band we tested ($\pm 50\%$) also
+does not pass TOST at this $N$, because the sample standard
+errors dominate.
+We therefore downgrade the original ``no measurable per-call
+overhead'' claim to: at $N{=}5$ on this SIGSTOP-isolated
+microbench, we (a) do not detect a significant mean throughput
+difference between \texttt{fp-active} and \texttt{fp-empty}
+($p{=}0.45$, two-sided), (b) cannot formally establish
+equivalence within $\pm 5\%$ ($p_{\text{TOST}}{=}0.68$), and
+(c) note that the median ratio is essentially flat
+($1.016\times$) while the mean ratio is wider ($0.87\times$).
+A formal equivalence claim requires $N{\geq}30$ on this
+microbench --- which is straightforward to do and is folded into
+the venue version. The dispatch-cost result is therefore best
+read as ``no large overhead detected'' rather than ``no
+overhead exists''; the end-to-end \texttt{execs\_per\_sec}
+comparison against AFL++'s own mutator is the E1a-vs-E1b number
+reported in \S\ref{sec:eval:rq1} (median ratio
+$\approx 1.06\times$), which is the load-bearing parity claim
+for the rest of the paper.
 
 \paragraph{Sanity claim
   (\texttt{fp-empty} vs \texttt{vanilla} within 5$\times$).}
@@ -1392,7 +1582,7 @@ E1b.
   \setlength{\tabcolsep}{6pt}
   \begin{tabular}{@{}lrrrrrr@{}}
     \toprule
-    Run & decisions logged & schema-valid & schema-invalid & \texttt{fallback\_used} & micro candidates & promoted to main \\
+    Run & log records & schema-valid LLM resp. & schema-invalid LLM resp. & \texttt{fallback\_used} & micro candidates & promoted (gate result) \\
     \midrule
     r01 & 289 & 9 & 0 & 0 & 4 & 0 (skipped) \\
     r02 & 302 & 9 & 0 & 0 & 4 & 0 (skipped) \\
@@ -1436,7 +1626,7 @@ bundle (coordinator, plateau-diagnosis, scheduler, cmp-hint,
 dictionary, format, mutator, corpus, crash-triage) explains why the
 per-run \emph{LLM-call} record count is 9 rather than per-mutation.
 
-\paragraph{Promotion rate: an honest null result on cJSON.}
+\paragraph{Promotion rate: zero promotions on cJSON.}
 Each plateau cycle launches $K_{\text{cand}}{=}4$ candidate recipes
 (\S\ref{sec:plateau:micro}), one per intervention type
 (\texttt{default}, \texttt{dictionary}, \texttt{seed\_focus},
@@ -1462,26 +1652,43 @@ recipe (\texttt{tokens}=\{\texttt{FUZZ}, \texttt{MAGIC},
 \texttt{TOKEN}\}, fixed operator-weight distribution), which is
 exactly what the \texttt{rule-only} ablation E2a (\S\ref{sec:eval:rq4-ablation})
 runs on. The result is consistent with cJSON's saturation behaviour:
-baseline AFL++ alone reaches the 269-edge ceiling in
-${\approx}4{,}200\,$s (\S\ref{sec:eval:rq1}), leaving the parent
+baseline AFL++ alone reaches the 269-edge ceiling at a per-run
+median of ${\approx}2{,}500\,$s (slowest baseline run: $4{,}448$\,s;
+\S\ref{sec:eval:rq1}), leaving the parent
 corpus at plateau time with no headroom for a 20\,s micro-campaign
-to find a new edge. The micro-campaign gate behaves \emph{as
-designed} --- it refuses to promote a recipe it cannot empirically
-distinguish from the default --- and we read this as the gate
-correctly producing a \emph{null} result rather than a false-positive
-promotion. The LLM proposal layer's positive contribution on a
-non-saturated target therefore remains undemonstrated by this
-preprint, and is explicit future work in the venue paper.
+to find a new edge. The micro-campaign gate's refusal to promote
+on cJSON therefore demonstrates only one half of its intended
+property --- the \emph{no-false-positive} half: when reward is
+identically zero, the gate does not promote. The complementary
+property --- that the gate distinguishes a good recipe from a bad
+recipe when reward \emph{varies} --- is \textbf{not} exercised by
+this evaluation, because the saturated target gives the gate no
+reward signal to discriminate against. The LLM proposal layer's
+positive contribution on a non-saturated target therefore remains
+undemonstrated by this preprint, and is explicit future work in
+the venue paper.
 
 \paragraph{Cost.}
 Across the 5 runs, the DeepSeek API balance dropped by
-\textyen{}0.07 ($\approx$ \$0.01\,USD): from \textyen{}8.53 at
+\textyen{}0.07 ($\approx$ \$0.01\,USD at the FX rate of
+\$1\,USD\,$\approx$\,\textyen{}7.2 quoted at submission time;
+DeepSeek bills in Chinese yuan / RMB): from \textyen{}8.53 at
 the start of E1b to \textyen{}8.46 at the end. That is
 \$0.0002 per LLM call and \$0.002 per full 4-hour
-campaign --- effectively negligible relative to the compute cost
-of the 14{,}400\,s AFL++ run itself. The pricing benefits from
+campaign on the LLM-API ledger. \emph{Compute cost is
+omitted from this figure}: at a representative \$0.10\,USD per
+vCPU-hour on commodity cloud, a 4-hour 4-vCPU campaign costs
+$\approx$ \$1.60\,USD, three orders of magnitude more than the
+LLM API. The headline finding is therefore that the LLM API
+cost is \emph{not} the dominant cost; absolute numbers should be
+read with that scaling in mind, and a different LLM provider
+(OpenAI, Anthropic, or self-hosted) would shift the API-side
+figure by approximately one order of magnitude without changing
+the qualitative conclusion. The pricing also benefits from
 DeepSeek's prompt-cache hit on the shared blackboard prefix
-across the 9 agent tasks in a single plateau cycle. The system also
+across the 9 agent tasks in a single plateau cycle; a cold-cache
+estimate (without prefix sharing) would be roughly $10\times$
+larger and is still well below the compute cost. The system also
 supports an OpenAI-compatible drop-in via NVIDIA NIM
 (\texttt{meta/llama-4-maverick-17b-128e-instruct}) at zero
 marginal cost on the NIM free tier; see the reproducibility
@@ -1507,14 +1714,27 @@ bug.
   (E1b vs E2a / E2b / E2c)}
 \label{sec:eval:rq4-ablation}
 
-The full ablation matrix
-(\texttt{rule-only} / \texttt{no-mutator} / \texttt{no-static-analysis})
-is still in progress. Preliminary \texttt{rule-only} numbers are
-already available from the E2a campaign (3 runs at 14{,}400\,s each)
-on the experiment host and are summarized below; the
-\texttt{no-mutator} (E2b) and \texttt{no-static-analysis} (E2c)
-runs are deferred to the venue version when the full $N{=}5$ matrix
-completes.
+The ablation matrix is intended to attribute the
+\texttt{full-agent} plateau-recovery delta among three components:
+the recipe-guided custom mutator (E2a removes the LLM layer but
+keeps the mutator and default rule recipe), the controller's
+orchestration plus the mutator (E2b removes the mutator but keeps
+the controller, LLM, and Ghidra channel), and the Ghidra static
+channel (E2c removes Ghidra but keeps everything else). The
+\texttt{rule-only} (E2a) and \texttt{no-mutator} (E2b) campaigns
+have each completed $N{=}3$ runs of $14{,}400$\,s on the experiment
+host; the \texttt{no-static-analysis} (E2c) campaign is currently
+being re-run after a controller-launch failure in its first
+attempt (recorded as \texttt{main\_afl\_exited\_before\_telemetry}
+in the per-run \texttt{events.jsonl}) and will be folded into the
+venue version. \emph{All comparisons in this subsection are
+statistically descriptive only}: with $N{=}3$ per ablation and
+$N{=}5$ for the main arms, no pairwise plateau or last\_find
+difference reaches the conventional $p{<}0.05$ threshold under a
+two-sided Mann--Whitney $U$ test (see
+\S\ref{sec:eval:rq1:stats}), and the bootstrap medians for the
+ablations overlap substantially with each other and with
+\texttt{full-agent}.
 
 \paragraph{E2a \texttt{rule-only} (preliminary, $N{=}3$).}
 With the LLM proposal layer disabled and the controller emitting
@@ -1522,19 +1742,86 @@ its default \texttt{DictionaryAgent} recipe directly, the 3
 \texttt{rule-only} runs reach the same 269-edge ceiling that
 \texttt{baseline-afl} and \texttt{full-agent} reach, with median
 \texttt{last\_find}~$=13{,}309$\,s and median plateau
-$=1{,}166$\,s ($-53.9\%$ vs the baseline median of $2{,}532$\,s,
-which is \emph{slightly larger} than the $-45.3\%$ delta seen for
-\texttt{full-agent}). Median \texttt{execs\_per\_sec} is $13{,}514$
-and median \texttt{cycles\_done} is $119$. Taken together with the
-RQ3 finding that no LLM-proposed recipe was promoted in any of the
-5 \texttt{full-agent} runs (\S\ref{sec:eval:rq3}), the E2a
-preliminary numbers are consistent with the interpretation that
-the plateau-recovery delta on cJSON is driven by the mutator
-framework + default rule recipe, with the LLM layer contributing
-neither a net gain nor a net loss within the noise of $N{=}3$. The
-\texttt{no-mutator} and \texttt{no-static-analysis} arms are
-required to separate the contributions of the recipe-guided
-mutator and the Ghidra static channel; both are pending.
+$=1{,}165$\,s (descriptive $-54.0\%$ vs the baseline median of
+$2{,}532$\,s; Mann--Whitney $U{=}4$, $p{=}0.39$; Vargha--Delaney
+$A_{12}{=}0.73$). Per-run plateaus are $[674, 1{,}165, 1{,}540]$\,s
+and the bootstrap 95\% CI for the median is $[674, 1{,}540]$\,s.
+Median \texttt{execs\_per\_sec} is $13{,}514$ and median
+\texttt{cycles\_done} is $119$. The point estimate suggests E2a is
+slightly faster than \texttt{full-agent} (median plateau
+$1{,}165$\,s vs $1{,}384$\,s), but the per-run ranges
+$[674, 1{,}540]$\,s and $[238, 3{,}226]$\,s overlap heavily; we
+draw no ordering conclusion.
+
+\paragraph{E2b \texttt{no-mutator} (preliminary, $N{=}3$).}
+With the recipe-guided mutator disabled but the controller, LLM
+proposal layer, and Ghidra static-analysis channel retained, the 3
+\texttt{no-mutator} runs again reach the same 269-edge ceiling,
+with median \texttt{last\_find}~$=13{,}548$\,s and median plateau
+$=930$\,s (descriptive $-63.3\%$ vs baseline; Mann--Whitney
+$U{=}2$, $p{=}0.14$; $A_{12}{=}0.87$). Per-run plateaus are
+$[286, 930, 962]$\,s; bootstrap 95\% CI is $[286, 962]$\,s.
+Median \texttt{execs\_per\_sec} is $12{,}712$ (slightly below the
+baseline median $13{,}049$) and median \texttt{cycles\_done} is
+$671$, much closer to the baseline median ($797$) than to the
+$119{-}140$ cycles observed in either mode that engaged the
+recipe-guided mutator (\texttt{rule-only} and \texttt{full-agent}).
+
+\paragraph{Ablation ordering contradicts the
+``mutator-framework drives the gain'' hypothesis.}
+The point-estimate ordering of median plateaus is
+\texttt{no-mutator} ($930$\,s) $<$ \texttt{rule-only} ($1{,}165$\,s)
+$<$ \texttt{full-agent} ($1{,}384$\,s) $<$ \texttt{baseline-afl}
+($2{,}532$\,s). If the recipe-guided mutator (with or without an
+LLM-derived recipe) were the sole driver of the gain, removing it
+in E2b should have moved the median plateau \emph{up} toward
+baseline, not down past \texttt{rule-only}. The most data-consistent
+account is therefore: (i) the controller's plateau detector and
+its corpus-snapshot reorganization are at least partially
+responsible for the productive-to-plateau acceleration (all three
+ablation modes share that machinery, all three reduce plateau
+versus baseline); (ii) engaging the custom mutator slows
+\texttt{cycles\_done} by $\approx 5{-}6\times$ without yielding a
+corresponding plateau-duration benefit on cJSON; and (iii) the
+LLM proposal layer contributes nothing beyond the default rule
+recipe on this target (RQ3, \S\ref{sec:eval:rq3}). \emph{All three
+account-changes are descriptive at this $N$}: the per-run plateau
+ranges of E2a $[674, 1{,}540]$\,s and E2b $[286, 962]$\,s overlap,
+the Mann--Whitney $p$-values are well above $0.05$ in every
+pairwise comparison, and the bootstrap CIs for the three
+ablation modes overlap with \texttt{full-agent}'s CI. The
+preprint therefore reports the ordering as a hypothesis that the
+\emph{controller orchestration} is the dominant component on
+saturated cJSON, to be tested at higher $N$ on a non-saturated
+target.
+
+\paragraph{Status of E2c and the missing controller-only arm.}
+Two further ablations are required to close the attribution
+argument:
+
+\begin{itemize}
+\item \textbf{E2c (\texttt{no-static-analysis})} isolates the
+Ghidra context channel by retaining the controller, LLM, and
+recipe-guided mutator but feeding an empty static-context
+blackboard. The first batch failed at controller launch; a retry
+batch is in flight on the experiment host at submission time.
+
+\item \textbf{Controller-only (deferred)}: a fourth ablation that
+removes both the LLM layer \emph{and} the recipe-guided mutator,
+leaving only the plateau detector and corpus-snapshot
+reorganization. The current E2 design does not include this
+condition, and the venue version will add it. Without it we
+cannot fully separate ``controller machinery'' from ``default
+rule recipe'', and any controller-driven attribution claim must
+remain a hypothesis rather than a measured effect.
+\end{itemize}
+
+The full multi-arm comparison
+(\texttt{baseline} / \texttt{rule-only} / \texttt{no-mutator} /
+\texttt{no-static-analysis} / \texttt{controller-only} /
+\texttt{full-agent}) at $N{\geq}10$ on a non-saturated target is
+explicit follow-up work
+(\S\ref{sec:limits}).
 
 % =====================================================================
 % NOTE: §7 "Case Study" was deferred to the venue version of the paper.
@@ -1626,6 +1913,46 @@ mutator / corpus / crash-triage agents; the domain (industrial
 protocols vs structured text parsers) and the intermediate
 representation (input sequences vs recipes) differ.
 
+\paragraph{LLM-as-generator (whole inputs).}
+TitanFuzz~\cite{deng2023titanfuzz} demonstrates that an LLM can
+synthesize \emph{entire program-level inputs} (Python snippets
+exercising deep-learning libraries) zero-shot, and that
+infill-style prompting matches or exceeds template-driven
+generators on coverage. FuzzGPT~\cite{deng2024fuzzgpt} extends the
+idea by prompting the LLM with historical bug-triggering inputs to
+push it toward edge cases. ChatFuzz~\cite{hu2023chatfuzz} couples
+ChatGPT-style mutations with greybox feedback for structured-text
+formats (JSON / XML / HTML) and is the closest single-target
+comparator to FuzzPilot's structured-text scope. All three
+generate \emph{inputs} directly; FuzzPilot's intermediate is a
+\emph{recipe} that a downstream AFL++ mutator consumes, so the LLM
+inference cost is amortized across the entire plateau interval
+rather than per input.
+
+\paragraph{LLM with white-box / static context.}
+WhiteFox~\cite{yang2024whitefox} drives compiler fuzzing with
+LLM-synthesized programs that target specific compiler-optimization
+rules extracted from source by another LLM pass; the white-box
+context source is the compiler's own implementation. KernelGPT
+~\cite{yang2024kernelgpt} mines kernel headers and source to build
+syscall specifications and then has an LLM synthesize Syzlang-like
+input programs. FuzzPilot's Ghidra channel
+(\S\ref{sec:plateau:ghidra}) is a parallel design point that opts
+for binary-level static analysis (so the same pipeline applies to
+closed-source targets) rather than source-level extraction; the
+trade-off is coarser per-function summaries in exchange for
+applicability beyond the open-source assumption.
+
+\paragraph{Industrial LLM-driven fuzzing infrastructure.}
+OSS-Fuzz-Gen~\cite{liu2024ossfuzzgen} is Google's production
+framework for using LLMs to \emph{generate fuzz targets and
+harnesses} for the OSS-Fuzz fleet, addressing a complementary
+problem (harness/target authoring at scale) to FuzzPilot's
+(in-campaign recipe proposal). The two could be composed: an
+OSS-Fuzz-Gen-authored harness fed into a FuzzPilot-orchestrated
+campaign with a Ghidra-informed recipe layer. We do not evaluate
+this composition here.
+
 \paragraph{T3: side-by-side comparison.}
 
 \begin{table*}[t]
@@ -1638,11 +1965,17 @@ representation (input sequences vs recipes) differ.
     System & LLM placement & LLM output & Validation & Static ctx. & Audit & Target domain \\
     \midrule
     AFL++~\cite{aflplusplus}        & \emph{none}      & ---             & coverage        & none           & ---  & general                 \\
-    LLAMAFUZZ~\cite{wang2024llamafuzz} & in-loop       & input bytes     & coverage        & none           & no   & general (Magma)         \\
+    LLAMAFUZZ~\cite{wang2024llamafuzz} & in-loop       & input bytes     & coverage        & none           & no   & general (Magma suite)   \\
     FuzzCoder~\cite{liu2024fuzzcoder}  & in-loop       & byte mutation   & coverage        & none           & no   & general                 \\
     Fuzz4All~\cite{xia2024fuzz4all}    & in-loop       & input bytes     & coverage        & none           & no   & multi-language          \\
     SemAware~\cite{semanticaware2025}  & parallel helper & input bytes   & semantic novelty& none           & no   & general                 \\
     Hybrid~\cite{lin2025hybrid}        & parallel helper, $\approx250$ rph & input bytes & novelty + syntax & LLVM-IR / angr & no & libpng / tcpdump / sqlite \\
+    TitanFuzz~\cite{deng2023titanfuzz} & generator (zero-shot) & whole program input & coverage & none & no & DL libraries (PyTorch / TF) \\
+    FuzzGPT~\cite{deng2024fuzzgpt}     & generator (history-prompted) & whole program input & coverage & none & no & DL libraries \\
+    ChatFuzz~\cite{hu2023chatfuzz}     & in-loop (ChatGPT mutator) & input bytes & coverage & none & no & structured text (JSON / XML / HTML) \\
+    WhiteFox~\cite{yang2024whitefox}   & two-stage generator & whole program input & coverage & source-level (compiler rules) & no & compilers (PyTorch / LLVM) \\
+    KernelGPT~\cite{yang2024kernelgpt} & generator + spec-mining & syscall sequences & coverage & source-level (kernel) & no & kernels (Linux) \\
+    OSS-Fuzz-Gen~\cite{liu2024ossfuzzgen} & offline (target authoring) & fuzz harness code & build + coverage & source-level (OSS repos) & no & OSS-Fuzz fleet \\
     MetaMut~\cite{ou2024metamut}       & offline       & C/C++ mutator   & manual          & none           & no   & compilers               \\
     Mut4All~\cite{ye2025mut4all}       & offline       & mutator code    & manual          & bug reports    & no   & compilers               \\
     MALF~\cite{malf2025}               & multi-agent in-loop & input seqs & coverage       & protocol KB    & no   & industrial protocols    \\
@@ -1679,7 +2012,8 @@ deferred to the venue version of the paper.
 
 \paragraph{cJSON is a saturated target for the LLM proposal layer.}
 Within the 14{,}400\,s budget the baseline AFL++ harness reaches
-the 269-edge ceiling in ${\approx}4{,}200$\,s, leaving the parent
+the 269-edge ceiling at a per-run median of ${\approx}2{,}500$\,s
+(slowest baseline run $4{,}448$\,s), leaving the parent
 corpus at plateau time with no edge headroom for a 20\,s
 micro-campaign to find. As a result, the LLM proposal layer's
 contribution (the \emph{LLM-promoted recipe} path, distinct from
@@ -1719,8 +2053,9 @@ micro-campaign-parameter sensitivity sweep (over $N$, $K$, and the
 reward weights $\alpha, \beta, \gamma, \delta_h, \delta_m$) are
 wired into the CLI but not in the manifest for the preprint matrix.
 Their data lands in the venue paper, alongside the remaining
-\texttt{no-mutator} and \texttt{no-static-analysis} arms of the E2
-ablation.
+\texttt{no-static-analysis} arm of the E2 ablation
+(the \texttt{rule-only} and \texttt{no-mutator} arms are already
+reported in \S\ref{sec:eval:rq4-ablation}).
 
 \paragraph{Multi-target generalization.}
 We do not run on Magma's full benchmark suite in this preprint, and
@@ -1743,20 +2078,103 @@ that captures the FuzzPilot tag and the model client version at
 submission time.
 
 \paragraph{Threats to validity.}
-\textbf{Internal:} plateau-detector hyperparameters ($W$, $\theta_e$,
-$\theta_p$) and micro-campaign weights
-($\alpha,\beta,\gamma,\delta_h,\delta_m$) were tuned on a separate
-cJSON corpus and not the evaluation seeds, but leakage cannot be
-excluded entirely.
-\textbf{External:} a single target family is not representative; we
-explicitly defer generalization. The LLM proposal layer in particular
-is exercised but not stress-tested by the cJSON target (the gate
-returns 20/20 null candidates; see \S\ref{sec:eval:rq3}).
-\textbf{Construct:} AFL++'s \texttt{bitmap\_cvg} measures bitmap
-hits, not unique edges; where the distinction matters we report
-both.
-\textbf{Reproducibility:} we pin the AFL++ commit, target build
-hash, FuzzPilot tag, Docker digest, and per-run \texttt{git.patch}.
+We organize the threats following Wohlin et al.'s
+~\cite{wohlin2012experimentation} standard
+internal / external / construct / conclusion taxonomy, with an
+additional explicit discussion of LLM-specific risks.
+
+\emph{Internal validity.} The plateau-detector hyperparameters
+($W{=}10$\,s, $\theta_e{=}50$, $\theta_p{=}1$) and the
+micro-campaign reward weights
+($\alpha,\beta,\gamma,\delta_h,\delta_m$) were tuned on a
+\emph{development cJSON seed corpus} (the 26 hand-curated JSON
+files described in \S\ref{sec:eval:setup}) that became the
+\emph{evaluation} seed corpus once the design was frozen. We did
+not implement a hold-out split between tuning and evaluation
+corpora and therefore cannot exclude data leakage; the venue
+version will tune on a disjoint development corpus or via
+cross-validation across seed-corpus splits, and will report the
+delta from tuning-set to evaluation-set numbers. A second
+internal threat is the absence of a \texttt{controller-only}
+ablation (\S\ref{sec:eval:rq4-ablation}) that would separate the
+plateau detector / corpus-snapshot reorganization machinery from
+the default rule recipe; we note this as a known design gap to be
+addressed in the venue ablation matrix. Plateau-detector
+SIGSTOP-based microbench isolation
+(\S\ref{sec:plateau:micro}) is also a methodological hazard:
+running the microbench concurrently with the main AFL workers
+\emph{without} SIGSTOP inverts our central RQ2 throughput-parity
+ratio in pilot tests, so any reproducer that omits the isolation
+will obtain different numbers.
+
+\emph{External validity.} A single target family (cJSON, parser
+of a structured-text format) is not representative; we make
+\emph{no} cross-format generalization claim and explicitly defer
+it. The LLM proposal layer in particular is exercised but not
+stress-tested by the cJSON target: the gate returns 20/20 null
+candidates (\S\ref{sec:eval:rq3}), so we observe only the
+\emph{no-false-positive} half of the gate's intended behavior.
+A single LLM (\texttt{deepseek-chat}) at temperature 0 is also a
+single-point evaluation in model space; whether
+\texttt{claude-haiku-4-5}, \texttt{gpt-4o-mini},
+\texttt{llama-4-maverick}, or any other backend produces a
+materially different schema-validity rate, recipe distribution,
+or null-result behavior is open. Finally, all numbers were
+collected on a single 4-vCPU experiment host (single tenancy at
+collection time except where noted in \S\ref{sec:eval:rq2});
+cross-machine reproducibility is supported by the Docker recipe
+but not separately measured.
+
+\emph{Construct validity.} The choice of metric is itself a
+construct decision. We use plateau duration
+(\texttt{run\_time}~$-$~\texttt{last\_find}) as a primary
+endpoint metric, which is sensitive to a single
+late-budget discovery (e.g.~full-agent r04 finds the 269th edge
+at $14{,}205$\,s and is credited with a $238$\,s plateau; see
+Table~\ref{tab:t1}). Klees~et~al.~\cite{klees2018evaluating}
+recommend coverage-AUC or time-to-$N$-edges as endpoint-free
+alternatives; we therefore additionally report time-to-$N$-edges
+for $N\in\{264, 268, 269\}$ in
+Table~\ref{tab:time-to-n}, which gives the opposite headline
+(\texttt{baseline-afl} reaches the 269-edge ceiling \emph{faster}
+than \texttt{full-agent} at the median). The two metrics are
+mutually consistent --- a plateau-shortening intervention can
+also delay the ceiling-touch by spreading out the discovery
+curve --- but the construct choice matters and we report both.
+The 269-edge ``ceiling'' is itself a construct: it is the number
+of AFL++ bitmap slots hit by the cJSON harness, not a measure of
+all reachable basic-block edges in the cJSON library; a richer
+harness (or a different fuzzing instrumentation) could expose
+more edges.
+
+\emph{Conclusion validity.} With $N{=}5$ per main arm and
+$N{=}3$ per ablation, we are well below the
+$N{\geq}20$ guideline of
+Klees~et~al.~\cite{klees2018evaluating}. We therefore report all
+group differences as descriptive point estimates accompanied by
+Mann--Whitney $U$, exact $p$-values, Vargha--Delaney
+$A_{12}$~\cite{vargha2000critique}, and percentile-bootstrap
+95\% confidence intervals (see \S\ref{sec:eval:rq1:stats}). No
+descriptive delta in this preprint reaches $p{<}0.05$ on the
+two-sided Mann--Whitney test; we present each result as a
+hypothesis rather than as a tested claim and the venue version
+will repeat the experiments at $N{\geq}10$ with formal
+significance testing.
+
+\emph{LLM-specific reproducibility.} The model identifier
+\texttt{deepseek-chat} is a moving alias served by DeepSeek;
+the underlying weights may change without notice between runs.
+At $T{=}0$ the API surface is intended to be deterministic, but
+our data shows $2/45$ schema-invalid responses, indicating that
+the API surface is not bit-exact deterministic in practice. We
+mitigate by (a) logging the \texttt{model} field returned in each
+API response into \texttt{agent\_decisions.jsonl}, (b) recording
+the full prompt / response pair so any decision is replayable
+from the recipe rather than the model, and (c) shipping a Docker
+recipe that pins the SDK version (not the model version). A
+future-proof reproducibility strategy would also archive the
+exact prompt-response transcripts in a content-addressable store
+to allow regeneration without re-querying the API.
 
 % =====================================================================
 \section{Conclusion}
@@ -1772,32 +2190,41 @@ promotion, and a Ghidra-derived static context channel that does not
 enter the mutation hot path. On cJSON --- the single target
 evaluated in this preprint --- the \texttt{baseline-afl} and
 \texttt{full-agent} groups both reach the same 269-edge target
-ceiling within their 14{,}400\,s budgets, the end-to-end
-\texttt{execs\_per\_sec} of \texttt{full-agent} is $1.0587\times$
-baseline, and per-run median plateau duration is $45.3\%$ shorter
-under \texttt{full-agent} ($1{,}384$\,s vs $2{,}532$\,s). We
-attribute the plateau-recovery delta to the recipe-guided mutator
-running the controller's default \texttt{DictionaryAgent} recipe,
-not to LLM-promoted recipes: all 20 LLM-derived candidates evaluated
-by the micro-campaign gate across the 5 \texttt{full-agent} runs
-returned reward $R{=}0$ (cJSON saturates well before plateau time),
-so the gate correctly produced a null result and \emph{no} LLM
-recipe was promoted. We read this as a faithful behaviour of the
-gate on a saturated target, not a verdict on the LLM proposal
-layer; an evaluation on non-saturated targets where the gate has
-edge headroom is explicit future work in the venue paper. The
-LLM-infrastructure path itself behaved predictably (95.6\%
-schema-valid, $0$ fallback, $\$0.002$ per 4-hour campaign), so the
-audit and cost properties of the design are demonstrated even
-though the proposal layer's positive coverage contribution is not.
-The full implementation, configurations, decision logs, and a
-reproducibility appendix recording the exact commit, AFL++ version,
-model configuration, and per-run artifact paths are released
-alongside the paper. Larger-target evaluation
+ceiling within their 14{,}400\,s budgets, the median
+\texttt{execs\_per\_sec} ratio of $\texttt{full-agent}$ to
+baseline is $\approx 1.06\times$, and per-run median plateau
+duration is a descriptive $45.3\%$ shorter under
+\texttt{full-agent} ($1{,}384$\,s vs $2{,}532$\,s; Mann--Whitney
+$U{=}8$, $p{=}0.42$ at $N{=}5$ --- significance is therefore
+\emph{not} established at this $N$). Across the 5
+\texttt{full-agent} runs the micro-campaign gate evaluated 20
+LLM-derived candidates and \emph{promoted zero}, because cJSON's
+269-edge ceiling is reached well before plateau time and the
+gate's reward is identically $R{=}0$. The plateau-duration delta
+is therefore attributable to the recipe-guided mutator running
+the controller's default \texttt{DictionaryAgent} recipe rather
+than to LLM-promoted recipes; the ablation ordering in
+\S\ref{sec:eval:rq4-ablation} (\texttt{no-mutator}
+$<$ \texttt{rule-only} $<$ \texttt{full-agent} on plateau median)
+further suggests the controller's plateau detector and
+corpus-snapshot reorganization are co-drivers, though this
+remains a descriptive hypothesis at $N{=}3$ ablations and is not
+a measured effect. The LLM proposal layer's positive coverage
+contribution cannot be empirically demonstrated on cJSON; what
+\emph{is} demonstrated is that the infrastructure behaves
+predictably ($43/45 = 95.6\%$ schema-valid, $0$ fallback,
+$\$0.002$ per 4-hour campaign), so the audit and cost properties
+of the design hold even though the proposal layer's coverage
+benefit does not. An evaluation on non-saturated targets where
+the gate has edge headroom is explicit future work in the venue
+paper. The full implementation, configurations, decision logs,
+and a reproducibility appendix recording the exact commit, AFL++
+version, model configuration, and per-run artifact paths are
+released alongside the paper. Larger-target evaluation
 (libpng, libxml2, sqlite3, openssl, Magma) and the remaining
-ablation rows (\texttt{no-mutator}, \texttt{no-static-analysis})
-are explicit future work; the \texttt{rule-only} ablation E2a is
-available in the repository and is referenced in
+\texttt{no-static-analysis} ablation row are explicit future work;
+the \texttt{rule-only} (E2a) and \texttt{no-mutator} (E2b)
+preliminary numbers are summarized in
 \S\ref{sec:eval:rq4-ablation}.
 
 % =====================================================================
@@ -1812,20 +2239,38 @@ artifacts. All paths are relative to the repository root.
 \begin{itemize}
   \item \textbf{Repository commit:} \texttt{85223d8}
   (branch \texttt{main}, repo
-  \texttt{Qiao-Zhiyi/fuzz\_agent}). Subsequent
-  commits are tagged \texttt{paper01-arxiv-v1}.
-  \item \textbf{Fuzzer:} AFL++ \texttt{++4.21c}, built from
-  source on the experiment host. Confirmed in every
+  \texttt{Qiao-Zhiyi/fuzz\_agent}). The arXiv-v1 commit pin is the
+  literal SHA above; the \texttt{paper01-arxiv-v1} git tag (created
+  at submission time) points at that same commit so reviewers can
+  fetch it without scrolling history.
+  \item \textbf{Fuzzer:} AFL++ build identifier \texttt{++4.21c}
+  (the leading \texttt{++} is the upstream banner prefix; the
+  underlying release tag is \texttt{v4.21c}). Built from source
+  on the experiment host and confirmed in every
   \texttt{fuzzer\_stats} file under
   \texttt{results/paper01\_ai\_recipe\_mutation/runs/}.
   \item \textbf{Target binary:} cJSON parser harness at
   \texttt{experiments/targets/cjson/}, AFL persistent mode
-  (\texttt{persistent shmem\_testcase deferred}).
+  (\texttt{persistent shmem\_testcase deferred}). The target
+  binary SHA-256 and the seed-corpus tarball SHA-256 are written
+  per-run into \texttt{run\_metadata.json}
+  (fields \texttt{target\_sha256} and \texttt{seed\_corpus\_sha256});
+  reviewers can verify reproduction by comparing those hashes
+  across re-builds.
+  \item \textbf{Seed corpus:} 26 hand-curated JSON files at
+  \texttt{experiments/targets/cjson/seeds/}; the directory is
+  small enough to inspect directly and is included in the
+  repository.
   \item \textbf{LLM:} \texttt{deepseek-chat} via the
   \texttt{api.deepseek.com} OpenAI-compatible endpoint
   (configuration in
   \texttt{experiments/targets/cjson/config.yaml}),
-  temperature $0.0$. A NIM-hosted
+  temperature $0.0$. \emph{Note that
+  \texttt{deepseek-chat} is a moving alias served by DeepSeek;
+  the specific underlying model version is logged into the
+  \texttt{model} field of each \texttt{agent\_decisions.jsonl}
+  record at call time, so a reviewer can recover the
+  model-version string from the audit log.} A NIM-hosted
   \texttt{meta/llama-4-maverick-17b-128e-instruct}
   fallback path is wired through the same watchdog and was
   exercised in regression testing only --- all numbers in this
@@ -1833,22 +2278,55 @@ artifacts. All paths are relative to the repository root.
   \item \textbf{Build mode:} native x86\_64 Linux on the experiment
   host (no container in the hot path). The repository ships a
   Docker recipe at \texttt{docker/ubuntu/Dockerfile} (build arg
-  \texttt{AFLPP\_REF=v4.21c}) for portability but the published
-  numbers were produced on the native build.
-  \item \textbf{Per-run artifacts:} 10 completed 14{,}400\,s runs
-  (5 \texttt{baseline-afl} + 5 \texttt{full-agent}) are checked in
-  under \texttt{results/paper01\_ai\_recipe\_mutation/runs/}; the 3
-  preliminary E2a \texttt{rule-only} runs referenced in
-  \S\ref{sec:eval:rq4-ablation} reside on the experiment host and
-  are linked from
-  \texttt{results/paper01\_ai\_recipe\_mutation/runs/REMOTE\_LOG.md}
-  pending rsync into the repository.
+  \texttt{AFLPP\_REF=v4.21c}) for portability. The image digest
+  at submission time is recorded in
+  \texttt{docker/ubuntu/IMAGE\_DIGEST.txt} once the Docker image
+  is published; the native-build numbers in this paper are the
+  reference. We do \emph{not} claim bit-identical reproduction
+  between the Docker and native builds; the Docker recipe is
+  shipped to lower the activation energy for re-running the
+  pipeline rather than to certify exact reproduction.
+  \item \textbf{Per-run artifacts:} 16 completed 14{,}400\,s runs
+  (5 \texttt{baseline-afl}, 5 \texttt{full-agent},
+  3 \texttt{rule-only}, 3 \texttt{no-mutator}) are checked into the
+  repository under
+  \texttt{results/paper01\_ai\_recipe\_mutation/runs/}; the
+  \texttt{no-static-analysis} (E2c) batch is being re-run after
+  the first attempt failed at controller launch, and will be
+  added to the repository when the retry completes.
   Each run directory contains the unmodified AFL++
   \texttt{fuzzer\_stats}, \texttt{coverage.csv},
-  \texttt{events.jsonl}, \texttt{main\_launch.sh},
+  \texttt{events.jsonl}, \texttt{agent\_decisions.jsonl}
+  (full-agent / no-mutator modes), \texttt{main\_launch.sh}
+  (the exact command-line that started the AFL run),
   \texttt{run\_metadata.json}, and \texttt{git.patch}
   (the working-tree diff at run start) for byte-level
   reproducibility of the experiment.
+  \item \textbf{Per-mode launch commands.}
+  Each ablation mode is selected by a single
+  \texttt{--ablation} switch to the controller; the canonical
+  invocations are:
+  \begin{quote}\footnotesize\ttfamily
+  \# E1a baseline-afl\\
+  python3 -m fuzzpilot.runner --target cjson \textbackslash{}\\
+  ~~--ablation baseline-afl --budget 14400 --run-id p1\_e1\_cjson\_baseline-afl\_r01\\[2pt]
+  \# E1b full-agent\\
+  python3 -m fuzzpilot.runner --target cjson \textbackslash{}\\
+  ~~--ablation full-agent --budget 14400 --run-id p1\_e1\_cjson\_full-agent\_r01\\[2pt]
+  \# E2a rule-only\\
+  python3 -m fuzzpilot.runner --target cjson \textbackslash{}\\
+  ~~--ablation rule-only --budget 14400 --run-id p1\_e2\_cjson\_rule-only\_r01\\[2pt]
+  \# E2b no-mutator\\
+  python3 -m fuzzpilot.runner --target cjson \textbackslash{}\\
+  ~~--ablation no-mutator --budget 14400 --run-id p1\_e2\_cjson\_no-mutator\_r01\\[2pt]
+  \# E2c no-static-analysis\\
+  python3 -m fuzzpilot.runner --target cjson \textbackslash{}\\
+  ~~--ablation no-static-analysis --budget 14400 --run-id p1\_e2\_cjson\_no-static-analysis\_r01
+  \end{quote}
+  The host-wide orchestrator
+  \texttt{scripts/paper01/run\_all\_host.sh\,--parallel\,4}
+  iterates the full 19-run preprint matrix in 4-way parallel
+  with the same per-mode invocations under the hood.
   \item \textbf{Aggregation:} run
   \texttt{python3 scripts/prepare\_paper01\_data.py
   --run-root results/paper01\_ai\_recipe\_mutation/runs
@@ -1856,16 +2334,25 @@ artifacts. All paths are relative to the repository root.
   --manifest experiments/manifests/paper01\_preprint.yaml}
   to regenerate \texttt{validity\_report.md},
   \texttt{tables/run\_level.csv}, and the per-RQ summary tables
-  cited in \S\ref{sec:eval}.
+  cited in \S\ref{sec:eval}. For the statistical numbers
+  (Mann--Whitney $U$, $A_{12}$, bootstrap CIs,
+  time-to-$N$-edges, and the leave-one-out throughput-parity
+  check), run
+  \texttt{python3 scripts/paper01/review\_stats.py};
+  output is deterministic.
 \end{itemize}
 
-Pending for the venue version: ablation rows
-(\texttt{rule-only}, \texttt{no-mutator},
-\texttt{no-static-analysis}) at $N=5$, libpng/libxml2/sqlite3
-additional targets, and head-to-head measurement against
-G\textsuperscript{2}FUZZ on its binary-format benchmark. The preprint
-intentionally limits empirical claims to what the 10 cJSON runs and
-the E3 microbench support.
+Pending for the venue version: \texttt{no-static-analysis}
+(E2c) ablation completion, the missing
+\texttt{controller-only} ablation
+(\S\ref{sec:eval:rq4-ablation}), $N{\geq}10$ repeats with formal
+Mann--Whitney $U$ significance testing per
+Klees~et~al.~\cite{klees2018evaluating},
+libpng/libxml2/sqlite3 additional targets, and head-to-head
+measurement against G\textsuperscript{2}FUZZ on its
+binary-format benchmark. The preprint intentionally limits
+empirical claims to what the 16 cJSON runs (plus E3 microbench)
+support.
 
 
 \bibliographystyle{plain}

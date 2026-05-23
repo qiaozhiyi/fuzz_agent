@@ -1,0 +1,11 @@
+rid	mode	run_time	fuzz_time	execs_done	execs_per_sec	cycles_done	corpus_count	bitmap_cvg	edges_found	saved_crashes	stability	max_depth	last_find_rel	plateau_s	peak_rss_mb
+p1_e1_cjson_baseline-afl_r01	baseline-afl	14444	14424	188492319	13049.33	797	585	23.21%	269	0	99.26%	15	11130	3314	0
+p1_e1_cjson_baseline-afl_r02	baseline-afl	14443	14432	187158013	12957.77	800	607	23.21%	269	0	99.26%	22	10473	3970	4
+p1_e1_cjson_baseline-afl_r03	baseline-afl	14443	14424	189334714	13108.41	702	606	23.21%	269	0	99.26%	18	13258	1185	4
+p1_e1_cjson_baseline-afl_r04	baseline-afl	14443	14402	185251854	12826.13	569	649	23.21%	269	0	99.26%	26	11911	2532	0
+p1_e1_cjson_baseline-afl_r05	baseline-afl	14446	14426	200147594	13854.1	819	607	23.21%	269	0	99.26%	27	13907	539	0
+p1_e1_cjson_full-agent_r01	full-agent	14441	14415	199520607	13815.95	122	598	23.21%	269	0	99.26%	17	13606	835	10
+p1_e1_cjson_full-agent_r02	full-agent	14442	14421	195572895	13541.78	141	573	22.95%	266	0	99.25%	15	11216	3226	4
+p1_e1_cjson_full-agent_r03	full-agent	14443	14425	195567575	13540.23	144	601	23.21%	269	0	99.26%	21	13059	1384	4
+p1_e1_cjson_full-agent_r04	full-agent	14443	14417	201466942	13948.72	126	604	23.21%	269	0	99.26%	15	14205	238	16
+p1_e1_cjson_full-agent_r05	full-agent	14437	14423	225180431	15597.36	140	600	23.21%	269	0	99.26%	13	12827	1610	4

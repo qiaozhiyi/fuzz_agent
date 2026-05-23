@@ -1,0 +1,302 @@
+{"id":"agent_decision_1779488550632281_p139043_0011","run_id":"run_1779474106432371_p139043_0000","plateau_id":"plateau_1779488550582320_p139043_0002","agent":"CoordinatorAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"67af2ea378fd3a3d","response_hash":"daf4c460c7b53de9","latency_ms":4406,"input_tokens":997,"output_tokens":707,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_string_length",
+            "type": "Length",
+            "target_begin": 0,
+            "target_end": 4
+          },
+          {
+            "name": "json_checksum",
+            "type": "Checksum",
+            "target_begin": 4,
+            "target_end": 8
+          }
+        ],
+        "data_flow_mapping": [
+          {
+            "offset": 0,
+            "size": 4,
+            "sink": "parse_length"
+          },
+          {
+            "offset": 4,
+            "size": 4,
+            "sink": "validate_checksum"
+          }
+        ],
+        "cfg_constraints": [
+          {
+            "branch": "unreached_branch_0x1234",
+            "magic_value": "0xDEADBEEF"
+          }
+        ]
+      }
+    },
+    {
+      "action": "seed_focus_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_string_length",
+            "type": "Length",
+            "target_begin": 0,
+            "target_end": 4
+          },
+          {
+            "name": "json_checksum",
+            "type": "Checksum",
+            "target_begin": 4,
+            "target_end": 8
+          }
+        ],
+        "data_flow_mapping": [
+          {
+            "offset": 0,
+            "size": 4,
+            "sink": "parse_length"
+          },
+          {
+            "offset": 4,
+            "size": 4,
+            "sink": "validate_checksum"
+          }
+        ],
+        "cfg_constraints": [
+          {
+            "branch": "unreached_branch_0x1234",
+            "magic_value": "0xDEADBEEF"
+          }
+        ]
+      }
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_string_length",
+            "type": "Length",
+            "target_begin": 0,
+            "target_end": 4
+          },
+          {
+            "name": "json_checksum",
+            "type": "Checksum",
+            "target_begin": 4,
+            "target_end": 8
+          }
+        ],
+        "data_flow_mapping": [
+          {
+            "offset": 0,
+            "size": 4,
+            "sink": "parse_length"
+          },
+          {
+            "offset": 4,
+            "size": 4,
+            "sink": "validate_checksum"
+          }
+        ],
+        "cfg_constraints": [
+          {
+            "branch": "unreached_branch_0x1234",
+            "magic_value": "0xDEADBEEF"
+          }
+        ]
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "mutate_length_and_checksum"
+    }
+  ]
+}}
+{"id":"agent_decision_1779488555038711_p139043_0013","run_id":"run_1779474106432371_p139043_0000","plateau_id":"plateau_1779488550582320_p139043_0002","agent":"PlateauDiagnosisAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"56b526c0c810e554","response_hash":"fabd9d3b6f6d29d9","latency_ms":2937,"input_tokens":1012,"output_tokens":195,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Coverage stalled at 22.95% bitmap with 266 edges. No new paths in 10s window. Cycles without finds: 29. Likely cause: sparse dictionary. Static analysis not available, but cjson parser typically uses string tokens and magic values. Dictionary probe can inject common JSON tokens to trigger new edges."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Corpus count 573, favored 56, variable bytes 2. Many seeds may be redundant. Focus on seeds with high edge coverage potential. Use recipe mutation to target specific structural fields (e.g., length fields, magic bytes) based on typical cjson parsing patterns."
+    }
+  ]
+}}
+{"id":"agent_decision_1779488557976191_p139043_0015","run_id":"run_1779474106432371_p139043_0000","plateau_id":"plateau_1779488550582320_p139043_0002","agent":"SchedulerAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"ebccd918db6cc4e2","response_hash":"2eeabb437fd59ec7","latency_ms":2508,"input_tokens":992,"output_tokens":186,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Plateau detected with zero new paths/edges in 10s window. Static analysis context empty, so no structural metadata to leverage. Focus on under-explored seeds to break coverage plateau.",
+      "seed_strategy": "favored_set_adjustment",
+      "params": {
+        "focus_seeds": "under-explored",
+        "adjustment": "increase_energy"
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "increase_energy_for_under_explored",
+      "reason": "Plateau indicates stagnation; reallocating energy to seeds that have not been heavily fuzzed may uncover new paths."
+    }
+  ]
+}}
+{"id":"agent_decision_1779488560484940_p139043_0017","run_id":"run_1779474106432371_p139043_0000","plateau_id":"plateau_1779488550582320_p139043_0002","agent":"CmpAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"02d99537f33c8674","response_hash":"0ca9d684e8756d92","latency_ms":945,"input_tokens":990,"output_tokens":25,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "CmpAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779488561431096_p139043_0019","run_id":"run_1779474106432371_p139043_0000","plateau_id":"plateau_1779488550582320_p139043_0002","agent":"MutatorAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"8bf02d1ce82e9fd1","response_hash":"3c3f3dd4c4e9fe5c","latency_ms":944,"input_tokens":993,"output_tokens":25,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "MutatorAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779488562375432_p139043_0021","run_id":"run_1779474106432371_p139043_0000","plateau_id":"plateau_1779488550582320_p139043_0002","agent":"DictionaryAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"1c8a9f847d022104","response_hash":"b529b1cc1be8b59e","latency_ms":5319,"input_tokens":991,"output_tokens":748,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "DictionaryAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "dictionary_entries": [
+          {
+            "value": "0x7B2274797065223A224F626A656374227D",
+            "type": "magic",
+            "comment": "JSON object start with type field"
+          },
+          {
+            "value": "0x5B5D",
+            "type": "magic",
+            "comment": "Empty JSON array"
+          },
+          {
+            "value": "0x6E756C6C",
+            "type": "magic",
+            "comment": "null literal"
+          },
+          {
+            "value": "0x74727565",
+            "type": "magic",
+            "comment": "true literal"
+          },
+          {
+            "value": "0x66616C7365",
+            "type": "magic",
+            "comment": "false literal"
+          },
+          {
+            "value": "0x22",
+            "type": "magic",
+            "comment": "Double quote character"
+          },
+          {
+            "value": "0x5C",
+            "type": "magic",
+            "comment": "Backslash escape"
+          },
+          {
+            "value": "0x2F",
+            "type": "magic",
+            "comment": "Forward slash"
+          },
+          {
+            "value": "0x08",
+            "type": "magic",
+            "comment": "Backspace escape"
+          },
+          {
+            "value": "0x0C",
+            "type": "magic",
+            "comment": "Form feed escape"
+          },
+          {
+            "value": "0x0A",
+            "type": "magic",
+            "comment": "Newline escape"
+          },
+          {
+            "value": "0x0D",
+            "type": "magic",
+            "comment": "Carriage return escape"
+          },
+          {
+            "value": "0x09",
+            "type": "magic",
+            "comment": "Tab escape"
+          },
+          {
+            "value": "0x5C7530303030",
+            "type": "magic",
+            "comment": "Unicode escape \\u0000"
+          },
+          {
+            "value": "0x5C7546464646",
+            "type": "magic",
+            "comment": "Unicode escape \\uFFFF"
+          },
+          {
+            "value": "0x2D",
+            "type": "magic",
+            "comment": "Minus sign for negative numbers"
+          },
+          {
+            "value": "0x2E",
+            "type": "magic",
+            "comment": "Decimal point"
+          },
+          {
+            "value": "0x45",
+            "type": "magic",
+            "comment": "Exponent 'E'"
+          },
+          {
+            "value": "0x65",
+            "type": "magic",
+            "comment": "Exponent 'e'"
+          },
+          {
+            "value": "0x30313233343536373839",
+            "type": "magic",
+            "comment": "Digits 0-9"
+          }
+        ],
+        "strategy": "Add common JSON structural tokens and escape sequences to dictionary to trigger edge cases in cJSON parser."
+      }
+    }
+  ],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779488567695355_p139043_0023","run_id":"run_1779474106432371_p139043_0000","plateau_id":"plateau_1779488550582320_p139043_0002","agent":"FormatAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"67ff166b1bb978d2","response_hash":"cb36b653b645535b","latency_ms":1081,"input_tokens":987,"output_tokens":24,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779488568777119_p139043_0025","run_id":"run_1779474106432371_p139043_0000","plateau_id":"plateau_1779488550582320_p139043_0002","agent":"CorpusAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"b5a6462656d9d336","response_hash":"4b732b2a9a577f2f","latency_ms":1975,"input_tokens":991,"output_tokens":89,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "CorpusAgent",
+  "interventions": [
+    {
+      "action": "default_control",
+      "reason": "Plateau detected with no new edges or paths in 10 seconds. Corpus size is 573, which is large. Recommend deduplication and minimization to remove redundant seeds and reduce corpus size, potentially triggering new coverage."
+    }
+  ],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779488652356554_p139043_0052","run_id":"run_1779474106432371_p139043_0000","plateau_id":"plateau_1779488550582320_p139043_0002","agent":"ResultAnalysisAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"89d626dbc0db45e0","response_hash":"408e9afb6762a45f","latency_ms":2145,"input_tokens":1525,"output_tokens":131,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "ResultAnalysisAgent",
+  "memory_patch": "All micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward. No intervention outperformed. The plateau persists with no new paths, edges, or crashes. Recommendation: consider switching to structural mutation or static analysis-guided strategies.",
+  "critique": "All four interventions failed to produce any improvement. The fuzzer is stuck in a plateau with zero new paths/edges/crashes. The static analysis context is empty, limiting actionable insights. The agent should explore alternative mutation strategies or adjust the campaign parameters."
+}}

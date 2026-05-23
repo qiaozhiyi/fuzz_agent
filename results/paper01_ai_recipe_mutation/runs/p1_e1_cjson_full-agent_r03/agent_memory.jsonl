@@ -1,0 +1,398 @@
+{"run_id":"run_1779474106514642_p139046_0000","agent":"CoordinatorAgent","key":"plateau_1779488552469854_p139046_0002:CoordinatorAgent:62cf68ca6ddb18be","reward_hint":0.000000,"memory":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "string_length",
+            "type": "Length",
+            "target_begin": 0,
+            "target_end": 4
+          },
+          {
+            "name": "checksum",
+            "type": "Checksum",
+            "target_begin": 4,
+            "target_end": 8
+          }
+        ],
+        "data_flow_mapping": [
+          {
+            "offset": 0,
+            "size": 4,
+            "sink": "parse_string_length"
+          },
+          {
+            "offset": 4,
+            "size": 4,
+            "sink": "validate_checksum"
+          }
+        ],
+        "cfg_constraints": [
+          {
+            "branch": "unreached_branch_1",
+            "magic_value": "0x41424344"
+          }
+        ]
+      }
+    },
+    {
+      "action": "seed_focus_probe",
+      "params": {
+        "seed_ids": ["seed_001", "seed_002"],
+        "focus_offsets": [0, 4]
+      }
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "params": {
+        "seed_ids": ["seed_001"],
+        "recipes": ["recipe_checksum_corrupt", "recipe_length_overflow"]
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "seed_001",
+      "strategy": "mutate_length_and_checksum"
+    },
+    {
+      "seed_id": "seed_002",
+      "strategy": "focus_on_structural_fields"
+    }
+  ]
+}}
+{"run_id":"run_1779474106514642_p139046_0000","agent":"PlateauDiagnosisAgent","key":"plateau_1779488552469854_p139046_0002:PlateauDiagnosisAgent:f0b4afd08d3dec03","reward_hint":0.000000,"memory":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reasoning": "Coverage stalled at 23.21% bitmap with 269 edges. No new paths in 10s window. Static analysis context empty, but cjson target likely parses JSON with structural fields (length, magic). Sparse dictionary is probable cause: missing JSON structural tokens (e.g., '[]', '{}', ':', ','). Probe to add these.",
+      "confidence": 0.7
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "structural_mutation",
+      "fields": [
+        {
+          "name": "json_array_length",
+          "type": "Length",
+          "target_begin": "0x0",
+          "target_end": "0x100"
+        },
+        {
+          "name": "json_object_magic",
+          "type": "Magic",
+          "value": "0x7B7D",
+          "target_begin": "0x0",
+          "target_end": "0x100"
+        }
+      ],
+      "data_flow_mapping": {
+        "offsets": ["0x0-0x100"],
+        "sinks": ["parse_value", "parse_object", "parse_array"]
+      },
+      "cfg_constraints": [
+        {
+          "unreached_branch": "parse_object_entry",
+          "required_magic": "0x3A"
+        }
+      ],
+      "reasoning": "cjson parses JSON; structural fields like array length and object braces are critical. Data-flow mapping focuses on offsets that reach parsing sinks. CFG constraints suggest missing colon ':' for object entries."
+    }
+  ]
+}}
+{"run_id":"run_1779474106514642_p139046_0000","agent":"SchedulerAgent","key":"plateau_1779488552469854_p139046_0002:SchedulerAgent:8e2f3eb63cbd56f4","reward_hint":0.000000,"memory":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Plateau detected with zero new paths/edges in 10s window. Static analysis context empty, so no structural metadata to leverage. Focus on under-explored seeds to reallocate energy.",
+      "parameters": {
+        "seed_ids": [],
+        "focus_mode": "under_explored",
+        "energy_boost": 1.5
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "",
+      "strategy": "favored_set_adjustment",
+      "reason": "No specific seed identified; adjust favored set to prioritize seeds with low coverage contribution.",
+      "parameters": {
+        "adjustment": "promote_unfavored",
+        "coverage_threshold": 0.1
+      }
+    }
+  ]
+}}
+{"run_id":"run_1779474106514642_p139046_0000","agent":"CmpAgent","key":"plateau_1779488552469854_p139046_0002:CmpAgent:0767bf4e126f4e85","reward_hint":0.000000,"memory":{
+  "agent": "CmpAgent",
+  "interventions": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Plateau detected with no new paths/edges. Static analysis context is empty, so no structural fields or CFG constraints are available. Falling back to per-seed recipe probing to diversify mutation strategies and break the plateau.",
+      "target_seed_ids": [],
+      "recipe": "default"
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106514642_p139046_0000","agent":"MutatorAgent","key":"plateau_1779488552469854_p139046_0002:MutatorAgent:88fa84ea26a65d39","reward_hint":0.000000,"memory":{
+  "agent": "MutatorAgent",
+  "interventions": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reasoning": "Plateau detected with zero new paths/edges in 10s window. Static context empty, so no structural/semantic hints. Proposing per-seed operator weights and offset ranges to break plateau via targeted mutation.",
+      "seed_strategies": [
+        {
+          "seed_id": "all",
+          "operator_weights": {
+            "bit_flip": 0.15,
+            "byte_flip": 0.15,
+            "arithmetic": 0.1,
+            "interest": 0.1,
+            "dict": 0.1,
+            "havoc": 0.2,
+            "splice": 0.1,
+            "overwrite": 0.1
+          },
+          "offset_ranges": [
+            {"begin": 0, "end": 32, "weight": 0.3},
+            {"begin": 32, "end": 64, "weight": 0.3},
+            {"begin": 64, "end": 128, "weight": 0.2},
+            {"begin": 128, "end": 256, "weight": 0.1},
+            {"begin": 256, "end": 512, "weight": 0.1}
+          ],
+          "fields": []
+        }
+      ]
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "operator_weights": {
+        "bit_flip": 0.15,
+        "byte_flip": 0.15,
+        "arithmetic": 0.1,
+        "interest": 0.1,
+        "dict": 0.1,
+        "havoc": 0.2,
+        "splice": 0.1,
+        "overwrite": 0.1
+      },
+      "offset_ranges": [
+        {"begin": 0, "end": 32, "weight": 0.3},
+        {"begin": 32, "end": 64, "weight": 0.3},
+        {"begin": 64, "end": 128, "weight": 0.2},
+        {"begin": 128, "end": 256, "weight": 0.1},
+        {"begin": 256, "end": 512, "weight": 0.1}
+      ],
+      "fields": []
+    }
+  ]
+}}
+{"run_id":"run_1779474106514642_p139046_0000","agent":"DictionaryAgent","key":"plateau_1779488552469854_p139046_0002:DictionaryAgent:0a7dbe3dba6c4fd0","reward_hint":0.000000,"memory":{
+  "agent": "DictionaryAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Plateau detected with no new edges or paths. Static context empty, but cJSON is a JSON parser. Propose structural magic values for JSON tokens and common integer boundaries to trigger new parsing paths.",
+      "dictionary_entries": [
+        {
+          "value": "0x7B",
+          "type": "magic",
+          "description": "ASCII '{' start of JSON object"
+        },
+        {
+          "value": "0x7D",
+          "type": "magic",
+          "description": "ASCII '}' end of JSON object"
+        },
+        {
+          "value": "0x5B",
+          "type": "magic",
+          "description": "ASCII '[' start of JSON array"
+        },
+        {
+          "value": "0x5D",
+          "type": "magic",
+          "description": "ASCII ']' end of JSON array"
+        },
+        {
+          "value": "0x22",
+          "type": "magic",
+          "description": "ASCII '\"' double quote for strings"
+        },
+        {
+          "value": "0x3A",
+          "type": "magic",
+          "description": "ASCII ':' key-value separator"
+        },
+        {
+          "value": "0x2C",
+          "type": "magic",
+          "description": "ASCII ',' element separator"
+        },
+        {
+          "value": "0x6E756C6C",
+          "type": "magic",
+          "description": "ASCII 'null' literal"
+        },
+        {
+          "value": "0x74727565",
+          "type": "magic",
+          "description": "ASCII 'true' literal"
+        },
+        {
+          "value": "0x66616C7365",
+          "type": "magic",
+          "description": "ASCII 'false' literal"
+        },
+        {
+          "value": "0x2D",
+          "type": "magic",
+          "description": "ASCII '-' negative sign"
+        },
+        {
+          "value": "0x2E",
+          "type": "magic",
+          "description": "ASCII '.' decimal point"
+        },
+        {
+          "value": "0x30",
+          "type": "magic",
+          "description": "ASCII '0' digit zero"
+        },
+        {
+          "value": "0x45",
+          "type": "magic",
+          "description": "ASCII 'E' exponent indicator"
+        },
+        {
+          "value": "0x65",
+          "type": "magic",
+          "description": "ASCII 'e' exponent indicator"
+        },
+        {
+          "value": "0x5C",
+          "type": "magic",
+          "description": "ASCII '\\' escape character"
+        },
+        {
+          "value": "0x2F",
+          "type": "magic",
+          "description": "ASCII '/' solidus"
+        },
+        {
+          "value": "0x62",
+          "type": "magic",
+          "description": "ASCII 'b' backspace escape"
+        },
+        {
+          "value": "0x66",
+          "type": "magic",
+          "description": "ASCII 'f' formfeed escape"
+        },
+        {
+          "value": "0x6E",
+          "type": "magic",
+          "description": "ASCII 'n' newline escape"
+        },
+        {
+          "value": "0x72",
+          "type": "magic",
+          "description": "ASCII 'r' carriage return escape"
+        },
+        {
+          "value": "0x74",
+          "type": "magic",
+          "description": "ASCII 't' tab escape"
+        },
+        {
+          "value": "0x75",
+          "type": "magic",
+          "description": "ASCII 'u' unicode escape"
+        },
+        {
+          "value": "0x09",
+          "type": "magic",
+          "description": "Tab whitespace"
+        },
+        {
+          "value": "0x0A",
+          "type": "magic",
+          "description": "Newline whitespace"
+        },
+        {
+          "value": "0x0D",
+          "type": "magic",
+          "description": "Carriage return whitespace"
+        },
+        {
+          "value": "0x20",
+          "type": "magic",
+          "description": "Space whitespace"
+        },
+        {
+          "value": "0x7FFFFFFF",
+          "type": "magic",
+          "description": "Max 32-bit signed integer"
+        },
+        {
+          "value": "0x80000000",
+          "type": "magic",
+          "description": "Min 32-bit signed integer (negative)"
+        },
+        {
+          "value": "0xFFFFFFFF",
+          "type": "magic",
+          "description": "Max 32-bit unsigned integer"
+        },
+        {
+          "value": "0x00000000",
+          "type": "magic",
+          "description": "Zero integer"
+        },
+        {
+          "value": "0x3FF0000000000000",
+          "type": "magic",
+          "description": "Double 1.0"
+        },
+        {
+          "value": "0x7FF0000000000000",
+          "type": "magic",
+          "description": "Double +infinity"
+        },
+        {
+          "value": "0xFFF0000000000000",
+          "type": "magic",
+          "description": "Double -infinity"
+        },
+        {
+          "value": "0x7FF8000000000000",
+          "type": "magic",
+          "description": "Double NaN"
+        }
+      ]
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106514642_p139046_0000","agent":"FormatAgent","key":"plateau_1779488552469854_p139046_0002:FormatAgent:cb36b653b645535b","reward_hint":0.000000,"memory":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106514642_p139046_0000","agent":"CorpusAgent","key":"plateau_1779488552469854_p139046_0002:CorpusAgent:600a180a23a251f0","reward_hint":0.000000,"memory":{
+  "agent": "CorpusAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106514642_p139046_0000","agent":"ResultAnalysisAgent","key":"plateau_1779488552469854_p139046_0002:ResultAnalysisAgent:e938efa4d752d881","reward_hint":0.000000,"memory":{"raw":"\"All micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward. No intervention outperformed. The plateau persists with no new paths, edges, or crashes. Agent memory should note that current strategies are ineffective on this target; consider exploring alternative mutation strategies or seed selection.\""}}

@@ -1,0 +1,298 @@
+{"run_id":"run_1779474106432371_p139043_0000","agent":"CoordinatorAgent","key":"plateau_1779488550582320_p139043_0002:CoordinatorAgent:daf4c460c7b53de9","reward_hint":0.000000,"memory":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_string_length",
+            "type": "Length",
+            "target_begin": 0,
+            "target_end": 4
+          },
+          {
+            "name": "json_checksum",
+            "type": "Checksum",
+            "target_begin": 4,
+            "target_end": 8
+          }
+        ],
+        "data_flow_mapping": [
+          {
+            "offset": 0,
+            "size": 4,
+            "sink": "parse_length"
+          },
+          {
+            "offset": 4,
+            "size": 4,
+            "sink": "validate_checksum"
+          }
+        ],
+        "cfg_constraints": [
+          {
+            "branch": "unreached_branch_0x1234",
+            "magic_value": "0xDEADBEEF"
+          }
+        ]
+      }
+    },
+    {
+      "action": "seed_focus_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_string_length",
+            "type": "Length",
+            "target_begin": 0,
+            "target_end": 4
+          },
+          {
+            "name": "json_checksum",
+            "type": "Checksum",
+            "target_begin": 4,
+            "target_end": 8
+          }
+        ],
+        "data_flow_mapping": [
+          {
+            "offset": 0,
+            "size": 4,
+            "sink": "parse_length"
+          },
+          {
+            "offset": 4,
+            "size": 4,
+            "sink": "validate_checksum"
+          }
+        ],
+        "cfg_constraints": [
+          {
+            "branch": "unreached_branch_0x1234",
+            "magic_value": "0xDEADBEEF"
+          }
+        ]
+      }
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "params": {
+        "fields": [
+          {
+            "name": "json_string_length",
+            "type": "Length",
+            "target_begin": 0,
+            "target_end": 4
+          },
+          {
+            "name": "json_checksum",
+            "type": "Checksum",
+            "target_begin": 4,
+            "target_end": 8
+          }
+        ],
+        "data_flow_mapping": [
+          {
+            "offset": 0,
+            "size": 4,
+            "sink": "parse_length"
+          },
+          {
+            "offset": 4,
+            "size": 4,
+            "sink": "validate_checksum"
+          }
+        ],
+        "cfg_constraints": [
+          {
+            "branch": "unreached_branch_0x1234",
+            "magic_value": "0xDEADBEEF"
+          }
+        ]
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "mutate_length_and_checksum"
+    }
+  ]
+}}
+{"run_id":"run_1779474106432371_p139043_0000","agent":"PlateauDiagnosisAgent","key":"plateau_1779488550582320_p139043_0002:PlateauDiagnosisAgent:fabd9d3b6f6d29d9","reward_hint":0.000000,"memory":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Coverage stalled at 22.95% bitmap with 266 edges. No new paths in 10s window. Cycles without finds: 29. Likely cause: sparse dictionary. Static analysis not available, but cjson parser typically uses string tokens and magic values. Dictionary probe can inject common JSON tokens to trigger new edges."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Corpus count 573, favored 56, variable bytes 2. Many seeds may be redundant. Focus on seeds with high edge coverage potential. Use recipe mutation to target specific structural fields (e.g., length fields, magic bytes) based on typical cjson parsing patterns."
+    }
+  ]
+}}
+{"run_id":"run_1779474106432371_p139043_0000","agent":"SchedulerAgent","key":"plateau_1779488550582320_p139043_0002:SchedulerAgent:2eeabb437fd59ec7","reward_hint":0.000000,"memory":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Plateau detected with zero new paths/edges in 10s window. Static analysis context empty, so no structural metadata to leverage. Focus on under-explored seeds to break coverage plateau.",
+      "seed_strategy": "favored_set_adjustment",
+      "params": {
+        "focus_seeds": "under-explored",
+        "adjustment": "increase_energy"
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "increase_energy_for_under_explored",
+      "reason": "Plateau indicates stagnation; reallocating energy to seeds that have not been heavily fuzzed may uncover new paths."
+    }
+  ]
+}}
+{"run_id":"run_1779474106432371_p139043_0000","agent":"CmpAgent","key":"plateau_1779488550582320_p139043_0002:CmpAgent:0ca9d684e8756d92","reward_hint":0.000000,"memory":{
+  "agent": "CmpAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106432371_p139043_0000","agent":"MutatorAgent","key":"plateau_1779488550582320_p139043_0002:MutatorAgent:3c3f3dd4c4e9fe5c","reward_hint":0.000000,"memory":{
+  "agent": "MutatorAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106432371_p139043_0000","agent":"DictionaryAgent","key":"plateau_1779488550582320_p139043_0002:DictionaryAgent:b529b1cc1be8b59e","reward_hint":0.000000,"memory":{
+  "agent": "DictionaryAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "params": {
+        "dictionary_entries": [
+          {
+            "value": "0x7B2274797065223A224F626A656374227D",
+            "type": "magic",
+            "comment": "JSON object start with type field"
+          },
+          {
+            "value": "0x5B5D",
+            "type": "magic",
+            "comment": "Empty JSON array"
+          },
+          {
+            "value": "0x6E756C6C",
+            "type": "magic",
+            "comment": "null literal"
+          },
+          {
+            "value": "0x74727565",
+            "type": "magic",
+            "comment": "true literal"
+          },
+          {
+            "value": "0x66616C7365",
+            "type": "magic",
+            "comment": "false literal"
+          },
+          {
+            "value": "0x22",
+            "type": "magic",
+            "comment": "Double quote character"
+          },
+          {
+            "value": "0x5C",
+            "type": "magic",
+            "comment": "Backslash escape"
+          },
+          {
+            "value": "0x2F",
+            "type": "magic",
+            "comment": "Forward slash"
+          },
+          {
+            "value": "0x08",
+            "type": "magic",
+            "comment": "Backspace escape"
+          },
+          {
+            "value": "0x0C",
+            "type": "magic",
+            "comment": "Form feed escape"
+          },
+          {
+            "value": "0x0A",
+            "type": "magic",
+            "comment": "Newline escape"
+          },
+          {
+            "value": "0x0D",
+            "type": "magic",
+            "comment": "Carriage return escape"
+          },
+          {
+            "value": "0x09",
+            "type": "magic",
+            "comment": "Tab escape"
+          },
+          {
+            "value": "0x5C7530303030",
+            "type": "magic",
+            "comment": "Unicode escape \\u0000"
+          },
+          {
+            "value": "0x5C7546464646",
+            "type": "magic",
+            "comment": "Unicode escape \\uFFFF"
+          },
+          {
+            "value": "0x2D",
+            "type": "magic",
+            "comment": "Minus sign for negative numbers"
+          },
+          {
+            "value": "0x2E",
+            "type": "magic",
+            "comment": "Decimal point"
+          },
+          {
+            "value": "0x45",
+            "type": "magic",
+            "comment": "Exponent 'E'"
+          },
+          {
+            "value": "0x65",
+            "type": "magic",
+            "comment": "Exponent 'e'"
+          },
+          {
+            "value": "0x30313233343536373839",
+            "type": "magic",
+            "comment": "Digits 0-9"
+          }
+        ],
+        "strategy": "Add common JSON structural tokens and escape sequences to dictionary to trigger edge cases in cJSON parser."
+      }
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106432371_p139043_0000","agent":"FormatAgent","key":"plateau_1779488550582320_p139043_0002:FormatAgent:cb36b653b645535b","reward_hint":0.000000,"memory":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106432371_p139043_0000","agent":"CorpusAgent","key":"plateau_1779488550582320_p139043_0002:CorpusAgent:4b732b2a9a577f2f","reward_hint":0.000000,"memory":{
+  "agent": "CorpusAgent",
+  "interventions": [
+    {
+      "action": "default_control",
+      "reason": "Plateau detected with no new edges or paths in 10 seconds. Corpus size is 573, which is large. Recommend deduplication and minimization to remove redundant seeds and reduce corpus size, potentially triggering new coverage."
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779474106432371_p139043_0000","agent":"ResultAnalysisAgent","key":"plateau_1779488550582320_p139043_0002:ResultAnalysisAgent:408e9afb6762a45f","reward_hint":0.000000,"memory":{"raw":"\"All micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward. No intervention outperformed. The plateau persists with no new paths, edges, or crashes. Recommendation: consider switching to structural mutation or static analysis-guided strategies.\""}}
