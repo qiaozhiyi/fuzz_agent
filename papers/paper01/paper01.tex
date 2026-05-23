@@ -437,8 +437,11 @@ shares the target binary with the main run but uses a private
 working directory and a snapshot of the corpus.
 
 \textbf{Custom mutator.} A native AFL++ mutator that dispatches on
-recipe operations (insert, replace, splice, dictionary, byte-range,
-length-repair). The mutator is the only on-the-hot-path component
+the seven recipe operations (\texttt{BitFlip},
+\texttt{OverwriteRange}, \texttt{InsertToken}, \texttt{Arith},
+\texttt{Splice}, \texttt{DeleteBlock}, \texttt{DictionaryOverwrite};
+the full enumeration is in \S\ref{sec:recipe:ops}). The mutator
+is the only on-the-hot-path component
 that touches recipes; its cost profile is reported in
 \S\ref{sec:eval} (RQ2, F5).
 
@@ -1823,6 +1826,57 @@ The full multi-arm comparison
 explicit follow-up work
 (\S\ref{sec:limits}).
 
+\subsection{Headline summary (consolidated)}
+\label{sec:eval:summary}
+
+For a single-glance reading, Table~\ref{tab:summary} pulls
+together every headline RQ number, with the matching significance
+companion or null-result marker where applicable. Cells marked
+\emph{desc.} are descriptive point estimates at the listed $N$;
+$p$ is the two-sided Mann--Whitney $U$ test (\S\ref{sec:eval:rq1:stats})
+unless noted; CI is the percentile bootstrap 95\% over $10{,}000$
+resamples. Negative findings (zero promotions, TOST not
+established, etc.) are explicitly listed rather than buried.
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{4pt}
+  \renewcommand{\arraystretch}{1.15}
+  \begin{tabular}{@{}l l l l@{}}
+    \toprule
+    RQ & Metric & Result ($N$) & Companion / caveat \\
+    \midrule
+    RQ1 & median plateau, baseline       & $2{,}532$\,s ($N{=}5$)   & CI $[539, 3{,}970]$ \\
+    RQ1 & median plateau, full-agent     & $1{,}384$\,s ($N{=}5$)   & CI $[238, 3{,}226]$ \\
+    RQ1 & $\Delta$ plateau (full vs baseline) & $-45.3\%$ (\emph{desc.}) & MW $U{=}8$, $p{=}0.42$, $A_{12}{=}0.68$; \textbf{not significant at $N{=}5$} \\
+    RQ1 & median time-to-269 edges, baseline & $2{,}524$\,s ($N{=}5$) & range $[1{,}081, 4{,}448]$ \\
+    RQ1 & median time-to-269 edges, full-agent & $6{,}702$\,s ($N{=}4$/5) & one run never reaches 269 within budget \\
+    RQ2 & median exec/sec ratio (full / baseline) & $\approx 1.06\times$ ($N{=}5$) & leave-one-out (drop r05): $1.05\times$ \\
+    RQ2 & microbench fp-active / fp-empty, median & $1.016\times$ ($N{=}5$) & \textbf{mean ratio $0.87\times$}; both within noise \\
+    RQ2 & microbench fp-active / fp-empty, $t$-test & two-sided $p{=}0.45$ & no significant diff at $N{=}5$ \\
+    RQ2 & TOST equivalence at $\pm5\%$ & $p_{\text{TOST}}{=}0.68$ ($N{=}5$) & \textbf{equivalence not established at $N{=}5$} \\
+    RQ2 & microbench fp-empty / vanilla, median & $1.53\times$ ($N{=}5$) & sanity gate ($\leq 5\times$), passes wide \\
+    RQ3 & schema-valid LLM responses & $43/45 = 95.6\%$ ($N{=}5$) & rule-only / no-mutator: $26{-}27/27$ \\
+    RQ3 & LLM-recipe promotions (gate accepted) & \textbf{$0/20$} ($N{=}5$) & cJSON saturated, $R{=}0$ on every micro-campaign \\
+    RQ3 & DeepSeek API cost & \$0.002 / 4h campaign & FX rate \$1$\approx$\textyen{}7.2; compute $\sim$\$1.60/campaign \\
+    RQ4 & median plateau, rule-only (E2a) & $1{,}165$\,s ($N{=}3$) & MW $U{=}4$, $p{=}0.39$, $A_{12}{=}0.73$ \\
+    RQ4 & median plateau, no-mutator (E2b) & $930$\,s ($N{=}3$) & MW $U{=}2$, $p{=}0.14$, $A_{12}{=}0.87$ \\
+    RQ4 & ablation ordering & \textbf{no-mutator $<$ rule-only $<$ full-agent} & \textbf{contradicts ``mutator drives the gain'' attribution} \\
+    RQ4 & no-static-analysis (E2c) & --- & retry in flight at submission \\
+    RQ4 & controller-only ablation & --- & not in preprint matrix; venue version \\
+    RQ4 & fairness baseline (AFL++ \texttt{-x}, \texttt{cmplog}) & --- & E4 batch in flight; addresses dictionary asymmetry \\
+    \bottomrule
+  \end{tabular}
+  \caption{One-glance summary of all RQ-level numbers reported in
+  the preprint, with the matching significance / null-result
+  companion. \emph{Desc.} = descriptive point estimate; no
+  pairwise plateau or last\_find difference reaches $p{<}0.05$ at
+  this $N$. Reproducible from
+  \texttt{scripts/paper01/review\_stats.py}.}
+  \label{tab:summary}
+\end{table}
+
 % =====================================================================
 % NOTE: §7 "Case Study" was deferred to the venue version of the paper.
 % The decision trail for any single full-agent run is recoverable from
@@ -1953,6 +2007,67 @@ OSS-Fuzz-Gen-authored harness fed into a FuzzPilot-orchestrated
 campaign with a Ghidra-informed recipe layer. We do not evaluate
 this composition here.
 
+\paragraph{Grammar / AST-aware greybox fuzzers (LLM-free).}
+A second family of structured-text fuzzers does not use LLMs at
+all and obtains its structure awareness from an explicit
+grammar or AST. AFLSmart~\cite{pham2019aflsmart} extends AFL with
+an input-model-aware mutation phase that preserves chunk
+boundaries; Nautilus~\cite{aschermann2019nautilus} drives
+greybox mutation from a context-free grammar with subtree
+splicing; Superion~\cite{wang2019superion} pairs AFL with an
+ANTLR-derived AST-mutation operator. Conceptually FuzzPilot's
+recipe vocabulary (\S\ref{sec:recipe:ops}) is byte-level rather
+than AST-level: a recipe can express ``insert dictionary token at
+offset $x$'', not ``replace the second \texttt{value} child of an
+\texttt{object} node''. We acknowledge this as a design
+limitation (\S\ref{sec:limits}) --- on grammar-amenable targets,
+AFLSmart-style chunk-aware mutation or Nautilus-style subtree
+splicing remains a strong baseline that we do not
+attempt to outperform in this preprint. Whether an LLM-guided
+recipe layer composes \emph{on top of} a grammar-aware mutator
+(e.g., FuzzPilot recipes that target Nautilus subtrees rather
+than byte offsets) is an explicit follow-up direction.
+
+\paragraph{AFL++ semantic-ish features (cmplog, RedQueen,
+laf-intel).}
+A third class of techniques exploits the AFL++ instrumentation
+itself rather than an external grammar or LLM. The
+\texttt{cmplog} module records concrete comparison operands
+during fuzzing and feeds them back as
+dictionary-overwrite candidates;
+RedQueen~\cite{aschermann2019redqueen} pioneered the underlying
+input-to-state-correspondence (I2S) idea; the \texttt{laf-intel}
+LLVM pass~\cite{lafintel2016} splits multi-byte comparisons into
+single-byte ones to make magic numbers reachable by coverage
+feedback alone. These are precisely the AFL++ features a fair
+\texttt{baseline-afl} arm should engage. Our preprint
+\texttt{baseline-afl} arm \emph{does not} pass
+\texttt{-x dictionary} or build the target with
+\texttt{cmplog}, and so the plateau-delta measured against it
+includes a non-trivial dictionary-contribution component that an
+AFL++-with-cmplog baseline could close. We treat this as the
+single most important missing baseline (\S\ref{sec:limits}); the
+follow-up E4 arm reported in the repository
+(\texttt{baseline-afl-dict} with the FuzzPilot default
+dictionary, and \texttt{baseline-afl-cmplog} with a
+\texttt{cmplog}-instrumented \texttt{cjson\_fuzzer.cmplog})
+addresses this directly and is in flight at submission time.
+
+\paragraph{LLM-upfront generators (one-shot, no steady-state
+LLM calls).}
+Sphinx~\cite{sun2024sphinx} uses an LLM \emph{once, before
+fuzzing starts} to synthesize a structured input generator for
+an SMT solver; the generator then runs without any further LLM
+involvement. The design rhymes with FuzzPilot in placing the LLM
+outside the per-mutation hot path, but the LLM is consulted only
+once (not on every plateau) and the output is a complete
+generator rather than a recipe that re-tunes a host fuzzer's
+existing mutation operators. Sphinx and FuzzPilot together
+suggest a spectrum --- \emph{LLM once} (Sphinx), \emph{LLM at
+plateaus} (FuzzPilot, G\textsuperscript{2}FUZZ), \emph{LLM per
+input} (LLAMAFUZZ, ChatFuzz) --- that we expect to be a
+productive axis for future comparisons.
+
 \paragraph{T3: side-by-side comparison.}
 
 \begin{table*}[t]
@@ -1965,6 +2080,12 @@ this composition here.
     System & LLM placement & LLM output & Validation & Static ctx. & Audit & Target domain \\
     \midrule
     AFL++~\cite{aflplusplus}        & \emph{none}      & ---             & coverage        & none           & ---  & general                 \\
+    AFL++ \texttt{cmplog} / RedQueen~\cite{aschermann2019redqueen} & none (I2S) & dict override   & coverage        & runtime cmp ops & ---  & general                 \\
+    laf-intel~\cite{lafintel2016}  & none (LLVM pass) & ---             & coverage        & cmp splitting  & ---  & general                 \\
+    AFLSmart~\cite{pham2019aflsmart} & none (input model) & chunk mutation & coverage      & input-format model & no  & structured (PNG / WAV / PDF) \\
+    Nautilus~\cite{aschermann2019nautilus} & none (grammar) & subtree splicing & coverage   & context-free grammar & no & grammar-amenable (JS / SQL / PHP) \\
+    Superion~\cite{wang2019superion} & none (grammar)  & AST mutation    & coverage        & ANTLR grammar  & no   & structured text (XML / JS) \\
+    Sphinx~\cite{sun2024sphinx}     & \textbf{LLM upfront, one-shot} & input generator (code) & coverage & none & no & SMT solvers \\
     LLAMAFUZZ~\cite{wang2024llamafuzz} & in-loop       & input bytes     & coverage        & none           & no   & general (Magma suite)   \\
     FuzzCoder~\cite{liu2024fuzzcoder}  & in-loop       & byte mutation   & coverage        & none           & no   & general                 \\
     Fuzz4All~\cite{xia2024fuzz4all}    & in-loop       & input bytes     & coverage        & none           & no   & multi-language          \\
@@ -2056,6 +2177,98 @@ Their data lands in the venue paper, alongside the remaining
 \texttt{no-static-analysis} arm of the E2 ablation
 (the \texttt{rule-only} and \texttt{no-mutator} arms are already
 reported in \S\ref{sec:eval:rq4-ablation}).
+
+\paragraph{Recipe vocabulary is byte-level, not AST-level.}
+The seven-operator recipe vocabulary
+(\texttt{BitFlip}, \texttt{OverwriteRange}, \texttt{InsertToken},
+\texttt{Arith}, \texttt{Splice}, \texttt{DeleteBlock},
+\texttt{DictionaryOverwrite}; \S\ref{sec:recipe:ops}) operates on
+\emph{byte offsets within a flat input buffer}, not on syntactic
+nodes of the structured-text grammar. A recipe can say ``insert
+the token \texttt{"null"} at offset $128$''; it cannot say
+``replace the second child of an \texttt{object} node with
+\texttt{null}''. For grammar-amenable targets, AST-level
+operators (Nautilus~\cite{aschermann2019nautilus},
+Superion~\cite{wang2019superion}) or chunk-level mutations
+(AFLSmart~\cite{pham2019aflsmart}) are stronger generators of
+parser-valid mutants. We chose a byte-level vocabulary
+deliberately --- to keep the mutator hot-path simple and to keep
+the recipe schema small enough for the LLM to emit reliably ---
+but the trade-off is real, and FuzzPilot is unlikely to
+\emph{outperform} a grammar-aware fuzzer on grammar-amenable
+targets without additional integration. Composing FuzzPilot's
+recipe layer on top of a grammar-aware mutator (recipes that
+target AST subtrees rather than byte offsets) is an explicit
+future-work direction.
+
+\paragraph{No syntax-aware repair or invariant-preserving
+operators.}
+Several recipe operators
+(\texttt{OverwriteRange}, \texttt{DictionaryOverwrite},
+\texttt{Splice}) can produce ill-formed JSON if applied
+naively: an overwrite that straddles a string-literal boundary
+breaks the quote-pair invariant; a splice that lands inside a
+numeric literal can produce an unparseable token; a dictionary
+overwrite inside a key context can violate the keys-are-unique
+invariant. The current recipe schema has \emph{no
+length-preserving, quote-aware, or escape-aware} repair
+operator. AFL's downstream coverage feedback eventually discards
+inputs that fail to advance coverage, so the practical impact on
+the campaign is bounded; but a sharper grammar-aware mutant
+generation strategy is the obvious next step. We have considered
+adding a \texttt{LengthRepair} operator (rebalance quote/bracket
+pairs after a mutation) and a \texttt{StringInsert} operator
+(insert at safe byte boundaries within a string literal), but
+neither is implemented in the released version --- avoiding
+having to specify them is part of why we kept the schema small
+and audit-friendly. We acknowledge this is a real reviewer-grade
+limitation rather than a design victory.
+
+\paragraph{AFL++ fairness baseline (\texttt{-x dictionary} and
+\texttt{cmplog}) is a follow-up arm, not finished in this
+preprint.}
+The \texttt{baseline-afl} arm reported in
+\S\ref{sec:eval:rq1} is \emph{vanilla} AFL++: it does \emph{not}
+receive an \texttt{-x dictionary} file, and the target binary is
+\emph{not} compiled with the \texttt{cmplog} pass. FuzzPilot's
+recipe-guided mutator, by contrast, dispatches against the
+controller's default \texttt{DictionaryAgent} recipe whose token
+set is \{\texttt{"FUZZ"}, \texttt{"MAGIC"}, \texttt{"TOKEN"}\}
+(\S\ref{sec:eval:rq3}). This asymmetry overstates FuzzPilot's
+advantage: any plateau-recovery delta could in principle be
+closed by an AFL++ run that consumes the \emph{same} three tokens
+via \texttt{-x}, or by an AFL++ build that uses
+\texttt{cmplog}/RedQueen-style I2S
+mining~\cite{aschermann2019redqueen,lafintel2016} to infer
+target-specific tokens at runtime. We treat closing this
+asymmetry as the single most important missing arm in the
+preprint matrix. A follow-up E4 batch
+(\texttt{baseline-afl-dict} with the FuzzPilot default
+dictionary; \texttt{baseline-afl-cmplog} with a
+\texttt{cmplog}-instrumented \texttt{cjson\_fuzzer.cmplog}) is in
+flight on the experiment host at submission time and will be
+folded into the next revision; \S\ref{sec:repro} pins the dict
+file and the cmplog binary so reviewers can run the comparison
+themselves.
+
+\paragraph{Reward / hyperparameter sensitivity is fixed, not
+swept.}
+The micro-campaign budget $N{=}20$\,s, the candidate count
+$K_{\text{cand}}{=}4$, and the reward weights
+$(\alpha,\beta,\gamma,\delta_h,\delta_m)$ in
+\S\ref{sec:plateau:micro} are pinned to fixed values for the
+preprint matrix --- chosen during development on the cJSON
+corpus, then frozen. We did not run a sensitivity sweep. The
+risk surface that this exposes is twofold. \emph{(i)} $N{=}20$\,s
+may be too short for the gate to discriminate marginal
+candidates on a non-saturated target (the cJSON null result is
+agnostic on this since reward is identically zero). \emph{(ii)}
+The reward weights bias the gate toward edge-discovery; on a
+crash-finding-dominant target, a different
+$(\alpha,\delta_h,\delta_m)$ trade could matter. A small
+sensitivity sweep (e.g., $N \in \{10,20,40,80\}$\,s and
+$K_{\text{cand}}\in\{2,4,8\}$ at $N{=}3$ each) is wired into the
+CLI and is part of the venue-paper matrix.
 
 \paragraph{Multi-target generalization.}
 We do not run on Magma's full benchmark suite in this preprint, and

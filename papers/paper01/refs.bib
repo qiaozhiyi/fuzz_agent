@@ -272,3 +272,79 @@
   pages   = {657--680},
   doi     = {10.1007/BF01068419}
 }
+
+% ----------------------------------------------------------------------
+% Grammar / structure / AST-aware fuzzers (LLM-free)
+% ----------------------------------------------------------------------
+
+@inproceedings{pham2019aflsmart,
+  title     = {Smart Greybox Fuzzing},
+  author    = {Pham, Van-Thuan and B{\"o}hme, Marcel and Santosa,
+               Andrew E. and Caciulescu, Alexandru R{\u a}zvan and
+               Roychoudhury, Abhik},
+  booktitle = {IEEE Transactions on Software Engineering (TSE)},
+  year      = {2021},
+  doi       = {10.1109/TSE.2019.2941681},
+  note      = {Originally NDSS 2019 (\textsc{AFLSmart}); journal
+               extension 2021.}
+}
+
+@inproceedings{aschermann2019nautilus,
+  title     = {{NAUTILUS}: Fishing for Deep Bugs with Grammars},
+  author    = {Aschermann, Cornelius and Frassetto, Tommaso and
+               Holz, Thorsten and Jauernig, Patrick and Sadeghi,
+               Ahmad-Reza and Teuchert, Daniel},
+  booktitle = {Proceedings of the Network and Distributed System
+               Security Symposium (NDSS '19)},
+  year      = {2019},
+  doi       = {10.14722/ndss.2019.23412}
+}
+
+@inproceedings{wang2019superion,
+  title     = {{Superion}: Grammar-Aware Greybox Fuzzing},
+  author    = {Wang, Junjie and Chen, Bihuan and Wei, Lei and
+               Liu, Yang},
+  booktitle = {Proceedings of the 41st International Conference on
+               Software Engineering (ICSE '19)},
+  year      = {2019},
+  doi       = {10.1109/ICSE.2019.00081}
+}
+
+% ----------------------------------------------------------------------
+% AFL++ semantic-ish features (LLM-free)
+% ----------------------------------------------------------------------
+
+@inproceedings{aschermann2019redqueen,
+  title     = {{REDQUEEN}: Fuzzing with Input-to-State Correspondence},
+  author    = {Aschermann, Cornelius and Schumilo, Sergej and
+               Blazytko, Tim and Gawlik, Robert and Holz, Thorsten},
+  booktitle = {Proceedings of the Network and Distributed System
+               Security Symposium (NDSS '19)},
+  year      = {2019},
+  doi       = {10.14722/ndss.2019.23337}
+}
+
+@misc{lafintel2016,
+  title        = {Circumventing Fuzzing Roadblocks with Compiler
+                  Transformations},
+  author       = {laf-intel},
+  howpublished = {\url{https://lafintel.wordpress.com/2016/08/15/circumventing-fuzzing-roadblocks-with-compiler-transformations/}},
+  year         = {2016},
+  note         = {The \texttt{laf-intel} LLVM pass; integrated into
+                  AFL++ as \texttt{AFL\_LLVM\_LAF\_*} build flags.}
+}
+
+% ----------------------------------------------------------------------
+% LLM-upfront generators (closest design-point siblings of FuzzPilot)
+% ----------------------------------------------------------------------
+
+@inproceedings{sun2024sphinx,
+  title     = {{Sphinx}: A Language Model Guided Generator for Solver
+               Fuzzing},
+  author    = {Sun, Yuyan and others},
+  booktitle = {Proceedings of the International Conference on
+               Automated Software Engineering (ASE '24)},
+  year      = {2024},
+  note      = {Representative ``LLM upfront, no steady-state calls''
+               design for SMT-solver fuzzing.}
+}
