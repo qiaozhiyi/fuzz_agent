@@ -249,8 +249,9 @@ to the full venue version (Paper~3). The \texttt{rule-only}
 ablation E2a and \texttt{no-mutator} ablation E2b
 (3 preliminary runs each) are summarized in
 \S\ref{sec:eval:rq4-ablation}; the \texttt{no-static-analysis}
-(E2c) arm is being re-run after a first-batch controller-launch
-failure and its data is folded into the venue version. The LLM
+(E2c) arm completed retry on the experiment host; results are
+reported in \S\ref{sec:eval:rq4-ablation} (median plateau 234\,s,
+bimodal at N=3). The LLM
 proposal layer hooks into
 the architecture, but the gate produces a null result on cJSON
 (\S\ref{sec:eval:rq3}); a non-saturated-target evaluation that
@@ -1280,7 +1281,7 @@ mode (expected for cJSON's safety-tested code base).
   E2a (\texttt{rule-only}) and E2b (\texttt{no-mutator}) ablation
   numbers ($N{=}3$ each) are reported in
   \S\ref{sec:eval:rq4-ablation}; E2c (\texttt{no-static-analysis})
-  is being re-run.}
+  reported in \S\ref{sec:eval:rq4-ablation}.}
   \label{tab:t1}
 \end{table}
 
@@ -1329,7 +1330,7 @@ runs, well within the standard ``stable target'' threshold of
   than \texttt{baseline-afl} median ($1{,}384$\,s vs $2{,}532$\,s);
   see RQ1 (\S\ref{sec:eval:rq1}).
   Preliminary E2a / E2b ablation medians ($N{=}3$) are reported in
-  \S\ref{sec:eval:rq4-ablation}; E2c is being re-run.}
+  \S\ref{sec:eval:rq4-ablation}; E2c reported there (median 234\,s, N=3).}
   \label{tab:t1-ext}
 \end{table}
 
@@ -1784,13 +1785,14 @@ keeps the mutator and default rule recipe), the controller's
 orchestration plus the mutator (E2b removes the mutator but keeps
 the controller, LLM, and Ghidra channel), and the Ghidra static
 channel (E2c removes Ghidra but keeps everything else). The
-\texttt{rule-only} (E2a) and \texttt{no-mutator} (E2b) campaigns
-have each completed $N{=}3$ runs of $14{,}400$\,s on the experiment
-host; the \texttt{no-static-analysis} (E2c) campaign is currently
-being re-run after a controller-launch failure in its first
-attempt (recorded as \texttt{main\_afl\_exited\_before\_telemetry}
-in the per-run \texttt{events.jsonl}) and will be folded into the
-venue version. \emph{All comparisons in this subsection are
+\texttt{rule-only} (E2a), \texttt{no-mutator} (E2b), and
+\texttt{no-static-analysis} (E2c) campaigns have each completed
+$N{=}3$ runs of $14{,}400$\,s on the experiment host (E2c
+required a controller-launch retry after its first batch
+exited before AFL telemetry was emitted, recorded as
+\texttt{main\_afl\_exited\_before\_telemetry} in the per-run
+\texttt{events.jsonl}; the retry succeeded and its data is
+reported below). \emph{All comparisons in this subsection are
 statistically descriptive only}: with $N{=}3$ per ablation and
 $N{=}5$ for the main arms, no pairwise plateau or last\_find
 difference reaches the conventional $p{<}0.05$ threshold under a
@@ -1858,33 +1860,112 @@ preprint therefore reports the ordering as a hypothesis that the
 saturated cJSON, to be tested at higher $N$ on a non-saturated
 target.
 
-\paragraph{Status of E2c and the missing controller-only arm.}
-Two further ablations are required to close the attribution
-argument:
+\paragraph{E2c \texttt{no-static-analysis} (preliminary, $N{=}3$).}
+With the Ghidra static-analysis channel disabled but the controller,
+LLM proposal layer, and recipe-guided mutator retained, the 3
+\texttt{no-static-analysis} runs reach the same 269-edge ceiling,
+with median \texttt{last\_find}~$=14{,}250$\,s and median plateau
+$=234$\,s (descriptive $-90.8\%$ vs baseline; Mann--Whitney
+$U{=}5$, $p{=}0.57$; $A_{12}{=}0.67$). \emph{However the per-run
+plateau distribution is bimodal} ($[187, 234, 4{,}454]$\,s; bootstrap
+95\% CI $[187, 4{,}454]$\,s spans the entire interval), so the
+point estimate is dominated by a single outlier-vs-cluster
+structure that $N{=}3$ cannot resolve. Median
+\texttt{execs\_per\_sec} is $10{,}259$ (lower than other E2 arms,
+because the empty-blackboard agents take a few extra prompt cycles
+before falling back to the default recipe) and median
+\texttt{cycles\_done} is $96$, the lowest of any mode --- the
+combination of recipe-guided mutator slowdown and longer
+agent-call overhead.
 
-\begin{itemize}
-\item \textbf{E2c (\texttt{no-static-analysis})} isolates the
-Ghidra context channel by retaining the controller, LLM, and
-recipe-guided mutator but feeding an empty static-context
-blackboard. The first batch failed at controller launch; a retry
-batch is in flight on the experiment host at submission time.
+\paragraph{Cross-ablation pattern (and the controller-only
+hypothesis it suggests).}
+At $N{=}3$ the four E2 ablation arms order
+\texttt{no-static-analysis} ($234$\,s) $<$ \texttt{no-mutator}
+($930$\,s) $<$ \texttt{rule-only} ($1{,}165$\,s) $<$
+\texttt{full-agent} ($1{,}384$\,s), each shorter than the
+\texttt{baseline-afl} plateau ($2{,}532$\,s). All four share the
+controller's plateau detector and corpus-snapshot reorganization;
+the modes that engage the recipe-guided mutator and the LLM
+proposal layer fall \emph{between} the controller-only-shaped
+floor (\texttt{no-static-analysis} median 234\,s) and the fully
+loaded \texttt{full-agent} median. The most natural read is that
+the productive-to-plateau acceleration on cJSON is driven
+primarily by controller machinery, with the LLM proposal and
+recipe-guided mutator layered on top adding latency rather than
+coverage --- a hypothesis the venue
+\texttt{controller-only} ablation will test directly. \emph{All
+of this is descriptive at $N{=}3$ with overlapping bootstrap
+CIs}; no pairwise difference between the four ablation arms
+reaches $p{<}0.05$ under Mann--Whitney $U$ at this $N$.
 
-\item \textbf{Controller-only (deferred)}: a fourth ablation that
-removes both the LLM layer \emph{and} the recipe-guided mutator,
-leaving only the plateau detector and corpus-snapshot
-reorganization. The current E2 design does not include this
-condition, and the venue version will add it. Without it we
-cannot fully separate ``controller machinery'' from ``default
-rule recipe'', and any controller-driven attribution claim must
-remain a hypothesis rather than a measured effect.
-\end{itemize}
-
-The full multi-arm comparison
+\paragraph{Missing controller-only arm (venue follow-up).}
+The current E2 design does not include a
+\texttt{controller-only} condition (plateau detector + corpus
+snapshot only, no LLM, no recipe-guided mutator, no Ghidra). The
+venue version will add it. Without it we cannot fully separate
+``controller machinery'' from ``default rule recipe'', and the
+controller-driven attribution above remains a hypothesis rather
+than a measured effect. The full multi-arm comparison
 (\texttt{baseline} / \texttt{rule-only} / \texttt{no-mutator} /
 \texttt{no-static-analysis} / \texttt{controller-only} /
 \texttt{full-agent}) at $N{\geq}10$ on a non-saturated target is
-explicit follow-up work
-(\S\ref{sec:limits}).
+explicit follow-up work (\S\ref{sec:limits}).
+
+\paragraph{E4 fairness baselines: AFL++ with dict / cmplog
+($N{=}3$).}
+The preprint \texttt{baseline-afl} arm is vanilla AFL++ without
+\texttt{-x dictionary} or \texttt{cmplog} instrumentation
+(\S\ref{sec:limits}), so any plateau delta against it
+overstates FuzzPilot's advantage. E4 is the corresponding
+fairness arm: \texttt{baseline-afl-dict} runs vanilla AFL++ with
+\texttt{-x experiments/targets/cjson/fuzzpilot\_default.dict}
+(the same \texttt{FUZZ}/\texttt{MAGIC}/\texttt{TOKEN} tokens the
+controller emits in its default recipe), and
+\texttt{baseline-afl-cmplog} runs vanilla AFL++ over a
+\texttt{cmplog}-instrumented build (\texttt{cjson\_fuzzer.cmplog}).
+3 runs each, 14{,}400\,s, same host. Two findings stand out:
+
+\begin{itemize}
+\item \textbf{Plateau: AFL++ with \texttt{-x} or \texttt{cmplog}
+does \emph{not} close the plateau gap.} Medians are
+\texttt{baseline-afl-dict} $=2{,}256$\,s ($p{=}0.79$,
+$A_{12}{=}0.60$ vs baseline) and \texttt{baseline-afl-cmplog}
+$=2{,}367$\,s ($p{=}1.00$, $A_{12}{=}0.53$ vs baseline) ---
+neither is meaningfully different from the
+$2{,}532$\,s vanilla baseline, and both are much longer than the
+FuzzPilot ablation arms (range $234$--$1{,}384$\,s). The
+plateau-recovery delta we attribute in
+\S\ref{sec:eval:rq4-ablation} to the FuzzPilot controller
+\emph{does not reduce} to ``vanilla AFL++ once it has a
+dictionary'' or ``vanilla AFL++ once it has runtime
+I2S information''.
+
+\item \textbf{Edges: \texttt{cmplog} actually reaches one more
+edge than FuzzPilot does on cJSON.} All three
+\texttt{baseline-afl-cmplog} runs hit $270$ edges (vs $269$ for
+\texttt{baseline-afl}, \texttt{full-agent}, and all E2
+ablations; one \texttt{baseline-afl-dict} run also hits $270$).
+The +1-edge gap is small but reproducible and \emph{must be
+disclosed}: \texttt{cmplog}'s runtime comparison-operand mining
+finds an edge that the recipe-guided mutator + default rule
+recipe does not. The two techniques operate on different axes
+--- FuzzPilot accelerates plateau via controller-driven
+corpus-snapshot reorganization (saves wall-time), while
+\texttt{cmplog} marginally extends absolute coverage via I2S
+mining (finds one more edge). They are complementary, not
+substitutes; composing the two (FuzzPilot's controller +
+\texttt{cmplog}-instrumented target) is an obvious
+follow-up that the current FuzzPilot CLI does not yet
+support.
+\end{itemize}
+
+The plateau-delta narrative we report in
+\S\ref{sec:eval:rq1} therefore stands as a wall-time advantage
+on a target whose absolute coverage is saturated; on a
+non-saturated target the E4 fairness comparison must be
+re-run, and we expect the controller-vs-\texttt{cmplog} ordering
+on absolute edges to be the open question.
 
 \subsection{Headline summary (consolidated)}
 \label{sec:eval:summary}
@@ -1922,10 +2003,12 @@ established, etc.) are explicitly listed rather than buried.
     RQ3 & DeepSeek API cost & \$0.002 / 4h campaign & FX rate \$1$\approx$\textyen{}7.2; compute $\sim$\$1.60/campaign \\
     RQ4 & median plateau, rule-only (E2a) & $1{,}165$\,s ($N{=}3$) & MW $U{=}4$, $p{=}0.39$, $A_{12}{=}0.73$ \\
     RQ4 & median plateau, no-mutator (E2b) & $930$\,s ($N{=}3$) & MW $U{=}2$, $p{=}0.14$, $A_{12}{=}0.87$ \\
-    RQ4 & ablation ordering & \textbf{no-mutator $<$ rule-only $<$ full-agent} & \textbf{contradicts ``mutator drives the gain'' attribution} \\
-    RQ4 & no-static-analysis (E2c) & --- & retry in flight at submission \\
+    RQ4 & median plateau, no-static-analysis (E2c) & $234$\,s ($N{=}3$) & MW $U{=}5$, $p{=}0.57$, $A_{12}{=}0.67$; bimodal $[187,234,4454]$ \\
+    RQ4 & ablation ordering & \textbf{no-static-analysis $<$ no-mutator $<$ rule-only $<$ full-agent} & \textbf{all four shorter than baseline; controller-driver hypothesis} \\
     RQ4 & controller-only ablation & --- & not in preprint matrix; venue version \\
-    RQ4 & fairness baseline (AFL++ \texttt{-x}, \texttt{cmplog}) & --- & E4 batch in flight; addresses dictionary asymmetry \\
+    Fair & E4a median plateau, baseline-afl-dict & $2{,}256$\,s ($N{=}3$) & $p{=}0.79$, $A_{12}{=}0.60$ vs baseline; dict alone does not help \\
+    Fair & E4b median plateau, baseline-afl-cmplog & $2{,}367$\,s ($N{=}3$) & $p{=}1.00$, $A_{12}{=}0.53$ vs baseline; cmplog does not shorten plateau \\
+    Fair & E4b edges, baseline-afl-cmplog & \textbf{$270/270/270$} & \textbf{cmplog finds +1 edge over FuzzPilot's $269$} (different axis, complementary) \\
     \bottomrule
   \end{tabular}
   \caption{One-glance summary of all RQ-level numbers reported in
@@ -2107,11 +2190,13 @@ feedback alone. These are precisely the AFL++ features a fair
 includes a non-trivial dictionary-contribution component that an
 AFL++-with-cmplog baseline could close. We treat this as the
 single most important missing baseline (\S\ref{sec:limits}); the
-follow-up E4 arm reported in the repository
+E4 fairness arms reported in this paper
 (\texttt{baseline-afl-dict} with the FuzzPilot default
 dictionary, and \texttt{baseline-afl-cmplog} with a
 \texttt{cmplog}-instrumented \texttt{cjson\_fuzzer.cmplog})
-addresses this directly and is in flight at submission time.
+close this directly --- and find that neither closes the plateau
+gap, but \texttt{cmplog} reaches $+1$ edge that FuzzPilot does
+not (see \S\ref{sec:eval:rq4-ablation}).
 
 \paragraph{LLM-upfront generators (one-shot, no steady-state
 LLM calls).}
@@ -2302,13 +2387,15 @@ via \texttt{-x}, or by an AFL++ build that uses
 mining~\cite{aschermann2019redqueen,lafintel2016} to infer
 target-specific tokens at runtime. We treat closing this
 asymmetry as the single most important missing arm in the
-preprint matrix. A follow-up E4 batch
+preprint matrix. The E4 fairness baselines
 (\texttt{baseline-afl-dict} with the FuzzPilot default
 dictionary; \texttt{baseline-afl-cmplog} with a
-\texttt{cmplog}-instrumented \texttt{cjson\_fuzzer.cmplog}) is in
-flight on the experiment host at submission time and will be
-folded into the next revision; \S\ref{sec:repro} pins the dict
-file and the cmplog binary so reviewers can run the comparison
+\texttt{cmplog}-instrumented \texttt{cjson\_fuzzer.cmplog})
+are reported in \S\ref{sec:eval:rq4-ablation}; the headline
+finding is that neither closes the plateau gap, but
+\texttt{cmplog} reaches one more edge ($270$) than any
+FuzzPilot arm ($269$). \S\ref{sec:repro} pins the dict file and
+the cmplog binary so reviewers can re-run the comparison
 themselves.
 
 \paragraph{Reward / hyperparameter sensitivity is fixed, not
@@ -2590,14 +2677,14 @@ artifacts. All paths are relative to the repository root.
   between the Docker and native builds; the Docker recipe is
   shipped to lower the activation energy for re-running the
   pipeline rather than to certify exact reproduction.
-  \item \textbf{Per-run artifacts:} 16 completed 14{,}400\,s runs
+  \item \textbf{Per-run artifacts:} 25 completed 14{,}400\,s runs
   (5 \texttt{baseline-afl}, 5 \texttt{full-agent},
-  3 \texttt{rule-only}, 3 \texttt{no-mutator}) are checked into the
-  repository under
-  \texttt{results/paper01\_ai\_recipe\_mutation/runs/}; the
-  \texttt{no-static-analysis} (E2c) batch is being re-run after
-  the first attempt failed at controller launch, and will be
-  added to the repository when the retry completes.
+  3 \texttt{rule-only}, 3 \texttt{no-mutator},
+  3 \texttt{no-static-analysis},
+  3 \texttt{baseline-afl-dict}, 3 \texttt{baseline-afl-cmplog})
+  are checked into the repository under
+  \texttt{results/paper01\_ai\_recipe\_mutation/runs/}; this is
+  the complete preprint matrix on cJSON.
   Each run directory contains the unmodified AFL++
   \texttt{fuzzer\_stats}, \texttt{coverage.csv},
   \texttt{events.jsonl}, \texttt{agent\_decisions.jsonl}

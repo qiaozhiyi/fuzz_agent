@@ -1,0 +1,173 @@
+{"id":"agent_decision_1779559366780157_p435837_0011","run_id":"run_1779544877720904_p435837_0000","plateau_id":"plateau_1779559362811870_p435837_0002","agent":"CoordinatorAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"ca73ca8c8dec6b7c","response_hash":"df26a69cc8cb528e","latency_ms":3991,"input_tokens":998,"output_tokens":381,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "rationale": "Plateau detected with no new edges; dictionary-based mutation may trigger new paths by inserting known magic values.",
+      "params": {
+        "fields": [
+          {
+            "name": "magic_bytes",
+            "type": "Magic",
+            "target_begin": 0,
+            "target_end": 4
+          }
+        ],
+        "data_flow_mapping": {
+          "sink_offsets": [0, 4, 8]
+        },
+        "cfg_constraints": {
+          "unreached_branch_magic": "0xDEADBEEF"
+        }
+      }
+    },
+    {
+      "action": "seed_focus_probe",
+      "rationale": "Focus on seeds that have shown recent path discoveries to break plateau.",
+      "params": {
+        "focus_seeds": ["seed_001", "seed_042"],
+        "mutation_rate": 0.3
+      }
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "rationale": "Apply targeted recipe mutations per seed to explore structural variations.",
+      "params": {
+        "recipes": ["recipe_length", "recipe_checksum"],
+        "seed_list": ["seed_001", "seed_042"]
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "seed_001",
+      "actions": ["dictionary_probe", "per_seed_recipe_probe"]
+    },
+    {
+      "seed_id": "seed_042",
+      "actions": ["dictionary_probe", "per_seed_recipe_probe"]
+    }
+  ]
+}}
+{"id":"agent_decision_1779559370772408_p435837_0013","run_id":"run_1779544877720904_p435837_0000","plateau_id":"plateau_1779559362811870_p435837_0002","agent":"PlateauDiagnosisAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"e36fd5463429ece8","response_hash":"ccfe52310cc1202a","latency_ms":4643,"input_tokens":1013,"output_tokens":453,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Coverage stalled at 23.21% bitmap with 120 cycles done and 4285s without finds. Likely cause: structural barrier due to missing magic values or checksum fields. Static context empty, but cjson parser expects specific tokens (e.g., '{', '}', '\"', ':', ','). Dictionary probe can inject these to unlock new paths.",
+      "parameters": {
+        "dictionary_entries": [
+          {"key": "open_brace", "value": "{"},
+          {"key": "close_brace", "value": "}"},
+          {"key": "open_bracket", "value": "["},
+          {"key": "close_bracket", "value": "]"},
+          {"key": "quote", "value": "\""},
+          {"key": "colon", "value": ":"},
+          {"key": "comma", "value": ","},
+          {"key": "null", "value": "null"},
+          {"key": "true", "value": "true"},
+          {"key": "false", "value": "false"},
+          {"key": "escape", "value": "\\"},
+          {"key": "newline", "value": "\n"},
+          {"key": "tab", "value": "\t"}
+        ]
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "structural_mutation",
+      "reason": "Based on cjson parser structure, mutations should focus on inserting structural tokens and varying numeric/string values. Use dictionary probe to inject magic values at random offsets.",
+      "fields": [
+        {
+          "name": "json_structure",
+          "type": "magic",
+          "target_begin": 0,
+          "target_end": 1024,
+          "values": ["{", "}", "[", "]", "\"", ":", ",", "null", "true", "false"]
+        }
+      ]
+    }
+  ]
+}}
+{"id":"agent_decision_1779559375416065_p435837_0015","run_id":"run_1779544877720904_p435837_0000","plateau_id":"plateau_1779559362811870_p435837_0002","agent":"SchedulerAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"45ee8fa0a7253120","response_hash":"2f555055cd9b01b1","latency_ms":2279,"input_tokens":993,"output_tokens":154,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reasoning": "Plateau detected with zero new paths/edges in 10s window. Static context empty, so no structural hints. Focus on under-explored seeds to trigger new coverage.",
+      "seed_strategy": "focus_under_explored"
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "focus_under_explored",
+      "params": {
+        "focus_ratio": 0.3,
+        "explore_ratio": 0.7
+      }
+    }
+  ]
+}}
+{"id":"agent_decision_1779559377696104_p435837_0017","run_id":"run_1779544877720904_p435837_0000","plateau_id":"plateau_1779559362811870_p435837_0002","agent":"CmpAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"e0ae28fd1255ef54","response_hash":"cd4d3f7994eb8eb3","latency_ms":4017,"input_tokens":991,"output_tokens":409,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "CmpAgent",
+  "interventions": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Plateau detected with no new paths/edges. Static analysis not available; propose generic magic value mutations to trigger comparison branches.",
+      "fields": [
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "values": ["0x00", "0xFF", "0x7F", "0x80", "0x3F800000", "0xBF800000", "0x00000000", "0xFFFFFFFF"]
+        }
+      ],
+      "data_flow_mapping": {
+        "focus_offsets": [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 128, 192, 256]
+      },
+      "cfg_constraints": {
+        "unreached_branches": [],
+        "magic_values": []
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "mutate_magic",
+      "offsets": [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 128, 192, 256],
+      "values": ["0x00", "0xFF", "0x7F", "0x80", "0x3F800000", "0xBF800000", "0x00000000", "0xFFFFFFFF"]
+    }
+  ]
+}}
+{"id":"agent_decision_1779559381714383_p435837_0019","run_id":"run_1779544877720904_p435837_0000","plateau_id":"plateau_1779559362811870_p435837_0002","agent":"MutatorAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"00d77d498d40ddca","response_hash":"3c3f3dd4c4e9fe5c","latency_ms":1351,"input_tokens":994,"output_tokens":25,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "MutatorAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779559383066550_p435837_0021","run_id":"run_1779544877720904_p435837_0000","plateau_id":"plateau_1779559362811870_p435837_0002","agent":"DictionaryAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"10b537dae6d90600","response_hash":"c3e3a6bb1c595214","latency_ms":1311,"input_tokens":992,"output_tokens":24,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "DictionaryAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779559384378585_p435837_0023","run_id":"run_1779544877720904_p435837_0000","plateau_id":"plateau_1779559362811870_p435837_0002","agent":"FormatAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"ba3c917961ad1b8c","response_hash":"cb36b653b645535b","latency_ms":1205,"input_tokens":988,"output_tokens":24,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779559385584497_p435837_0025","run_id":"run_1779544877720904_p435837_0000","plateau_id":"plateau_1779559362811870_p435837_0002","agent":"CorpusAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"7987038263b75cbe","response_hash":"600a180a23a251f0","latency_ms":1274,"input_tokens":992,"output_tokens":25,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "CorpusAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"id":"agent_decision_1779559470138195_p435837_0052","run_id":"run_1779544877720904_p435837_0000","plateau_id":"plateau_1779559362811870_p435837_0002","agent":"ResultAnalysisAgent","provider":"openai_compatible","model":"deepseek-chat","context_hash":"19d731dc9b93c3ff","response_hash":"8350d5996e874069","latency_ms":2710,"input_tokens":1526,"output_tokens":144,"retry_count":0,"error_kind":"ok","schema_valid":true,"fallback_used":false,"proposal":{
+  "agent": "ResultAnalysisAgent",
+  "memory_patch": {
+    "type": "memory_patch",
+    "content": "All micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward. No new paths, edges, or crashes. The plateau persists. Static analysis context is empty, so structural mutations are not applicable. Recommend switching to a different strategy or terminating the campaign."
+  },
+  "critique": "All four interventions failed to produce any improvement. The plateau is confirmed with zero gains across all metrics. The static analysis context is empty, limiting mutation guidance. The agent should consider exploring alternative actions or ending the campaign."
+}}

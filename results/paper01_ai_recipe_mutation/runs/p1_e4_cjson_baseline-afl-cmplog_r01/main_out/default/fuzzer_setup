@@ -1,0 +1,9 @@
+# environment variables:
+AFL_CUSTOM_INFO_PROGRAM=/root/fuzz_agent/experiments/targets/cjson/cjson_fuzzer
+AFL_CUSTOM_INFO_PROGRAM_ARGV=@@
+AFL_CUSTOM_INFO_OUT=/root/fuzz_agent/results/paper01_ai_recipe_mutation/runs/p1_e4_cjson_baseline-afl-cmplog_r01/main_out/default
+AFL_NO_UI=1
+AFL_MAP_SIZE=65536
+AFL_SKIP_CPUFREQ=1
+# command line:
+'afl-fuzz' '-i' '/root/fuzz_agent/experiments/targets/cjson/seeds' '-o' '/root/fuzz_agent/results/paper01_ai_recipe_mutation/runs/p1_e4_cjson_baseline-afl-cmplog_r01/main_out' '-V' '14400' '-m' '1024' '-t' '1000' '-c' '/root/fuzz_agent/experiments/targets/cjson/cjson_fuzzer.cmplog' '--' '/root/fuzz_agent/experiments/targets/cjson/cjson_fuzzer' '@@'

@@ -1,0 +1,169 @@
+{"run_id":"run_1779544877720904_p435837_0000","agent":"CoordinatorAgent","key":"plateau_1779559362811870_p435837_0002:CoordinatorAgent:df26a69cc8cb528e","reward_hint":0.000000,"memory":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "rationale": "Plateau detected with no new edges; dictionary-based mutation may trigger new paths by inserting known magic values.",
+      "params": {
+        "fields": [
+          {
+            "name": "magic_bytes",
+            "type": "Magic",
+            "target_begin": 0,
+            "target_end": 4
+          }
+        ],
+        "data_flow_mapping": {
+          "sink_offsets": [0, 4, 8]
+        },
+        "cfg_constraints": {
+          "unreached_branch_magic": "0xDEADBEEF"
+        }
+      }
+    },
+    {
+      "action": "seed_focus_probe",
+      "rationale": "Focus on seeds that have shown recent path discoveries to break plateau.",
+      "params": {
+        "focus_seeds": ["seed_001", "seed_042"],
+        "mutation_rate": 0.3
+      }
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "rationale": "Apply targeted recipe mutations per seed to explore structural variations.",
+      "params": {
+        "recipes": ["recipe_length", "recipe_checksum"],
+        "seed_list": ["seed_001", "seed_042"]
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "seed_001",
+      "actions": ["dictionary_probe", "per_seed_recipe_probe"]
+    },
+    {
+      "seed_id": "seed_042",
+      "actions": ["dictionary_probe", "per_seed_recipe_probe"]
+    }
+  ]
+}}
+{"run_id":"run_1779544877720904_p435837_0000","agent":"PlateauDiagnosisAgent","key":"plateau_1779559362811870_p435837_0002:PlateauDiagnosisAgent:ccfe52310cc1202a","reward_hint":0.000000,"memory":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Coverage stalled at 23.21% bitmap with 120 cycles done and 4285s without finds. Likely cause: structural barrier due to missing magic values or checksum fields. Static context empty, but cjson parser expects specific tokens (e.g., '{', '}', '\"', ':', ','). Dictionary probe can inject these to unlock new paths.",
+      "parameters": {
+        "dictionary_entries": [
+          {"key": "open_brace", "value": "{"},
+          {"key": "close_brace", "value": "}"},
+          {"key": "open_bracket", "value": "["},
+          {"key": "close_bracket", "value": "]"},
+          {"key": "quote", "value": "\""},
+          {"key": "colon", "value": ":"},
+          {"key": "comma", "value": ","},
+          {"key": "null", "value": "null"},
+          {"key": "true", "value": "true"},
+          {"key": "false", "value": "false"},
+          {"key": "escape", "value": "\\"},
+          {"key": "newline", "value": "\n"},
+          {"key": "tab", "value": "\t"}
+        ]
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "structural_mutation",
+      "reason": "Based on cjson parser structure, mutations should focus on inserting structural tokens and varying numeric/string values. Use dictionary probe to inject magic values at random offsets.",
+      "fields": [
+        {
+          "name": "json_structure",
+          "type": "magic",
+          "target_begin": 0,
+          "target_end": 1024,
+          "values": ["{", "}", "[", "]", "\"", ":", ",", "null", "true", "false"]
+        }
+      ]
+    }
+  ]
+}}
+{"run_id":"run_1779544877720904_p435837_0000","agent":"SchedulerAgent","key":"plateau_1779559362811870_p435837_0002:SchedulerAgent:2f555055cd9b01b1","reward_hint":0.000000,"memory":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reasoning": "Plateau detected with zero new paths/edges in 10s window. Static context empty, so no structural hints. Focus on under-explored seeds to trigger new coverage.",
+      "seed_strategy": "focus_under_explored"
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "focus_under_explored",
+      "params": {
+        "focus_ratio": 0.3,
+        "explore_ratio": 0.7
+      }
+    }
+  ]
+}}
+{"run_id":"run_1779544877720904_p435837_0000","agent":"CmpAgent","key":"plateau_1779559362811870_p435837_0002:CmpAgent:cd4d3f7994eb8eb3","reward_hint":0.000000,"memory":{
+  "agent": "CmpAgent",
+  "interventions": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Plateau detected with no new paths/edges. Static analysis not available; propose generic magic value mutations to trigger comparison branches.",
+      "fields": [
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "values": ["0x00", "0xFF", "0x7F", "0x80", "0x3F800000", "0xBF800000", "0x00000000", "0xFFFFFFFF"]
+        }
+      ],
+      "data_flow_mapping": {
+        "focus_offsets": [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 128, 192, 256]
+      },
+      "cfg_constraints": {
+        "unreached_branches": [],
+        "magic_values": []
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "all",
+      "strategy": "mutate_magic",
+      "offsets": [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 128, 192, 256],
+      "values": ["0x00", "0xFF", "0x7F", "0x80", "0x3F800000", "0xBF800000", "0x00000000", "0xFFFFFFFF"]
+    }
+  ]
+}}
+{"run_id":"run_1779544877720904_p435837_0000","agent":"MutatorAgent","key":"plateau_1779559362811870_p435837_0002:MutatorAgent:3c3f3dd4c4e9fe5c","reward_hint":0.000000,"memory":{
+  "agent": "MutatorAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779544877720904_p435837_0000","agent":"DictionaryAgent","key":"plateau_1779559362811870_p435837_0002:DictionaryAgent:c3e3a6bb1c595214","reward_hint":0.000000,"memory":{
+  "agent": "DictionaryAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779544877720904_p435837_0000","agent":"FormatAgent","key":"plateau_1779559362811870_p435837_0002:FormatAgent:cb36b653b645535b","reward_hint":0.000000,"memory":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779544877720904_p435837_0000","agent":"CorpusAgent","key":"plateau_1779559362811870_p435837_0002:CorpusAgent:600a180a23a251f0","reward_hint":0.000000,"memory":{
+  "agent": "CorpusAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779544877720904_p435837_0000","agent":"ResultAnalysisAgent","key":"plateau_1779559362811870_p435837_0002:ResultAnalysisAgent:8350d5996e874069","reward_hint":0.000000,"memory":{
+    "type": "memory_patch",
+    "content": "All micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward. No new paths, edges, or crashes. The plateau persists. Static analysis context is empty, so structural mutations are not applicable. Recommend switching to a different strategy or terminating the campaign."
+  }}

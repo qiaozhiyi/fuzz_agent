@@ -12,9 +12,9 @@ p1_e1_cjson_full-agent_r05,e1,cjson,full-agent,r05,completed,225180431,15597.36,
 p1_e2_cjson_no-mutator_r01,e2,cjson,no-mutator,r01,completed,182989345,12638.35,625,269,23.21%,0,0,0,9,0,0.8888888888888888,0.0
 p1_e2_cjson_no-mutator_r02,e2,cjson,no-mutator,r02,completed,184046841,12712.05,613,269,23.21%,0,0,0,9,0,1.0,0.0
 p1_e2_cjson_no-mutator_r03,e2,cjson,no-mutator,r03,completed,185117365,12787.02,616,269,23.21%,0,0,0,9,0,1.0,0.0
-p1_e2_cjson_no-static-analysis_r01,e2,cjson,no-static-analysis,r01,skipped,,,,,,,,0,0,0,,
-p1_e2_cjson_no-static-analysis_r02,e2,cjson,no-static-analysis,r02,skipped,,,,,,,,0,0,0,,
-p1_e2_cjson_no-static-analysis_r03,e2,cjson,no-static-analysis,r03,skipped,,,,,,,,0,0,0,,
+p1_e2_cjson_no-static-analysis_r01,e2,cjson,no-static-analysis,r01,completed,148001843,10215.16,583,269,23.21%,0,0,0,9,0,0.8888888888888888,0.0
+p1_e2_cjson_no-static-analysis_r02,e2,cjson,no-static-analysis,r02,completed,148611055,10259.41,584,269,23.21%,0,0,0,9,0,1.0,0.0
+p1_e2_cjson_no-static-analysis_r03,e2,cjson,no-static-analysis,r03,completed,154960808,10698.48,587,269,23.21%,0,1,0,9,0,1.0,0.0
 p1_e2_cjson_rule-only_r01,e2,cjson,rule-only,r01,completed,195959529,13538.63,609,269,23.21%,0,0,0,9,0,1.0,0.0
 p1_e2_cjson_rule-only_r02,e2,cjson,rule-only,r02,completed,195616076,13513.55,583,269,23.21%,0,0,0,9,0,1.0,0.0
 p1_e2_cjson_rule-only_r03,e2,cjson,rule-only,r03,completed,188939720,13053.03,594,269,23.21%,0,0,0,9,0,1.0,0.0

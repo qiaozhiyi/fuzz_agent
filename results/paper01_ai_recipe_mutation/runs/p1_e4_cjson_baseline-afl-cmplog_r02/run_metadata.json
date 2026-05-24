@@ -1,0 +1,13 @@
+{
+  \"run_id\": \"p1_e4_cjson_baseline-afl-cmplog_r02\",
+  \"captured_at_utc\": \"2026-05-23T22:05:57Z\",
+  \"git_commit\": \"85223d844711c704130608f58200a0b5a18862fe\",
+  \"git_branch\": \"main\",
+  \"git_dirty\": true,
+  \"target_name\": \"cjson_parser\",
+  \"os\": \"Linux\",
+  \"arch\": \"x86_64\",
+  \"mode\": \"baseline-afl-cmplog\",
+  \"budget_sec\": 14400,
+  \"afl_extra_flags\": \"-c /root/fuzz_agent/experiments/targets/cjson/cjson_fuzzer.cmplog\"
+}

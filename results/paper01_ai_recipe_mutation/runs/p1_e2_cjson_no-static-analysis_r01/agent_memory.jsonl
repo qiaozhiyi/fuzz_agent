@@ -1,0 +1,284 @@
+{"run_id":"run_1779544877530291_p435833_0000","agent":"CoordinatorAgent","key":"plateau_1779559366876538_p435833_0002:CoordinatorAgent:95506d0c6615b894","reward_hint":0.000000,"memory":{
+  "agent": "CoordinatorAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Plateau detected with no new paths/edges; dictionary may unlock blocked transitions."
+    },
+    {
+      "action": "seed_focus_probe",
+      "reason": "Focus on seeds that have shown recent progress to break stagnation."
+    },
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Apply targeted recipes to seeds near uncovered edges to force new paths."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "favored",
+      "strategy": "prioritize_favored",
+      "reason": "Favored seeds are more likely to trigger new coverage."
+    },
+    {
+      "seed_id": "recent_path",
+      "strategy": "focus_recent",
+      "reason": "Seeds that recently found paths may still have untapped potential."
+    }
+  ]
+}}
+{"run_id":"run_1779544877530291_p435833_0000","agent":"PlateauDiagnosisAgent","key":"plateau_1779559366876538_p435833_0002:PlateauDiagnosisAgent:d13bb44f397da507","reward_hint":0.000000,"memory":{
+  "agent": "PlateauDiagnosisAgent",
+  "interventions": [
+    {
+      "action": "dictionary_probe",
+      "reason": "Coverage stalled at 23.21% bitmap with 269 edges. No new paths in 10s window. Static analysis context empty, but likely structural barriers (e.g., magic bytes, checksums) in JSON parsing. Dictionary probe can inject common JSON tokens to bypass magic checks.",
+      "parameters": {
+        "dictionary_source": "auto_extract",
+        "target_fields": ["magic", "length", "checksum"]
+      }
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Corpus has 583 entries but only 56 favored. Many seeds may be redundant. Focus on seeds that exercise rare edges or have high variability (var_byte_count=2).",
+      "parameters": {
+        "focus_mode": "rare_edge",
+        "max_seeds": 10
+      }
+    }
+  ]
+}}
+{"run_id":"run_1779544877530291_p435833_0000","agent":"SchedulerAgent","key":"plateau_1779559366876538_p435833_0002:SchedulerAgent:c873862c5ee5eabf","reward_hint":0.000000,"memory":{
+  "agent": "SchedulerAgent",
+  "interventions": [
+    {
+      "action": "seed_focus_probe",
+      "reason": "Plateau detected with zero new paths/edges in 10s window. Static context empty, so focusing on under-explored seeds to reallocate energy."
+    }
+  ],
+  "seed_strategies": [
+    {
+      "seed_id": "seed_under_001",
+      "energy_boost": 1.5,
+      "reason": "Seed with low coverage contribution; boost to explore new paths."
+    },
+    {
+      "seed_id": "seed_under_002",
+      "energy_boost": 1.5,
+      "reason": "Seed with low coverage contribution; boost to explore new paths."
+    }
+  ]
+}}
+{"run_id":"run_1779544877530291_p435833_0000","agent":"CmpAgent","key":"plateau_1779559366876538_p435833_0002:CmpAgent:54bd360971e68695","reward_hint":0.000000,"memory":{
+  "agent": "CmpAgent",
+  "interventions": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Plateau detected with no new paths/edges. Static analysis context empty, but we can still attempt to trigger comparison magic values. Focus on common JSON parsing magic values like 'true', 'false', 'null', and structural tokens.",
+      "fields": [
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "true",
+          "description": "Magic value for boolean true"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "false",
+          "description": "Magic value for boolean false"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "null",
+          "description": "Magic value for null"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "{",
+          "description": "Opening brace for object"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "}",
+          "description": "Closing brace for object"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "[",
+          "description": "Opening bracket for array"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "]",
+          "description": "Closing bracket for array"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "\"",
+          "description": "Double quote for string"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": ":",
+          "description": "Colon separator"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": ",",
+          "description": "Comma separator"
+        }
+      ]
+    }
+  ],
+  "seed_strategies": [
+    {
+      "action": "per_seed_recipe_probe",
+      "reason": "Focus on seeds that are likely to be JSON inputs. Apply magic value mutations to trigger comparison branches in cjson parser.",
+      "fields": [
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "true",
+          "description": "Magic value for boolean true"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "false",
+          "description": "Magic value for boolean false"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "null",
+          "description": "Magic value for null"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "{",
+          "description": "Opening brace for object"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "}",
+          "description": "Closing brace for object"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "[",
+          "description": "Opening bracket for array"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "]",
+          "description": "Closing bracket for array"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": "\"",
+          "description": "Double quote for string"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": ":",
+          "description": "Colon separator"
+        },
+        {
+          "type": "Magic",
+          "target_begin": "0x0",
+          "target_end": "0x100",
+          "value": ",",
+          "description": "Comma separator"
+        }
+      ]
+    }
+  ]
+}}
+{"run_id":"run_1779544877530291_p435833_0000","agent":"MutatorAgent","key":"plateau_1779559366876538_p435833_0002:MutatorAgent:364488adeb83b185","reward_hint":0.000000,"memory":{
+  "agent": "MutatorAgent",
+  "interventions": [
+    {
+      "action": "per_seed_recipe_probe",
+      "params": {
+        "recipe": "structural_mutation",
+        "fields": [
+          {
+            "type": "Length",
+            "target_begin": "0x0",
+            "target_end": "0x4",
+            "offset_range": [0, 4],
+            "operator_weights": {
+              "Insert": 0.2,
+              "Overwrite": 0.3,
+              "Delete": 0.1,
+              "Splice": 0.2,
+              "Dictionary": 0.2
+            }
+          },
+          {
+            "type": "Magic",
+            "target_begin": "0x10",
+            "target_end": "0x14",
+            "offset_range": [16, 20],
+            "operator_weights": {
+              "Overwrite": 0.5,
+              "Dictionary": 0.5
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779544877530291_p435833_0000","agent":"DictionaryAgent","key":"plateau_1779559366876538_p435833_0002:DictionaryAgent:dc1abe502943c446","reward_hint":0.000000,"memory":{"raw":"{\n  \"agent\": \"DictionaryAgent\",\n  \"interventions\": [\n    {\n      \"action\": \"dictionary_probe\",\n      \"reason\": \"Plateau detected with no new paths/edges. Static analysis context empty, but based on known cJSON format, propose structural magic numbers and field markers to trigger deeper parsing.\",\n      \"entries\": [\n        {\n          \"value\": \"{\",\n          \"type\": \"ASCII\",\n          \"description\": \"JSON object start\"\n        },\n        {\n          \"value\": \"}\",\n          \"type\": \"ASCII\",\n          \"description\": \"JSON object end\"\n        },\n        {\n          \"value\": \"[\",\n          \"type\": \"ASCII\",\n          \"description\": \"JSON array start\"\n        },\n        {\n          \"value\": \"]\",\n          \"type\": \"ASCII\",\n          \"description\": \"JSON array end\"\n        },\n        {\n          \"value\": \"\\\"\",\n          \"type\": \"ASCII\",\n          \"description\": \"JSON string delimiter\"\n        },\n        {\n          \"value\": \":\",\n          \"type\": \"ASCII\",\n          \"description\": \"JSON key-value separator\"\n        },\n        {\n          \"value\": \",\",\n          \"type\": \"ASCII\",\n          \"description\": \"JSON element separator\"\n        },\n        {\n          \"value\": \"true\",\n          \"type\": \"ASCII\",\n          \"description\": \"JSON boolean true\"\n        },\n        {\n          \"value\": \"false\",\n          \"type\": \"ASCII\",\n          \"description\": \"JSON boolean false\"\n        },\n        {\n          \"value\": \"null\",\n          \"type\": \"ASCII\",\n          \"description\": \"JSON null\"\n        },\n        {\n          \"value\": \"0x\",\n          \"type\": \"ASCII\",\n          \"description\": \"Hex prefix for numbers\"\n        },\n        {\n          \"value\": \"\\\\u\",\n          \"type\": \"ASCII\",\n          \"description\": \"Unicode escape\"\n        },\n        {\n          \"value\": \"\\\\\\\"\",\n          \"type\": \"ASCII\",\n          \"description\": \"Escaped quote\"\n        },\n        {\n          \"value\": \"\\\\\\\\\",\n          \"type\": \"ASCII\",\n          \"description\": \"Escaped backslash\"\n        },\n        {\n          \"value\": \"\\\\/\",\n          \"type\": \"ASCII\",\n          \"description\": \"Escaped slash\"\n        },\n        {\n          \"value\": \"\\\\b\",\n          \"type\": \"ASCII\",\n          \"description\": \"Backspace escape\"\n        },\n        {\n          \"value\": \"\\\\f\",\n          \"type\": \"ASCII\",\n          \"description\": \"Form feed escape\"\n        },\n        {\n          \"value\": \"\\\\n\",\n          \"type\": \"ASCII\",\n          \"description\": \"Newline escape\"\n        },\n        {\n          \"value\": \"\\\\r\",\n          \"type\": \"ASCII\",\n          \"description\": \"Carriage return escape\"\n        },\n        {\n          \"value\": \"\\\\t\",\n          \"type\": \"ASCII\",\n          \"description\": \"Tab escape\"\n        },\n        {\n          \"value\": \"1e10\",\n          \"type\": \"ASCII\",\n          \"description\": \"Scientific notation number\"\n        },\n        {\n          \"value\": \"-0.0\",\n          \"type\": \"ASCII\",\n          \"description\": \"Negative zero\"\n        },\n        {\n          \"value\": \"1.0e+308\",\n          \"type\": \"ASCII\",\n          \"description\": \"Large double\"\n        },\n        {\n          \"value\": \"1.0e-308\",\n          \"type\": \"ASCII\",\n          \"description\": \"Small double\"\n        },\n        {\n          \"value\": \"NaN\",\n          \"type\": \"ASCII\",\n          \"description\": \"Not a Number\"\n        },\n        {\n          \"value\": \"Infinity\",\n          \"type\": \"ASCII\",\n          \"description\": \"Infinity\"\n        },\n        {\n          \"value\": \"-Infinity\",\n          \"type\": \"ASCII\",\n          \"description\": \"Negative Infinity\"\n        },\n        {\n          \"value\": \" \",\n          \"type\": \"ASCII\",\n          \"description\": \"Space\"\n        },\n        {\n          \"value\": \"\\t\",\n          \"type\": \"ASCII\",\n          \"description\": \"Tab\"\n        },\n        {\n          \"value\": \"\\n\",\n          \"type\": \"ASCII\",\n          \"description\": \"Newline\"\n        },\n        {\n          \"value\": \"\\r\",\n          \"type\": \"ASCII\",\n          \"description\": \"Carriage return\"\n        },\n        {\n          \"value\": \"\\\"\\\"\",\n          \"type\": \"ASCII\",\n          \"description\": \"Empty string\"\n        },\n        {\n          \"value\": \"{}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Empty object\"\n        },\n        {\n          \"value\": \"[]\",\n          \"type\": \"ASCII\",\n          \"description\": \"Empty array\"\n        },\n        {\n          \"value\": \"{\\\"\\\":\\\"\\\"}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Object with empty key and value\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Simple object\"\n        },\n        {\n          \"value\": \"[1,2,3]\",\n          \"type\": \"ASCII\",\n          \"description\": \"Simple array\"\n        },\n        {\n          \"value\": \"{\\\"key\\\":\\\"value\\\"}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Standard key-value\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Multiple keys\"\n        },\n        {\n          \"value\": \"[[[]]]\",\n          \"type\": \"ASCII\",\n          \"description\": \"Nested arrays\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":{\\\"b\\\":{}}}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Nested objects\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":[1,2]}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Object with array value\"\n        },\n        {\n          \"value\": \"[{\\\"a\\\":1}]\",\n          \"type\": \"ASCII\",\n          \"description\": \"Array with object\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":\\\"b\\\",\\\"c\\\":\\\"d\\\"}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Two string pairs\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Three numeric keys\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Four keys\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Five keys\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Six keys\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Seven keys\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Eight keys\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8,\\\"i\\\":9}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Nine keys\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8,\\\"i\\\":9,\\\"j\\\":10}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Ten keys\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8,\\\"i\\\":9,\\\"j\\\":10,\\\"k\\\":11}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Eleven keys\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8,\\\"i\\\":9,\\\"j\\\":10,\\\"k\\\":11,\\\"l\\\":12}\",\n          \"type\": \"ASCII\",\n          \"description\": \"Twelve keys\"\n        },\n        {\n          \"value\": \"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":3,\\\"d\\\":4,\\\"e\\\":5,\\\"f\\\":6,\\\"g\\\":7,\\\"h\\\":8,\\\"i\\\":9,\\\"j\\\":10,\\\"k\\\":11,\\\"l\\\":12,\\\"m"}}
+{"run_id":"run_1779544877530291_p435833_0000","agent":"FormatAgent","key":"plateau_1779559366876538_p435833_0002:FormatAgent:cb36b653b645535b","reward_hint":0.000000,"memory":{
+  "agent": "FormatAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779544877530291_p435833_0000","agent":"CorpusAgent","key":"plateau_1779559366876538_p435833_0002:CorpusAgent:600a180a23a251f0","reward_hint":0.000000,"memory":{
+  "agent": "CorpusAgent",
+  "interventions": [],
+  "seed_strategies": []
+}}
+{"run_id":"run_1779544877530291_p435833_0000","agent":"ResultAnalysisAgent","key":"plateau_1779559366876538_p435833_0002:ResultAnalysisAgent:bc024d45d0094d16","reward_hint":0.000000,"memory":{
+    "type": "memory_patch",
+    "content": "All micro-campaigns (default, dictionary, seed_focus, per_seed_recipe) yielded zero reward. No new paths, edges, crashes, or recipe hits. The plateau persists. Static analysis context is empty, so structural mutations are not applicable. Recommend switching to a different strategy or terminating the campaign."
+  }}

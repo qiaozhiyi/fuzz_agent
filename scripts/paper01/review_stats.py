@@ -30,6 +30,9 @@ MODES = {
     "full-agent": [f"p1_e1_cjson_full-agent_r{r:02d}" for r in range(1, 6)],
     "rule-only": [f"p1_e2_cjson_rule-only_r{r:02d}" for r in range(1, 4)],
     "no-mutator": [f"p1_e2_cjson_no-mutator_r{r:02d}" for r in range(1, 4)],
+    "no-static-analysis": [f"p1_e2_cjson_no-static-analysis_r{r:02d}" for r in range(1, 4)],
+    "baseline-afl-dict": [f"p1_e4_cjson_baseline-afl-dict_r{r:02d}" for r in range(1, 4)],
+    "baseline-afl-cmplog": [f"p1_e4_cjson_baseline-afl-cmplog_r{r:02d}" for r in range(1, 4)],
 }
 
 
@@ -401,18 +404,20 @@ def main() -> None:
     print("MANN-WHITNEY U + A12 EFFECT SIZE (baseline vs treatment, plateau)")
     print("=" * 78)
     print("A12 = P(baseline_plateau > treatment_plateau) — >0.5 ⇒ treatment is faster")
-    for mode in ("full-agent", "rule-only", "no-mutator"):
+    for mode in ("full-agent", "rule-only", "no-mutator", "no-static-analysis",
+                 "baseline-afl-dict", "baseline-afl-cmplog"):
         bs = baseline["plateaus"]
         tr = metrics[mode]["plateaus"]
         U, p = mannwhitney_u(bs, tr)
         a12 = vargha_delaney_a12(bs, tr)
-        print(f"  baseline vs {mode:12s}: U={U:.1f} p={p:.3f} A12={a12:.3f}")
+        print(f"  baseline vs {mode:22s}: U={U:.1f} p={p:.3f} A12={a12:.3f}")
 
     print()
     print("=" * 78)
     print("MANN-WHITNEY U + A12 (baseline vs treatment, last_find — bigger is better)")
     print("=" * 78)
-    for mode in ("full-agent", "rule-only", "no-mutator"):
+    for mode in ("full-agent", "rule-only", "no-mutator", "no-static-analysis",
+                 "baseline-afl-dict", "baseline-afl-cmplog"):
         bs = baseline["last_finds"]
         tr = metrics[mode]["last_finds"]
         U, p = mannwhitney_u(tr, bs)  # treatment > baseline desired
