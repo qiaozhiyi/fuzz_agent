@@ -737,6 +737,66 @@ of the entire channel to coverage, jointly measuring both
 consumers (agent blackboard and AFL dictionary); it does not
 isolate Ghidra-versus-alternative-backend gains.
 
+\paragraph{Channel yield per target (Table~\ref{tab:ghidra-yield}).}
+The Ghidra channel's empirical value depends on how much
+structurally meaningful token material the target binary actually
+exposes. As a sanity check on this axis, we extract the .rodata
+string-literal vocabulary from each target binary via
+\texttt{objcopy --only-section=.rodata} followed by GNU
+\texttt{strings} and a printable-ASCII filter
+(\texttt{scripts/paper01/extract\_strings\_dict.py}). This is a
+cheaper, library-free proxy for the broader Ghidra extraction
+pipeline (which the script also wraps in
+\texttt{extract\_ghidra\_dict.sh}); we use it here as the headline
+``how big is the candidate dictionary'' number because it is
+deterministic, language-agnostic, and easily reproducible without
+a Ghidra install. Table~\ref{tab:ghidra-yield} reports the count
+for each binary checked into the repository.
+\emph{cJSON} yields only $40$ usable string literals --- mostly
+JSON keywords ($\mathtt{null}$, $\mathtt{true}$, $\mathtt{false}$)
+and format specifiers ($\mathtt{\%1.15g}$, $\mathtt{u\%04x}$) ---
+which is one structural reason the LLM proposal layer produced a
+null result on cJSON (\S\ref{sec:eval:rq3}): the static channel
+simply has very little to work with. The venue targets yield
+1{,}000$+$ to 6{,}000$+$ tokens (XML diagnostic strings, SQL
+keywords, ASN.1 OID labels), which gives the LLM enough material
+to propose target-specific recipes rather than rely on the
+fixed-three-token DictionaryAgent fallback. We caution that
+\emph{the raw token count is an upper bound on usable dictionary
+candidates}: openssl in particular includes embedded test PEM
+certificates and base64 blobs that survive the printable-ASCII
+filter but are not semantically useful as fuzzer dictionary
+entries; downstream consumers (AFL++ \texttt{-x} and the
+FuzzPilot mutator) re-rank by per-token reward signal.
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{6pt}
+  \begin{tabular}{@{}lrrl@{}}
+    \toprule
+    Target & Binary size & Unique tokens & Token examples (top by occurrence) \\
+    \midrule
+    cJSON              & $228$\,KB & $40$       & \texttt{null}, \texttt{true}, \texttt{false}, \texttt{\%1.15g}, \texttt{u\%04x} \\
+    libxml2 (parser)   & $5.6$\,MB & $2{,}572$  & \texttt{"Start tag expected"}, \texttt{"PEReference forbidden"}, \texttt{"DOCTYPE improperly terminated"} \\
+    sqlite3 (parser/VM)& $7.2$\,MB & $1{,}164$  & \texttt{"SQLite format 3"}, \texttt{":memory:"}, \texttt{"(join-\%u)"}, \texttt{"(subquery-\%u)"}, \texttt{unix-none} \\
+    openssl X.509      & $12$\,MB  & $6{,}656$\,$^{\dagger}$ & ASN.1 OID labels + embedded test certificate blobs (mixed quality; see caveat below) \\
+    \bottomrule
+  \end{tabular}
+  \caption{Per-target \texttt{.rodata} string-literal yield, on the
+  binaries checked into \texttt{experiments/targets/}.
+  $^{\dagger}$openssl's count is inflated by embedded test
+  certificates and base64 blobs that survive the printable-ASCII
+  filter but are not semantically useful as fuzzing tokens; the
+  effective usable count is smaller. The cJSON row anchors the
+  preprint null result (the static channel has only $\sim$40
+  things to say to the LLM); the venue rows show that the channel
+  has 30--160$\times$ more raw material to work with on richer
+  binaries. Reproduce with
+  \texttt{python3 scripts/paper01/extract\_strings\_dict.py <binary>}.}
+  \label{tab:ghidra-yield}
+\end{table}
+
 \subsection{Micro-campaign protocol}
 \label{sec:plateau:micro}
 
@@ -2291,7 +2351,14 @@ flight on the experiment host with the harnesses
 checked into the repository; the Stage-1 outcome gates whether
 the Stage-2 full-Klees matrix runs on all three targets or
 focuses on the subset where the LLM proposal layer shows a
-non-null contribution. The choice to ship the preprint at
+non-null contribution. \emph{Headroom check:} a $60$\,s smoke-test
+run of vanilla \texttt{afl-fuzz} on the three harnesses (no
+FuzzPilot pipeline) reaches $2{,}776$ edges on libxml2,
+$6{,}922$ edges on sqlite3, and $3{,}635$ edges on openssl X.509
+--- 10--25$\times$ more than cJSON's $269$-edge ceiling at the
+\emph{end} of a 14{,}400\,s budget. The Stage-2 budget will not
+saturate any of the three, so the LLM proposal layer has room to
+contribute a non-null result if it can. The choice to ship the preprint at
 cJSON-only is deliberate: it lets reviewers verify the
 infrastructure (audit, gate, mutator, micro-campaign) end-to-end
 on a target small enough to read every artifact, before we burn
