@@ -7,7 +7,7 @@
 \documentclass[11pt]{article}
 
 \usepackage[margin=1in]{geometry}
-\usepackage[protrusion=false]{microtype}
+\usepackage{microtype}
 \usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{graphicx}
@@ -20,7 +20,6 @@
 \pgfplotsset{compat=1.18}
 \usepgfplotslibrary{fillbetween}
 \usepackage{listings}
-\usepackage{url}
 \usepackage{cite}
 \usepackage{tabularx}
 \usepackage{array}
@@ -109,7 +108,9 @@ implementation on cJSON with $N{=}5$ repetitions for the two main
 arms, \texttt{baseline-afl} and \texttt{full-agent}, each with a
 $14{,}400$\,s budget. cJSON turns out to be a saturated target:
 vanilla AFL++ reaches the exposed 269-edge ceiling at a median of
-$2{,}524$\,s. As a result, these experiments do not establish
+$2{,}524$\,s (time to first reach 269 edges; the distinct
+plateau-duration metric used in the next paragraph is $2{,}532$\,s).
+As a result, these experiments do not establish
 that language-model proposals improve coverage, nor do they support a
 generalization claim beyond cJSON.
 
@@ -174,6 +175,61 @@ intentionally limited: cJSON exercises the machinery end to end, but
 because the target saturates early, it does not show that every
 component is beneficial.
 
+\paragraph{Scope and limitations (stated up front).} Before
+enumerating contributions, we make the bounds of this preprint
+explicit. The limits are part of the result, not footnotes:
+
+\begin{itemize}
+\item \textbf{Single saturated target}: We evaluate on \emph{only}
+cJSON, at $N{=}5$ repetitions for main arms and $N{=}3$ for
+ablations. cJSON is a \emph{saturated target} where baseline AFL++
+alone exhausts the reachable 269-edge ceiling at a median of
+$2{,}524$\,s (time to first reach 269 edges; the distinct
+plateau-duration metric used elsewhere is $2{,}532$\,s), leaving no
+headroom for the LLM proposal layer or micro-campaign gate to
+demonstrate coverage gains. We make \emph{no} empirical claim about
+libpng, libxml2, sqlite3, openssl, or any other target.
+
+\item \textbf{LLM layer untested}: The micro-campaign gate evaluated
+20 LLM-proposed recipes on cJSON and promoted zero, because target
+saturation leaves reward $R{=}0$ on every candidate
+(\S\ref{sec:eval:rq3}). The gate's intended property---distinguishing
+good recipes from bad on non-saturated targets---remains
+\emph{empirically undemonstrated}. A non-saturated-target evaluation
+is the most important single piece of future work.
+
+\item \textbf{Statistical power insufficient}: At $N{=}5$ (main) and
+$N{=}3$ (ablations), no pairwise plateau or coverage difference
+reaches conventional significance thresholds ($p{<}0.05$). We report
+descriptive point estimates and effect sizes ($A_{12}$), not
+significance claims. Formal rank-sum tests require $N{\geq}20$ for
+main arms and $N{\geq}10$ for ablations~\cite{klees2018evaluating}.
+
+\item \textbf{Attribution incomplete}: Ablation experiments
+(\S\ref{sec:eval:rq4-ablation}) suggest the plateau reduction is
+driven primarily by the controller's plateau-detection and
+corpus-reorganization machinery, not by the recipe-guided mutator or
+LLM layer. However, a \texttt{controller-only} ablation (plateau
+detector + corpus snapshot only, no mutator, no LLM, no Ghidra) is
+\emph{not} in the preprint matrix; without it we cannot fully
+separate ``controller machinery'' from ``default rule recipe''. This
+ablation is deferred to the venue version.
+
+\item \textbf{Fairness baseline caveat}: An E4 fairness arm shows
+that AFL++ with \texttt{cmplog} (AFL++'s comparison-operand logging
+pass) instrumentation reaches 270 edges (vs FuzzPilot's 269) without
+shortening the plateau (\S\ref{sec:eval:rq4-ablation}), indicating
+the two techniques operate on complementary axes (wall-time vs
+absolute coverage).
+\end{itemize}
+
+Taken together, these constraints mean that this version should be
+read as an implementation report and a cJSON proof-of-concept. The
+larger non-saturated-target matrix, higher repetition counts, and the
+missing \texttt{controller-only} ablation are the next steps.
+\S\ref{sec:limits} gives the full list of threats to validity. With
+these bounds explicit, the contributions are:
+
 \begin{enumerate}
   \item[\textbf{C1}] A \textbf{data-as-recipe} intermediate
   representation that replaces generated helper code with a
@@ -220,59 +276,6 @@ The artifact also includes an auditable decision trail covering
 blackboard state, proposal generation, recipe emission,
 micro-campaign reward, and promotion outcome, plus native
 Linux/x86\_64 run metadata from the experiment host.
-
-\paragraph{What this version does not claim.} This is an arXiv
-preprint intended to make the design and cJSON artifact public before
-the larger target matrix finishes. The limits are part of the result,
-not footnotes:
-
-\begin{itemize}
-\item \textbf{Single saturated target}: We evaluate on \emph{only}
-cJSON, at $N{=}5$ repetitions for main arms and $N{=}3$ for
-ablations. cJSON is a \emph{saturated target} where baseline AFL++
-alone exhausts the reachable 269-edge ceiling at a median of
-$2{,}524$\,s, leaving no headroom for the LLM proposal layer
-or micro-campaign gate to demonstrate coverage gains. We make
-\emph{no} empirical claim about libpng, libxml2, sqlite3, openssl, or
-any other target.
-
-\item \textbf{LLM layer untested}: The micro-campaign gate evaluated
-20 LLM-proposed recipes on cJSON and promoted zero, because target
-saturation leaves reward $R{=}0$ on every candidate
-(\S\ref{sec:eval:rq3}). The gate's intended property---distinguishing
-good recipes from bad on non-saturated targets---remains
-\emph{empirically undemonstrated}. A non-saturated-target evaluation
-is the most important single piece of future work.
-
-\item \textbf{Statistical power insufficient}: At $N{=}5$ (main) and
-$N{=}3$ (ablations), no pairwise plateau or coverage difference
-reaches conventional significance thresholds ($p{<}0.05$). We report
-descriptive point estimates and effect sizes ($A_{12}$), not
-significance claims. Formal rank-sum tests require $N{\geq}20$ for
-main arms and $N{\geq}10$ for ablations~\cite{klees2018evaluating}.
-
-\item \textbf{Attribution incomplete}: Ablation experiments
-(\S\ref{sec:eval:rq4-ablation}) suggest the plateau reduction is
-driven primarily by the controller's plateau-detection and
-corpus-reorganization machinery, not by the recipe-guided mutator or
-LLM layer. However, a \texttt{controller-only} ablation (plateau
-detector + corpus snapshot only, no mutator, no LLM, no Ghidra) is
-\emph{not} in the preprint matrix; without it we cannot fully
-separate ``controller machinery'' from ``default rule recipe''. This
-ablation is deferred to the venue version.
-
-\item \textbf{Fairness baseline caveat}: An E4 fairness arm shows
-that AFL++ with \texttt{cmplog} instrumentation reaches 270 edges (vs
-FuzzPilot's 269) without shortening the plateau
-(\S\ref{sec:eval:rq4-ablation}), indicating the two techniques
-operate on complementary axes (wall-time vs absolute coverage).
-\end{itemize}
-
-Taken together, these constraints mean that this version should be
-read as an implementation report and a cJSON proof-of-concept. The
-larger non-saturated-target matrix, higher repetition counts, and the
-missing \texttt{controller-only} ablation are the next steps.
-\S\ref{sec:limits} gives the full list of threats to validity.
 
 \paragraph{Roadmap.} \S\ref{sec:bg} surveys the design space and
 positions FuzzPilot relative to G\textsuperscript{2}FUZZ and the
@@ -1482,34 +1485,33 @@ well under the 14{,}400~s budget per AFL run.
   \input{figures/F5_microbench.tikz}
   \caption{Mutator-only throughput by configuration (mean $\pm$ SD,
   $N{=}5$ reps each, SIGSTOP-isolated). Dots show individual reps;
-  the body text reports the median ratios and the power-limited TOST
-  result.}
+  the body text reports the median ratios and the power-limited
+  two-one-sided-test (TOST) equivalence result.}
   \label{fig:microbench}
 \end{figure}
 
 \paragraph{Primary RQ2 claim
   (\texttt{fp-active} vs \texttt{fp-empty}: descriptive, not
   formally equivalent at $N{=}5$).}
-The median \texttt{fp-active}/\texttt{fp-empty} ratio is
+At $N{=}5$ this microbench does \emph{not} formally establish
+dispatch-cost equivalence. The \emph{mean}
+\texttt{fp-active}/\texttt{fp-empty} ratio is
+$2{,}800{,}142 / 3{,}222{,}108 = 0.869\times$ ($-13.1\%$); a two-sided
+Welch $t$-test gives $t{=}{-}0.81$, $df{\approx}7.2$, $p{=}0.45$ ---
+power-limited null, not evidence of equivalence; and a two one-sided
+test (TOST) procedure~\cite{schuirmann1987comparison} for equivalence
+at the $\pm 5\%$ band claimed in \S\ref{sec:design} gives
+$p_{\text{TOST}}{=}0.68$, so the test does \textbf{not} establish
+equivalence at the conventional $\alpha{=}0.05$ level. The
+\emph{median} ratio, by contrast, is essentially flat at
 $3{,}008{,}030 / 2{,}961{,}850 = 1.016\times$ (inside the
 $[0.95, 1.05]$ band stated in \S\ref{sec:design}); the
-\emph{mean} ratio, however, is $2{,}800{,}142 / 3{,}222{,}108
-= 0.869\times$ ($-13.1\%$). The mean-vs-median divergence
-reflects the high coefficient of variation
+mean-vs-median divergence reflects the high coefficient of variation
 ($\sim 25{-}30\%$) at $N{=}5$ and the presence of an
 \texttt{fp-active} run (r04) at $1.7\,$Mexec/s alongside an
-\texttt{fp-empty} run (r05) at $4.4\,$Mexec/s. A two-sided
-Welch $t$-test of \texttt{fp-active} vs \texttt{fp-empty}
-gives $t{=}{-}0.81$, $df{\approx}7.2$, $p{=}0.45$ --- no
-significant difference is detected, but at $N{=}5$ this is a
-power-limited null finding rather than evidence of equivalence.
-\emph{We additionally ran a two one-sided test (TOST)
-procedure~\cite{schuirmann1987comparison} for equivalence at the
-$\pm 5\%$ band claimed in \S\ref{sec:design}:
-$p_{\text{TOST}}{=}0.68$, so the test does \textbf{not} establish
-equivalence at the conventional $\alpha {=}0.05$ level.} We did not
-establish a useful no-overhead equivalence band from this $N{=}5$
-microbench; the sample standard errors dominate.
+\texttt{fp-empty} run (r05) at $4.4\,$Mexec/s. We did not establish a
+useful no-overhead equivalence band from this $N{=}5$ microbench; the
+sample standard errors dominate.
 We therefore downgrade the original ``no measurable per-call
 overhead'' claim to: at $N{=}5$ on this SIGSTOP-isolated
 microbench, we (a) do not detect a significant mean throughput
@@ -1620,8 +1622,14 @@ E1b.
     \bottomrule
   \end{tabular}
   \caption{RQ3: LLM-call quality and micro-campaign outcome across
-  the 5 \texttt{full-agent} runs. The schema-validation and promotion
-  paragraphs define the counters and interpret the zero-promoted result.}
+  the 5 \texttt{full-agent} runs. Columns: \emph{log records} =
+  agent-loop decision-trail entries; \emph{schema-valid / -invalid
+  LLM resp.} = JSON-schema-validity counts of model output;
+  \emph{\texttt{fallback\_used}} = rule-only fallbacks taken when the
+  model response could not be used; \emph{micro candidates} = recipes
+  that entered the micro-campaign gate; \emph{promoted} = recipes
+  accepted into the main run (gate result). The schema-validation and
+  promotion paragraphs below interpret the zero-promoted result.}
   \label{tab:rq3-llm}
 \end{table}
 
@@ -1914,7 +1922,8 @@ FuzzPilot ablation arms (range $234$--$1{,}384$\,s, though note
 E2c's bimodal distribution). The descriptive plateau-reduction
 pattern we observe in \S\ref{sec:eval:rq4-ablation} \emph{does not
 reduce} to ``vanilla AFL++ once it has a dictionary'' or ``vanilla
-AFL++ once it has runtime I2S information'', suggesting the
+AFL++ once it has runtime input-to-state-correspondence (I2S)
+information'', suggesting the
 controller machinery (if our hypothesis is correct) operates via a
 different mechanism.
 
@@ -2637,7 +2646,7 @@ root.
   \setlength{\parskip}{0pt}
   \item \textbf{Experiment code commit:}
   \texttt{85223d844711c704130608f58200a0b5a18862fe}
-  (branch \texttt{main}, repo
+  (branch \texttt{main}, tag \texttt{paper01-arxiv-v1}, repo
   \url{https://github.com/Qiao-Zhiyi/fuzz_agent}). This is the
   run-time code commit recorded in each completed campaign's
   \texttt{run\_metadata.json}. The manuscript and aggregation text may
