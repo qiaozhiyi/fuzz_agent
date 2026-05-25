@@ -1197,9 +1197,10 @@ more executions on each pass through the queue before recycling to
 the top --- exactly the mutation-rate redistribution the default
 recipe encodes (\emph{focus dictionary-token insertions and overwrites
 over the first $4\,$KB}, with fixed operator weights pinned at
-\texttt{insert\_token}=0.35 / \texttt{dictionary\_overwrite}=0.25 /
-\texttt{overwrite\_range}=0.20 / \texttt{arith}=0.10 /
-\texttt{bit\_flip}=0.10).
+\texttt{InsertToken}=0.35 / \texttt{DictionaryOverwrite}=0.25 /
+\texttt{Splice}=0.15 / \texttt{OverwriteRange}=0.10 /
+\texttt{BitFlip}=0.10 / \texttt{Arith}=0.03 /
+\texttt{DeleteBlock}=0.02, matching Listing~\ref{lst:recipe}).
 \emph{We caution that \texttt{cycles\_done} is not a cross-mode
 comparator for ``progress''}: it is a derived quantity of the
 form $\text{execs\_done} / \overline{\text{execs-per-cycle}}$,
@@ -1980,7 +1981,7 @@ established, etc.) are explicitly listed rather than buried.
     RQ3 & DeepSeek API cost & \$0.002 / 4h campaign & FX rate \$1$\approx$\textyen{}7.2; compute $\sim$\$1.60/campaign \\
     RQ4 & median plateau, rule-only (E2a) & $1{,}165$\,s ($N{=}3$) & MW $U{=}4$, $p{=}0.39$, $A_{12}{=}0.73$ \\
     RQ4 & median plateau, no-mutator (E2b) & $930$\,s ($N{=}3$) & MW $U{=}2$, $p{=}0.14$, $A_{12}{=}0.87$ \\
-    RQ4 & median plateau, no-static-analysis (E2c) & $234$\,s ($N{=}3$) & MW $U{=}5$, $p{=}0.57$, $A_{12}{=}0.67$; bimodal $[187,234,4454]$ \\
+    RQ4 & median plateau, no-static-analysis (E2c) & $234$\,s ($N{=}3$) & MW $U{=}5$, $p{=}0.57$, $A_{12}{=}0.67$; bimodal $[187, 234, 4{,}454]$ \\
     RQ4 & ablation ordering & \textbf{no-static-analysis $<$ no-mutator $<$ rule-only $<$ full-agent} & \textbf{all four shorter than baseline; controller-driver hypothesis} \\
     RQ4 & controller-only ablation & --- & not in preprint matrix; venue version \\
     Fair & E4a median plateau, baseline-afl-dict & $2{,}256$\,s ($N{=}3$) & $p{=}0.79$, $A_{12}{=}0.60$ vs baseline; dict alone does not help \\
