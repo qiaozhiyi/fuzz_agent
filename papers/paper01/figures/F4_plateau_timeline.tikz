@@ -63,9 +63,6 @@
     \pgfmathsetmacro{\xrt}{\labW + #4 * \xscale}
     \draw[#5] ({\labW}, {#2*\yspacing}) rectangle ({\xlf}, {#2*\yspacing + \barH});
     \draw[plateaubar] ({\xlf}, {#2*\yspacing}) rectangle ({\xrt}, {#2*\yspacing + \barH});
-    \node[anchor=west, font=\scriptsize, gray!50!black]
-        at ({\xrt + 0.08}, {#2*\yspacing + \barH/2})
-        {$\Delta{=}\,$\pgfmathprintnumber[fixed,precision=0,1000 sep={,}]{\inteval{#4-#3}}};
 }
 
 % --- baseline-afl rows (y=9 top to y=5 bottom) ---
@@ -93,9 +90,9 @@
 \node[anchor=south, font=\scriptsize, blue!70!black]
     at ({\xmA}, {10.3*\yspacing})
     {E1a median 11{,}911\,s};
-\node[anchor=south east, font=\scriptsize, orange!85!black, align=right]
-    at ({\xmB - 0.10}, {-2.3*\yspacing})
-    {E1b median 13{,}059\,s\\($+19$\,min, $-45\%$ plateau)};
+\node[anchor=south, font=\scriptsize, orange!85!black]
+    at ({\xmB}, {-2.3*\yspacing})
+    {E1b median 13{,}059\,s};
 
 % --- Legend (bottom, single row, well clear of run rows) ---
 \def\legendY{-4.4*\yspacing}

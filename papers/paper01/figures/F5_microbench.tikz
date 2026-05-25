@@ -16,9 +16,9 @@
 \def\barW{0.72}
 
 \node[font=\small] at (6.25,4.35)
-  {Mutator-only \texttt{exec/sec}, $N{=}5$ reps each, SIGSTOP-isolated};
+  {Mutator-only throughput, $N{=}5$};
 \node[font=\small, rotate=90] at (0.24,2.22)
-  {Mutator throughput (exec/sec)};
+  {\texttt{exec/sec}};
 
 % Axes, ticks, and grid.
 \draw[axis] (\axisLeft,\baseY) -- (\axisRight,\baseY);
@@ -46,9 +46,9 @@
   \node[anchor=north, font=\small\ttfamily] at (#1,\baseY-0.13) {#5};
 }
 
-\fpmicrobar{2.75}{2.005078}{0.341644}{2{,}005{,}078}{vanilla}
-\fpmicrobar{6.25}{3.222108}{0.958259}{3{,}222{,}108}{fp-empty}
-\fpmicrobar{9.75}{2.800142}{0.673566}{2{,}800{,}142}{fp-active}
+\fpmicrobar{2.75}{2.005078}{0.341644}{2.01M}{vanilla}
+\fpmicrobar{6.25}{3.222108}{0.958259}{3.22M}{fp-empty}
+\fpmicrobar{9.75}{2.800142}{0.673566}{2.80M}{fp-active}
 
 % Individual data points (5 reps per config) overlaid as black dots
 % so reviewers can see the actual distribution, not just mean+SD.

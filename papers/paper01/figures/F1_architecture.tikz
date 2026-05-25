@@ -139,15 +139,15 @@
 
 % Outputs caption-style sublabel (instead of fan-out arrows, which
 % would cross the hot-path stripe and clutter the figure).
-\node[font=\tiny\itshape, gray!55!black, anchor=north]
-  at (105, 36) {written per run by AFL++ (stats) and the controller (cov, events, audit)};
+\node[font=\scriptsize, gray!60!black, anchor=north]
+  at (105, 36) {written per run by AFL++ (stats) and by the controller (coverage, events, audit)};
 
 % ====================================================================
 % (D) Hot-path internal edges (same stripe; never crossed by any
 % other edge in this layout)
 % ====================================================================
 \draw[biarr] (afl.east)    -- node[edgelblt, midway, above] {queue}    (corpus.west);
-\draw[biarr] (corpus.east) -- node[edgelblt, midway, above] {sample}   (mut.west);
+\draw[biarr] (corpus.east) -- node[edgelblt, midway, above] {input}   (mut.west);
 \draw[biarr] (mut.east)    -- node[edgelblt, midway, above] {bytes}    (tgt.west);
 
 % ====================================================================

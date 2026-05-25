@@ -6,7 +6,7 @@
 \begin{tikzpicture}
 \begin{axis}[
     width=0.92\textwidth,
-    height=6.8cm,
+    height=6.3cm,
     xmin=0, xmax=14400,
     ymin=263.5, ymax=271,
     xlabel={Wall-clock (seconds)},
@@ -30,7 +30,7 @@
         fill=white, draw=gray!50,
         nodes={inner sep=2pt},
     },
-    title={\small Coverage on cJSON (zoomed; \emph{first 60\,s ramp} 180$\rightarrow$260+ omitted)},
+    title={\small cJSON edge discovery after the initial ramp},
     title style={yshift=2pt},
     clip=true,
 ]
@@ -39,7 +39,7 @@
 \draw[red!50!black, dashed, line width=0.8pt]
     (axis cs:0, 269) -- (axis cs:14400, 269);
 \node[anchor=south east, font=\scriptsize, red!50!black]
-    at (axis cs:14400, 269) {ceiling = 269 (cJSON max)};
+    at (axis cs:14400, 269) {269-edge ceiling};
 
 % --- baseline-afl median ---
 \addplot[
@@ -80,16 +80,12 @@
 \draw[blue!70!black, dashed, line width=0.7pt]
     (axis cs:11911, 264) -- (axis cs:11911, 268.5);
 \node[anchor=south, font=\scriptsize, blue!70!black, rotate=90]
-    at (axis cs:11911, 266.4) {E1a last\_find};
+    at (axis cs:11911, 266.6) {E1a median};
 
 \draw[orange!85!black, dashed, line width=0.7pt]
     (axis cs:13059, 264) -- (axis cs:13059, 268.5);
 \node[anchor=south, font=\scriptsize, orange!85!black, rotate=90]
-    at (axis cs:13059, 266.4) {E1b last\_find};
-
-% Annotation: full-agent stays at 268 longer
-\node[anchor=south, font=\scriptsize, orange!85!black, align=center]
-    at (axis cs:5500, 267.8) {full-agent stays at 268\\$\sim 5$k\,s longer before climbing};
+    at (axis cs:13059, 266.6) {E1b median};
 
 \end{axis}
 \end{tikzpicture}
