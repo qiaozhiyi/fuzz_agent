@@ -10,6 +10,7 @@
 #include "fuzzpilot/micro/manager.hpp"
 #include "fuzzpilot/model/gateway.hpp"
 #include "fuzzpilot/mutation/recipe_store.hpp"
+#include "fuzzpilot/mutation/recipe_reward_tracker.hpp"
 #include "fuzzpilot/plateau/detector.hpp"
 #include "fuzzpilot/runner/afl_runner.hpp"
 #include "fuzzpilot/runner/process.hpp"
@@ -697,12 +698,21 @@ RunSummary run_mvp(const RunOptions& requested_options) {
                   "ts,execs_done,execs_per_sec,paths_total,edges_found,bitmap_cvg,"
                   "unique_crashes,unique_hangs,recipe_hits,recipe_misses\n");
 
+  // Reward tracker for in-context RL: every LLM decision is "deployed" at
+  // its emit time; we credit subsequent edge-growth back to recent decisions
+  // within a 600s window and feed top/bottom-k back into the next prompt.
+  RecipeRewardTracker reward_tracker(summary.run_dir / "recipe_rewards.jsonl");
+
   auto process_stats = [&](const AflStats& stats) {
     main_samples.push_back(stats);
     db.insert_telemetry(summary.main_campaign_id, stats);
     ++summary.telemetry_count;
     append_line(summary.coverage_csv_path, coverage_csv_row(stats));
     append_line(events_path, telemetry_event_json(summary.run_id, summary.main_campaign_id, stats));
+    // Feed edge-growth into the reward tracker so prior decisions get
+    // credited over the credit window.
+    reward_tracker.observe_edges(stats.edges_found,
+                                 static_cast<uint64_t>(stats.sampled_at));
     const auto plateau = detector.add_sample(stats, summary.run_id, summary.main_campaign_id);
     if (plateau && summary.plateau_id.empty()) {
       summary.plateau_id = plateau->id;
@@ -739,6 +749,91 @@ RunSummary run_mvp(const RunOptions& requested_options) {
       base_intelligence_json = ss.str();
     }
   }
+
+  // Helper: build a prose few-shot block for the next agent prompt. Uses
+  // up to 5 GOOD + 5 BAD examples; empty when no decisions have any credit.
+  auto format_few_shot_block = [&]() -> std::string {
+    const auto top = reward_tracker.topk(5);
+    const auto bottom = reward_tracker.bottomk(5);
+    bool any_credit = false;
+    for (const auto& e : top) {
+      if (e.apply_count > 0) { any_credit = true; break; }
+    }
+    if (!any_credit) return "";
+    std::ostringstream out;
+    out << "## Prior decisions and observed effectiveness\n"
+        << "The following are previous proposals from this run with the "
+           "edge-growth credit they earned over the 10 minutes after deployment. "
+           "Prefer the GOOD patterns and avoid the BAD ones in your next proposal.\n";
+    if (!top.empty()) {
+      out << "\nGOOD (high reward):\n";
+      for (const auto& e : top) {
+        if (e.apply_count == 0) continue;
+        out << "- agent=" << e.agent_name
+            << " reward=" << e.reward
+            << " summary=" << e.summary << "\n";
+      }
+    }
+    if (!bottom.empty()) {
+      out << "\nBAD (low or zero reward):\n";
+      for (const auto& e : bottom) {
+        out << "- agent=" << e.agent_name
+            << " reward=" << e.reward
+            << " summary=" << e.summary << "\n";
+      }
+    }
+    return out.str();
+  };
+
+  // Helper: condense a proposal_json to a short prose summary suitable for
+  // future few-shot prompts. We just truncate-and-escape; the LLM is fine
+  // with raw JSON snippets and it keeps prompt size bounded.
+  auto short_proposal_summary = [&](const std::string& proposal_json) {
+    constexpr std::size_t kMax = 200;
+    if (proposal_json.size() <= kMax) return proposal_json;
+    return proposal_json.substr(0, kMax) + "...";
+  };
+
+  // Construct the model gateway up front so plateau-triggered agent
+  // interventions inside the main loop can reuse it. Failing early is
+  // preferable to running AFL for 24h and silently never calling the LLM.
+  auto inline_gateway = make_gateway(options, config);
+  const bool agent_inline_enabled =
+      options.ablation_mode != "baseline-afl" &&
+      config.micro_campaign.enabled;
+  std::size_t inline_intervention_count = 0;
+
+  auto trigger_inline_agent = [&](const PlateauEvent& plateau,
+                                   const AflStats& stats) {
+    const auto recent = db.get_recent_decisions(summary.run_id, 10);
+    const auto mem = db.get_agent_memory(summary.run_id);
+    const auto bb = plateau_blackboard_json(plateau, stats,
+                                            base_intelligence_json,
+                                            recent, mem);
+    auto tasks = make_default_agent_tasks(
+        plateau.id, bb,
+        static_cast<uint32_t>(config.micro_campaign.budget_sec),
+        format_few_shot_block());
+    configure_agent_tasks(tasks, config);
+    const auto deadline =
+        static_cast<uint64_t>(std::time(nullptr)) + 300;
+    auto decisions = run_agent_tasks(*inline_gateway, summary.run_id,
+                                     plateau.id, tasks, deadline);
+    for (const auto& d : decisions) {
+      persist_agent_decision(db, summary, config, d, 0.0, events_path);
+      reward_tracker.record_deploy(
+          d.id, d.agent, short_proposal_summary(d.proposal_json),
+          static_cast<uint64_t>(d.created_ts));
+    }
+    ++inline_intervention_count;
+    append_line(events_path,
+                std::string("{\"event\":\"agent_inline_triggered\",\"plateau_id\":\"") +
+                    json_escape(plateau.id) +
+                    "\",\"decision_count\":" +
+                    std::to_string(decisions.size()) +
+                    ",\"total_inline\":" +
+                    std::to_string(inline_intervention_count) + "}");
+  };
 
   if (options.dry_run) {
     for (const auto& stats_path : options.main_stats_paths) {
@@ -777,8 +872,28 @@ RunSummary run_mvp(const RunOptions& requested_options) {
       const auto stats = collector.sample(&error);
       if (stats) {
         process_stats(*stats);
-        if (config.micro_campaign.enabled && !summary.plateau_id.empty()) {
-          break; // Stop main loop to evaluate micro-campaigns on plateau
+        if (agent_inline_enabled && !summary.plateau_id.empty()) {
+          // Run the agent inline against this plateau, then reset the
+          // detector so it can fire again later. AFL keeps running in the
+          // background — this is the "closed-loop" path that lets a single
+          // 24h run trigger many agent interventions instead of just one.
+          PlateauEvent plateau_for_agent;
+          plateau_for_agent.id = summary.plateau_id;
+          plateau_for_agent.run_id = summary.run_id;
+          plateau_for_agent.campaign_id = summary.main_campaign_id;
+          plateau_for_agent.detected_ts =
+              static_cast<uint64_t>(stats->sampled_at);
+          plateau_for_agent.window_sec = plateau_config.window_sec;
+          plateau_for_agent.reason = "inline_plateau";
+          try {
+            trigger_inline_agent(plateau_for_agent, *stats);
+          } catch (const std::exception& ex) {
+            append_line(events_path,
+                        std::string("{\"event\":\"agent_inline_failed\",\"error\":\"") +
+                            json_escape(ex.what()) + "\"}");
+          }
+          detector.reset();
+          summary.plateau_id.clear();
         }
       } else {
         last_telemetry_error = error;
@@ -919,7 +1034,9 @@ RunSummary run_mvp(const RunOptions& requested_options) {
 
   const auto blackboard = plateau_blackboard_json(blackboard_plateau, main_samples.back(), combined_intel, recent_decisions, agent_memory);
   auto tasks = make_default_agent_tasks(
-      summary.plateau_id, blackboard, static_cast<uint32_t>(config.micro_campaign.budget_sec));
+      summary.plateau_id, blackboard,
+      static_cast<uint32_t>(config.micro_campaign.budget_sec),
+      format_few_shot_block());
   configure_agent_tasks(tasks, config);
   // Wall-clock cap: budget the agent block to roughly the reserve window
   // we held back in the main loop, capped at 30 min. Prevents 8 sequential
@@ -930,6 +1047,10 @@ RunSummary run_mvp(const RunOptions& requested_options) {
   auto decisions = run_agent_tasks(*gateway, summary.run_id, summary.plateau_id, tasks, agent_deadline);
   for (const auto& decision : decisions) {
     persist_agent_decision(db, summary, config, decision, 0.0, events_path);
+    reward_tracker.record_deploy(
+        decision.id, decision.agent,
+        short_proposal_summary(decision.proposal_json),
+        static_cast<uint64_t>(decision.created_ts));
   }
 
   const auto specs = plan_micro_campaigns(
@@ -1130,6 +1251,10 @@ RunSummary run_mvp(const RunOptions& requested_options) {
       *gateway, summary.run_id, summary.plateau_id, {result_task});
   for (const auto& decision : result_decisions) {
     persist_agent_decision(db, summary, config, decision, summary.winner_reward, events_path);
+    reward_tracker.record_deploy(
+        decision.id, decision.agent,
+        short_proposal_summary(decision.proposal_json),
+        static_cast<uint64_t>(decision.created_ts));
     decisions.push_back(decision);
   }
 

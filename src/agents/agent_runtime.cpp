@@ -56,7 +56,8 @@ std::string role_for(const std::string& agent_name) {
 
 std::vector<AgentTask> make_default_agent_tasks(const std::string& plateau_id,
                                                 const std::string& blackboard_json,
-                                                uint32_t budget_sec) {
+                                                uint32_t budget_sec,
+                                                const std::string& few_shot_examples) {
   const std::vector<std::string> agents = {
       "CoordinatorAgent",
       "PlateauDiagnosisAgent",
@@ -73,6 +74,7 @@ std::vector<AgentTask> make_default_agent_tasks(const std::string& plateau_id,
     task.task_id = make_id("agent_task");
     task.agent_name = agent;
     task.role_description = role_for(agent);
+    task.few_shot_examples = few_shot_examples;
     task.objective = "Generate typed FuzzPilot proposal for plateau " + plateau_id;
     task.blackboard_slice_json = blackboard_json;
     task.action_schema_json =
@@ -286,6 +288,13 @@ std::vector<AgentDecision> run_agent_tasks(IModelGateway& gateway,
         "Do not include Markdown, comments, trailing commas, NaN/Infinity, or hex literals. "
         "Represent byte/address constants as quoted strings such as \"0xDEADBEEF\". "
         "Stay strictly within the action_schema.allowed_actions list — never invent new actions.";
+    // In-context RL: append GOOD/BAD examples from prior decisions and the
+    // edge-growth credit they earned. The model is told to prefer GOOD
+    // patterns and avoid BAD ones. Empty when no prior decisions exist.
+    if (!task.few_shot_examples.empty()) {
+      request.system_prompt += "\n\n";
+      request.system_prompt += task.few_shot_examples;
+    }
     request.user_context_json = agent_task_json(task);
     request.output_schema_json = task.output_schema_json;
     request.timeout_ms = task.timeout_ms;

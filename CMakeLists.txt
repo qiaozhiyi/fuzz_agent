@@ -30,6 +30,7 @@ add_library(fuzzpilot_core STATIC
   src/plateau/detector.cpp
   src/mutation/strategy.cpp
   src/mutation/recipe_store.cpp
+  src/mutation/recipe_reward_tracker.cpp
   src/mutation/operator_sampler.cpp
   src/mutation/range_selector.cpp
   src/micro/manager.cpp

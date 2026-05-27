@@ -74,11 +74,17 @@ std::optional<PlateauEvent> PlateauDetector::add_sample(const AflStats& stats,
     if (worst_paths_jump > config_.max_new_paths) {
       return std::nullopt;
     }
-    // Edge-aware: any intermediate edge growth larger than ~1% of starting
-    // count is also disqualifying. Skip when edge telemetry is missing.
-    if (oldest.edges_found > 0 &&
-        worst_edges_jump > std::max<uint64_t>(1, oldest.edges_found / 100)) {
-      return std::nullopt;
+    // Edge-aware intermediate jump cap with floor + ceiling. Old "/100" gave
+    // 0 for small edge counts (every jump rejected) and unbounded caps for
+    // large ones; bounds keep the gate meaningful across run lengths.
+    if (oldest.edges_found > 0) {
+      const uint64_t pct_cap = std::max<uint64_t>(1, oldest.edges_found / 100);
+      const uint64_t cap = std::min(
+          config_.monotonic_jump_ceiling,
+          std::max(config_.monotonic_jump_floor, pct_cap));
+      if (worst_edges_jump > cap) {
+        return std::nullopt;
+      }
     }
   }
 
@@ -87,10 +93,19 @@ std::optional<PlateauEvent> PlateauDetector::add_sample(const AflStats& stats,
       newest.last_path == 0 || (now >= newest.last_path && now - newest.last_path >= config_.window_sec);
   const bool execs_ok = execs_delta >= config_.min_execs_delta &&
                         newest.execs_per_sec >= config_.min_execs_per_sec;
-  const bool no_growth = paths_delta <= config_.max_new_paths && crashes_delta == 0;
+  // Edges-aware no_growth: if paths_total is reported (legacy AFL or
+  // corpus_count fallback), require ≤max_new_paths AND bounded edges growth.
+  // If paths_total is unavailable, fall back to edges-only gate.
+  const uint64_t edge_cap =
+      std::max(config_.edges_growth_floor,
+               oldest.edges_found * config_.edges_growth_pct / 100);
+  const bool edges_flat = edges_delta <= edge_cap;
+  const bool paths_flat = paths_delta <= config_.max_new_paths;
+  const bool no_growth = paths_flat && edges_flat && crashes_delta == 0;
 
   if (execs_ok && no_growth && stale_last_path) {
     emitted_ = true;
+    last_emit_ts_ = now;
     PlateauEvent event;
     event.id = make_id("plateau");
     event.run_id = run_id;
@@ -113,6 +128,7 @@ std::optional<PlateauEvent> PlateauDetector::add_sample(const AflStats& stats,
 void PlateauDetector::reset() {
   window_.clear();
   emitted_ = false;
+  last_emit_ts_ = 0;
 }
 
 std::string plateau_event_json(const PlateauEvent& event) {

@@ -21,8 +21,8 @@ cd "${REPO_ROOT}"
 [ -r /etc/profile.d/fuzzpilot_env.sh ] && . /etc/profile.d/fuzzpilot_env.sh
 
 case "${EXP}" in
-  E1b|E2b|E2c) NEEDS_API_KEY=1 ;;
-  *)           NEEDS_API_KEY=0 ;;
+  E1b|E2b|E2c|W1b|W1d) NEEDS_API_KEY=1 ;;
+  *)                   NEEDS_API_KEY=0 ;;
 esac
 
 if (( NEEDS_API_KEY )) && [[ -z "${FUZZPILOT_MODEL_API_KEY:-}" ]]; then

@@ -84,7 +84,9 @@ std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
   }
   stats.execs_done = as_u64(stats.raw, "execs_done");
   stats.execs_per_sec = as_double(stats.raw, "execs_per_sec");
-  stats.paths_total = as_u64(stats.raw, "paths_total");
+  // AFL++ 4.x dropped `paths_total` in favor of `corpus_count`. Fall back so
+  // plateau logic and stats reporting keep working on new versions.
+  stats.paths_total = first_nonzero(stats, {"paths_total", "corpus_count"});
   stats.paths_favored = as_u64(stats.raw, "paths_favored");
   stats.paths_found = as_u64(stats.raw, "paths_found");
   stats.paths_imported = as_u64(stats.raw, "paths_imported");
@@ -111,7 +113,7 @@ std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
   // Without this, a 24h run accumulates several hundred MB of
   // redundant strings since each sample copies the entire raw map.
   static const std::initializer_list<const char*> kTypedKeys = {
-      "last_update", "execs_done", "execs_per_sec", "paths_total",
+      "last_update", "execs_done", "execs_per_sec", "paths_total", "corpus_count",
       "paths_favored", "paths_found", "paths_imported",
       "edges_found", "edge_count", "total_edges", "fuzzed_edges",
       "max_depth", "cur_path", "pending_favs", "pending_total",
