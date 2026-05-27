@@ -135,7 +135,13 @@ export RUNS_ROOT REPO FUZZPILOT_BIN BUDGET_SEC STATUS DRY
 # CPU-pinned. Blocks until all N finished.
 run_mode_batch() {
   local target="$1" mode="$2" n="$3" cfg="$4"
-  status_set "BATCH START: target=$target mode=$mode N=$n cfg=$cfg budget=${BUDGET_SEC}s"
+  # full-agent spawns an LLM controller + AFL fork-server per slot; running 4
+  # of them in parallel on a 4-core box thrashes the scheduler and silently
+  # cuts effective fuzz time per run (observed: rc=137 at t=23064s with no
+  # agent_decision emitted). Serialize full-agent; other modes keep NCPUS.
+  local par="$NCPUS"
+  if [[ "$mode" == "full-agent" ]]; then par=1; fi
+  status_set "BATCH START: target=$target mode=$mode N=$n cfg=$cfg budget=${BUDGET_SEC}s parallel=$par"
   local args=()
   for r in $(seq 1 "$n"); do
     cpu=$(( (r - 1) % NCPUS ))
@@ -143,7 +149,7 @@ run_mode_batch() {
   done
   # 5 args per launch_one call
   printf '%s\n' "${args[@]}" | \
-    xargs -n 5 -P "$NCPUS" bash -c 'launch_one "$@"' _
+    xargs -n 5 -P "$par" bash -c 'launch_one "$@"' _
   status_set "BATCH END:   target=$target mode=$mode"
   if [[ "${DRY:-0}" != "1" ]]; then
     status_set "sleeping 60s for AFL/pagecache cleanup"
