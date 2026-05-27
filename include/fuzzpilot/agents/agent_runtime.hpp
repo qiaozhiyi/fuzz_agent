@@ -52,10 +52,15 @@ bool validate_agent_proposal(const std::string& proposal_json,
                              const std::string& action_schema_json,
                              std::string* reason);
 
+// `deadline_unix_sec` is an absolute wall-clock cut-off (seconds since
+// epoch). When non-zero, any agent that hasn't started by the deadline
+// is recorded with error_kind="deadline_exceeded" instead of blocking
+// on a slow LLM call. Default 0 = no cap (legacy behaviour).
 std::vector<AgentDecision> run_agent_tasks(IModelGateway& gateway,
                                            const std::string& run_id,
                                            const std::string& plateau_id,
-                                           const std::vector<AgentTask>& tasks);
+                                           const std::vector<AgentTask>& tasks,
+                                           uint64_t deadline_unix_sec = 0);
 
 std::string agent_task_json(const AgentTask& task);
 std::string agent_decision_json(const AgentDecision& decision);

@@ -163,38 +163,51 @@ bool validate_agent_proposal(const std::string& proposal_json,
       pos = stop + 1;
     }
   }
-  // Cheap numeric-field sanity check — reject obviously pathological
-  // values that would break the mutator. NOTE: scans the ENTIRE
-  // proposal_json text (not just top level) so an adversarial LLM
-  // can't bypass the cap by nesting the numeric inside
-  // `{"interventions":[{"fields":[{"target_begin":1e10}]}]}`. The
-  // string search hits all occurrences of the key regardless of depth.
-  // The trade-off is false positives if a legitimate value happens to
-  // contain the substring inside another field name — we accept that
-  // because the keys (target_begin/target_end/budget/timeout_ms) are
-  // distinctive enough that collisions in well-formed JSON are
-  // unrealistic in practice. If a key name was to be reused (e.g. an
-  // agent emits "budget" as a string label inside a different
-  // context), the only consequence is a false-positive reject which
-  // is the safer failure mode for a guardrail.
+  // Numeric-field sanity check using a single-pass JSON-string-aware
+  // scanner. The previous find()-based version would treat an occurrence
+  // of e.g. "budget" inside a "hypothesis" description string as a real
+  // key match and silently reject valid proposals as schema_invalid →
+  // fallback_used=true (cpp audit finding 5-B). This walker only
+  // considers a "<key>" as a real key when (a) it starts outside a
+  // string literal and (b) its closing quote is followed (optionally
+  // through whitespace) by ':'. Values inside string literals are
+  // explicitly skipped.
   const std::vector<std::pair<std::string, uint64_t>> numeric_caps = {
       {"target_begin", 1ull << 28},   // 256 MB offset cap
       {"target_end",   1ull << 28},
       {"budget",       3600ull * 24}, // 24h budget cap
       {"timeout_ms",   600ull * 1000},
   };
-  for (const auto& [key, cap] : numeric_caps) {
-    std::size_t hpos = 0;
-    while ((hpos = proposal_json.find("\"" + key + "\"", hpos)) != std::string::npos) {
-      const auto colon = proposal_json.find(':', hpos);
-      if (colon == std::string::npos) break;
-      std::size_t numStart = colon + 1;
+  bool in_string = false;
+  bool escape_next = false;
+  for (std::size_t i = 0; i < proposal_json.size(); ++i) {
+    const char c = proposal_json[i];
+    if (escape_next) { escape_next = false; continue; }
+    if (in_string) {
+      if (c == '\\') { escape_next = true; }
+      else if (c == '"') { in_string = false; }
+      continue;
+    }
+    if (c != '"') continue;
+    // Opening quote outside a string literal: candidate key position.
+    bool matched_key = false;
+    for (const auto& [key, cap] : numeric_caps) {
+      const std::size_t key_end = i + 1 + key.size();
+      if (key_end >= proposal_json.size()) continue;
+      if (proposal_json.compare(i + 1, key.size(), key) != 0) continue;
+      if (proposal_json[key_end] != '"') continue;
+      // Closing quote must be followed by optional whitespace then ':'
+      // to be a real key. Otherwise this is just a string value that
+      // happens to equal one of our key names.
+      std::size_t after = key_end + 1;
+      while (after < proposal_json.size() &&
+             std::isspace(static_cast<unsigned char>(proposal_json[after]))) ++after;
+      if (after >= proposal_json.size() || proposal_json[after] != ':') continue;
+      matched_key = true;
+      std::size_t numStart = after + 1;
       while (numStart < proposal_json.size() &&
-             std::isspace(static_cast<unsigned char>(proposal_json[numStart]))) {
-        ++numStart;
-      }
-      const bool negative = numStart < proposal_json.size() && proposal_json[numStart] == '-';
-      if (negative) {
+             std::isspace(static_cast<unsigned char>(proposal_json[numStart]))) ++numStart;
+      if (numStart < proposal_json.size() && proposal_json[numStart] == '-') {
         if (reason) *reason = "negative " + key;
         return false;
       }
@@ -202,9 +215,7 @@ bool validate_agent_proposal(const std::string& proposal_json,
       while (numEnd < proposal_json.size() &&
              (std::isdigit(static_cast<unsigned char>(proposal_json[numEnd])) ||
               proposal_json[numEnd] == 'e' || proposal_json[numEnd] == 'E' ||
-              proposal_json[numEnd] == '.' || proposal_json[numEnd] == '+')) {
-        ++numEnd;
-      }
+              proposal_json[numEnd] == '.' || proposal_json[numEnd] == '+')) ++numEnd;
       if (numEnd > numStart) {
         try {
           const double v = std::stod(proposal_json.substr(numStart, numEnd - numStart));
@@ -213,10 +224,18 @@ bool validate_agent_proposal(const std::string& proposal_json,
             return false;
           }
         } catch (...) {
-          // ignore — malformed; will be caught upstream
+          // malformed number; caught upstream
         }
       }
-      hpos = numEnd;
+      // Skip i past the closing quote of the key so the outer loop's
+      // ++i moves us beyond the matched pair. Don't enter in_string —
+      // the key's two quotes are already consumed.
+      i = key_end;
+      break;
+    }
+    if (!matched_key) {
+      // Ordinary string literal (value or non-cap key). Enter it.
+      in_string = true;
     }
   }
   return true;
@@ -225,9 +244,30 @@ bool validate_agent_proposal(const std::string& proposal_json,
 std::vector<AgentDecision> run_agent_tasks(IModelGateway& gateway,
                                            const std::string& run_id,
                                            const std::string& plateau_id,
-                                           const std::vector<AgentTask>& tasks) {
+                                           const std::vector<AgentTask>& tasks,
+                                           uint64_t deadline_unix_sec) {
   std::vector<AgentDecision> decisions;
   for (const auto& task : tasks) {
+    // Honor the caller's wall-clock cap. Without this, 8 sequential LLM
+    // calls could blow well past the run budget on a slow endpoint and
+    // get SIGKILL'd mid-call (observed: rc=137 mid-agent on libxml2).
+    if (deadline_unix_sec != 0 &&
+        static_cast<uint64_t>(std::time(nullptr)) >= deadline_unix_sec) {
+      AgentDecision skipped;
+      skipped.id = make_id("agent_decision");
+      skipped.run_id = run_id;
+      skipped.plateau_id = plateau_id;
+      skipped.agent = task.agent_name;
+      skipped.task_json = agent_task_json(task);
+      skipped.model_response.schema_valid = false;
+      skipped.model_response.error_kind = "deadline_exceeded";
+      skipped.model_response.error =
+          "wall-clock deadline reached before agent could run";
+      skipped.fallback_used = true;
+      skipped.created_ts = static_cast<uint64_t>(std::time(nullptr));
+      decisions.push_back(std::move(skipped));
+      continue;
+    }
     ModelRequest request;
     request.agent_name = task.agent_name;
     const std::string role = task.role_description.empty() ? role_for(task.agent_name)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <random>
 #include <string>
 #include <unordered_map>
@@ -62,6 +63,11 @@ class RecipeCache {
   RecipeCache();
 
   void load_from_environment();
+  // Cheap mtime check against the recipe store. If the controller has
+  // written newer global.recipe or recipe_index.tsv since the last
+  // load, drops seed-specific caches and re-runs load_from_environment.
+  // Safe to call on the AFL hot path (one stat() per file per call).
+  void reload_if_stale();
   bool loaded() const { return loaded_; }
   const CompactRecipe& global() const { return global_; }
   // Hot-path lookup. Callers should prefer the `seed_hash_hint` overload
@@ -96,4 +102,9 @@ class RecipeCache {
   std::vector<CompactRecipe> seed_id_recipes_;
   std::unordered_map<std::string, CompactRecipe> seed_hash_recipes_;
   bool loaded_ = false;
+  // Captured at load_from_environment so reload_if_stale can detect
+  // post-init writes from the controller (recipe promotion).
+  std::filesystem::path store_path_;
+  std::filesystem::file_time_type global_mtime_{};
+  std::filesystem::file_time_type index_mtime_{};
 };

@@ -57,7 +57,20 @@ std::size_t choose_focus_offset(const CompactRecipe& recipe, std::mt19937& rng, 
       return candidate;
     }
   }
-  return random_offset(rng, size);
+  // 16 random attempts all hit protected ranges. Previously we fell back
+  // to plain random_offset() which IGNORED protect_ranges entirely —
+  // structural magic bytes (e.g. the XML header) could be clobbered
+  // even when the recipe explicitly marked them protected (cpp audit
+  // 5-D). Do a deterministic linear scan from a random start instead,
+  // so we respect protection unless EVERY byte is protected.
+  const std::size_t start = random_offset(rng, size);
+  for (std::size_t i = 0; i < size; ++i) {
+    const std::size_t cand = (start + i) % size;
+    if (!is_protected(recipe, cand)) {
+      return cand;
+    }
+  }
+  return 0;
 }
 
 void mutate_bit_flip(FpMutator& mutator, const CompactRecipe& recipe) {
@@ -339,6 +352,16 @@ extern "C" void fp_mutator_deinit(void *data) {
 extern "C" unsigned char fp_mutator_queue_get(void *data, const char *filename) {
   if (data != nullptr && filename != nullptr) {
     auto* m = static_cast<FpMutator*>(data);
+    // Per-corpus-entry tick is a natural cadence to re-check the recipe
+    // store: the controller writes new recipes on plateau detection, and
+    // this hook fires often enough that updates land within seconds but
+    // not so often that the two stat() calls become a hot-path drag.
+    m->recipes.reload_if_stale();
+    // Flush telemetry on the same cadence so recipe_hits/misses survive
+    // an external SIGKILL (rc=137 from the orchestrator watchdog
+    // otherwise means fp_mutator_deinit never fires and the counters
+    // never reach the JSONL file — cpp audit 1-B / Task #1B).
+    m->telemetry.flush_from_environment();
     m->current_seed = filename;
     // Invalidate cached seed hash — next mutation will recompute once.
     m->seed_hash_valid = false;

@@ -281,6 +281,48 @@ void RecipeCache::load_from_environment() {
     add_recipe(std::move(recipe));
     loaded_ = true;
   }
+
+  // Remember the store + mtimes so reload_if_stale() can pick up any
+  // recipe the controller writes after this point. Without this, the
+  // mutator was stuck on whatever existed at AFL fork-server start
+  // (typically an empty bootstrap `strategy_dictionary`).
+  store_path_ = store;
+  std::error_code mtime_ec;
+  if (std::filesystem::exists(global_recipe_path, mtime_ec)) {
+    global_mtime_ = std::filesystem::last_write_time(global_recipe_path, mtime_ec);
+  }
+  if (std::filesystem::exists(index_path, mtime_ec)) {
+    index_mtime_ = std::filesystem::last_write_time(index_path, mtime_ec);
+  }
+}
+
+void RecipeCache::reload_if_stale() {
+  if (store_path_.empty()) {
+    return;  // load_from_environment never succeeded; nothing to reload.
+  }
+  std::error_code ec;
+  const auto global_path = store_path_ / "global.recipe";
+  const auto idx_path = store_path_ / "recipe_index.tsv";
+  std::filesystem::file_time_type g_mt{};
+  std::filesystem::file_time_type i_mt{};
+  if (std::filesystem::exists(global_path, ec)) {
+    g_mt = std::filesystem::last_write_time(global_path, ec);
+  }
+  if (std::filesystem::exists(idx_path, ec)) {
+    i_mt = std::filesystem::last_write_time(idx_path, ec);
+  }
+  if (g_mt == global_mtime_ && i_mt == index_mtime_) {
+    return;  // store unchanged since last load
+  }
+  // Wipe seed-specific caches so stale entries don't bleed into the new
+  // recipe set. global_ is overwritten by load_from_environment if a new
+  // global.recipe exists; otherwise it retains the previous value (better
+  // than dropping back to the constructor default mid-run).
+  seed_id_recipes_.clear();
+  seed_hash_recipes_.clear();
+  load_from_environment();
+  fprintf(stderr, "[M5] reload_if_stale: recipe store refreshed (seed_ids=%zu, seed_hashes=%zu)\n",
+          seed_id_recipes_.size(), seed_hash_recipes_.size());
 }
 
 void RecipeCache::add_recipe(CompactRecipe recipe) {
@@ -340,15 +382,16 @@ const CompactRecipe& RecipeCache::lookup(const std::string& seed_name,
     *hit = false;
   }
 
-  // Cheap path first: seed-name based selectors. We keep substring match
-  // for backward compat but short-circuit on exact match. Skipped entirely
-  // when no seed-id recipes are loaded — the previous code paid the O(N)
-  // scan even when N == 0.
+  // Cheap path first: seed-name based selectors. Exact match only.
+  // Previous code also accepted `seed_name.find(selector_key) != npos`,
+  // which let a recipe targeting `id:000001` accidentally bind to
+  // `id:0000010`, `id:000001,orig:foo`, etc. (cpp audit 5-C). Recipes
+  // are referenced by AFL corpus basename, which is stable, so exact
+  // string equality is the correct selector semantics.
   if (!seed_id_recipes_.empty()) {
     for (const auto& recipe : seed_id_recipes_) {
       if (recipe.selector_key.empty()) continue;
-      if (seed_name == recipe.selector_key ||
-          seed_name.find(recipe.selector_key) != std::string::npos) {
+      if (seed_name == recipe.selector_key) {
         if (hit != nullptr) {
           *hit = true;
         }

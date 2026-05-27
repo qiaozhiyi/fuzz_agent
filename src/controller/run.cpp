@@ -749,12 +749,20 @@ RunSummary run_mvp(const RunOptions& requested_options) {
     TelemetryCollector collector(main_output_dir, "");
     int elapsed_sec = 0;
     std::string last_telemetry_error;
+    // Reserve a tail of the budget for the post-loop agent pipeline
+    // (forced plateau + run_agent_tasks + micro campaigns + DB cleanup).
+    // Without this, a long fuzz with no plateau detection eats the
+    // entire budget and the agent block races SIGTERM. 30 min for
+    // long runs, 10% for short ones — whichever is smaller.
+    const int agent_reserve_sec = std::min(
+        1800, std::max(60, config.afl.main_budget_sec / 10));
+    const int loop_budget_sec = std::max(60, config.afl.main_budget_sec - agent_reserve_sec);
     // Subscribe to the SIGINT/SIGTERM flag installed in main(). When
     // the signal arrives we break out of the main sampling loop,
     // tear down the AFL process group, and let the rest of run_mvp
     // run normal cleanup (DB finish_run, report writing).
     volatile sig_atomic_t* termination_flag = install_termination_signal_handler();
-    while (elapsed_sec < config.afl.main_budget_sec) {
+    while (elapsed_sec < loop_budget_sec) {
       std::this_thread::sleep_for(std::chrono::seconds(1));
       elapsed_sec += 1;
 
@@ -913,7 +921,13 @@ RunSummary run_mvp(const RunOptions& requested_options) {
   auto tasks = make_default_agent_tasks(
       summary.plateau_id, blackboard, static_cast<uint32_t>(config.micro_campaign.budget_sec));
   configure_agent_tasks(tasks, config);
-  auto decisions = run_agent_tasks(*gateway, summary.run_id, summary.plateau_id, tasks);
+  // Wall-clock cap: budget the agent block to roughly the reserve window
+  // we held back in the main loop, capped at 30 min. Prevents 8 sequential
+  // LLM calls from blowing past the SIGTERM cut-off.
+  const auto agent_deadline =
+      static_cast<uint64_t>(std::time(nullptr)) +
+      static_cast<uint64_t>(std::min(1800, std::max(60, config.afl.main_budget_sec / 10)));
+  auto decisions = run_agent_tasks(*gateway, summary.run_id, summary.plateau_id, tasks, agent_deadline);
   for (const auto& decision : decisions) {
     persist_agent_decision(db, summary, config, decision, 0.0, events_path);
   }
