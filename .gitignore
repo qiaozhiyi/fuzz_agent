@@ -24,6 +24,8 @@ results/paper01_ai_recipe_mutation/runs/*/work/
 results/paper01_ai_recipe_mutation/runs/*/stdout.log
 results/paper01_ai_recipe_mutation/runs/*/stderr.log
 results/paper01_ai_recipe_mutation/runs/*/status
+results/paper01_ai_recipe_mutation/runs/*/git.patch
+results/paper01_ai_recipe_mutation/runs/*/.git.patch*
 results/paper01_ai_recipe_mutation/microbench/*.status
 scripts/__pycache__/
 **/__pycache__/
