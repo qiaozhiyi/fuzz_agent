@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<root xmlns="http://example.com/ns" xmlns:x="http://example.com/x">
+  <child>default ns</child>
+  <x:other attr="value">prefixed</x:other>
+</root>

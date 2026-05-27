@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<library>
+  <book id="1" lang="en">
+    <title>Tao Te Ching</title>
+    <author>Laozi</author>
+    <year>500</year>
+  </book>
+  <book id="2" lang="zh">
+    <title>Dao De Jing</title>
+    <author>Laozi</author>
+    <year>500</year>
+  </book>
+</library>

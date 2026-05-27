@@ -2,6 +2,8 @@ build/
 build-*/
 build-make
 cmake-build-*/
+experiments/targets/libxml2/build/
+experiments/targets/libxml2/libxml2_fuzzer
 .idea/
 work/
 work_*/

@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<doc>
+  <!-- a comment -->
+  <code><![CDATA[if (x < y && y > 0) { return &x; }]]></code>
+  <!-- another comment -->
+</doc>
