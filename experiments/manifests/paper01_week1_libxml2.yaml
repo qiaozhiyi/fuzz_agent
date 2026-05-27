@@ -1,0 +1,85 @@
+paper: "paper01_ai_recipe_mutation"
+version: 1
+defaults:
+  budget_sec: 86400
+  target_config: "experiments/targets/libxml2/config.yaml"
+  out_root: "results/paper01_ai_recipe_mutation/runs"
+  metadata_script: "scripts/capture_run_metadata.sh"
+
+experiments:
+  - id: W1a
+    description: "libxml2 baseline AFL++ week-1 anchor"
+    target: libxml2_parser
+    mode: baseline-afl
+    repeats: 5
+    budget_sec: 86400
+    runs:
+      - p1_w1_libxml2_baseline-afl_r01
+      - p1_w1_libxml2_baseline-afl_r02
+      - p1_w1_libxml2_baseline-afl_r03
+      - p1_w1_libxml2_baseline-afl_r04
+      - p1_w1_libxml2_baseline-afl_r05
+
+  - id: W1b
+    description: "libxml2 full-agent week-1 main comparison"
+    target: libxml2_parser
+    mode: full-agent
+    repeats: 5
+    budget_sec: 86400
+    runs:
+      - p1_w1_libxml2_full-agent_r01
+      - p1_w1_libxml2_full-agent_r02
+      - p1_w1_libxml2_full-agent_r03
+      - p1_w1_libxml2_full-agent_r04
+      - p1_w1_libxml2_full-agent_r05
+
+  - id: W1c
+    description: "libxml2 controller-only week-1 attribution anchor"
+    target: libxml2_parser
+    mode: controller-only
+    repeats: 3
+    budget_sec: 86400
+    runs:
+      - p1_w1_libxml2_controller-only_r01
+      - p1_w1_libxml2_controller-only_r02
+      - p1_w1_libxml2_controller-only_r03
+
+  - id: W1d
+    description: "libxml2 rule-only week-1 LLM increment check"
+    target: libxml2_parser
+    mode: rule-only
+    repeats: 3
+    budget_sec: 86400
+    runs:
+      - p1_w1_libxml2_rule-only_r01
+      - p1_w1_libxml2_rule-only_r02
+      - p1_w1_libxml2_rule-only_r03
+
+  - id: W1e
+    description: "libxml2 no-static-analysis week-1 static-context increment check"
+    target: libxml2_parser
+    mode: no-static-analysis
+    repeats: 3
+    budget_sec: 86400
+    runs:
+      - p1_w1_libxml2_no-static-analysis_r01
+      - p1_w1_libxml2_no-static-analysis_r02
+      - p1_w1_libxml2_no-static-analysis_r03
+
+acceptance:
+  per_run_required_files:
+    - "fuzzer_stats"
+    - "coverage.csv"
+    - "events.jsonl"
+    - "run_metadata.json"
+    - "report.md"
+  per_full_agent_required_files:
+    - "agent_decisions.jsonl"
+    - "agent_memory.jsonl"
+    - "fuzzpilot.sqlite"
+  min_run_time_sec: 82000
+  min_coverage_csv_rows: 1000
+  # Active-agent gates: a full-agent run with zero plateau events or zero
+  # agent decisions is a silent failure (mutator loaded, LLM never called).
+  per_full_agent_min_plateau_events: 1
+  per_full_agent_min_agent_decisions: 1

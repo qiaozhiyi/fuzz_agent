@@ -252,9 +252,11 @@ def _record_from_run_dir(run_dir: Path, target: str, mode: str, repeat: str, run
         record.notes.append("missing report.md")
     read_sqlite(run_dir, record)
     # FS status file is what scripts/paper01/run_batch.sh actually writes
-    # (completed | failed | failed_short_run | skipped). Prefer it over
-    # whatever the sqlite runs table happened to record, since the batch
-    # driver applies the manifest acceptance gates *after* the run exits.
+    # (running | completed | failed | failed-short-run | missing-api-key |
+    # skipped). Prefer it over whatever the sqlite runs table happened to
+    # record, since the batch driver applies the manifest acceptance gates
+    # *after* the run exits. Numeric exit code (when failed) is in the
+    # sibling `exit_code` file.
     status_path = run_dir / "status"
     if status_path.exists():
         fs_status = status_path.read_text().strip()

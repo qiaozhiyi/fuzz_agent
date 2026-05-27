@@ -216,15 +216,50 @@ PY
       observed_run_time="$(awk -F: '/^run_time/ {gsub(/ /, "", $2); print $2; exit}' "${out_dir}/fuzzer_stats")"
     fi
     if [[ -n "${min_run_time}" && "${min_run_time}" -gt 0 && -n "${observed_run_time}" && "${observed_run_time}" -lt "${min_run_time}" ]]; then
-      echo "failed_short_run" > "${status_file}"
+      echo "failed-short-run" > "${status_file}"
       echo "[${run_id}] FAILED: run_time=${observed_run_time}s < min_run_time_sec=${min_run_time}s (re-run with --resume to retry)" >&2
       return 1
+    fi
+    # Active-agent gates: full-agent runs must produce >= N plateau events and
+    # >= N agent decisions. A full-agent run with zero of either is a silent
+    # failure (mutator loaded, LLM never called). Without these gates the W1b
+    # regression pattern (mode statistically equal to baseline-afl because
+    # the agent never triggered) merges silently.
+    if [[ "${mode}" == "full-agent" ]]; then
+      local min_plateau min_decisions
+      read -r min_plateau min_decisions < <(python3 - "${MANIFEST}" <<'PY'
+import sys, yaml
+a = (yaml.safe_load(open(sys.argv[1])) or {}).get("acceptance", {}) or {}
+print(int(a.get("per_full_agent_min_plateau_events", 0)),
+      int(a.get("per_full_agent_min_agent_decisions", 0)))
+PY
+)
+      local observed_plateau=0 observed_decisions=0
+      if [[ -f "${out_dir}/events.jsonl" ]]; then
+        observed_plateau=$(grep -c '"event":"plateau_detected"' "${out_dir}/events.jsonl" 2>/dev/null || echo 0)
+      fi
+      if [[ -f "${out_dir}/agent_decisions.jsonl" ]]; then
+        observed_decisions=$(wc -l < "${out_dir}/agent_decisions.jsonl" | tr -d '[:space:]')
+      fi
+      if [[ "${min_plateau}" -gt 0 && "${observed_plateau:-0}" -lt "${min_plateau}" ]]; then
+        echo "failed" > "${status_file}"
+        echo "${rc}" > "${out_dir}/exit_code"
+        echo "[${run_id}] FAILED: plateau_events=${observed_plateau} < per_full_agent_min_plateau_events=${min_plateau} (agent never triggered)" >&2
+        return 1
+      fi
+      if [[ "${min_decisions}" -gt 0 && "${observed_decisions:-0}" -lt "${min_decisions}" ]]; then
+        echo "failed" > "${status_file}"
+        echo "${rc}" > "${out_dir}/exit_code"
+        echo "[${run_id}] FAILED: agent_decisions=${observed_decisions} < per_full_agent_min_agent_decisions=${min_decisions} (LLM never called)" >&2
+        return 1
+      fi
     fi
     echo "completed" > "${status_file}"
     echo "[${run_id}] completed (run_time=${observed_run_time:-?}s)"
     return 0
   else
     echo "failed" > "${status_file}"
+    echo "${rc}" > "${out_dir}/exit_code"
     echo "[${run_id}] FAILED (rc=${rc}); see ${out_dir}/stderr.log" >&2
     return 1
   fi

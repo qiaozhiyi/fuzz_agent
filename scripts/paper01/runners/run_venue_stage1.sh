@@ -124,8 +124,11 @@ launch_one() {
   rm -rf "$out_dir/work" \
          "$out_dir/git.patch" \
          "$out_dir/fuzzpilot.sqlite"* 2>/dev/null
-  if [ "$rc" = "0" ]; then echo completed > "$out_dir/status"
-  else echo "failed(rc=$rc)" > "$out_dir/status"
+  if [ "$rc" = "0" ]; then
+    echo completed > "$out_dir/status"
+  else
+    echo failed > "$out_dir/status"
+    echo "$rc" > "$out_dir/exit_code"
   fi
 }
 export -f launch_one
