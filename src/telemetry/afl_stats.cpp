@@ -130,32 +130,49 @@ std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
 }
 
 std::string afl_stats_json(const AflStats& stats) {
-  std::ostringstream out;
-  out << "{";
-  out << "\"ts\":" << stats.sampled_at << ",";
-  out << "\"execs_done\":" << stats.execs_done << ",";
-  out << "\"execs_per_sec\":" << stats.execs_per_sec << ",";
-  out << "\"paths_total\":" << stats.paths_total << ",";
-  out << "\"edges_found\":" << stats.edges_found << ",";
-  out << "\"stale\":" << (stats.stale ? "true" : "false") << ",";
-  out << "\"unique_crashes\":" << stats.unique_crashes << ",";
-  out << "\"unique_hangs\":" << stats.unique_hangs << ",";
-  out << "\"bitmap_cvg\":" << stats.bitmap_cvg << ",";
-  out << "\"stability\":" << stats.stability << ",";
-  out << "\"last_path\":" << stats.last_path << ",";
-  out << "\"recipe_hits\":" << stats.recipe_hits << ",";
-  out << "\"recipe_misses\":" << stats.recipe_misses << ",";
-  out << "\"raw\":{";
+  std::string out;
+  out.reserve(512);
+  out += "{\"ts\":";
+  out += std::to_string(stats.sampled_at);
+  out += ",\"execs_done\":";
+  out += std::to_string(stats.execs_done);
+  out += ",\"execs_per_sec\":";
+  out += std::to_string(stats.execs_per_sec);
+  out += ",\"paths_total\":";
+  out += std::to_string(stats.paths_total);
+  out += ",\"edges_found\":";
+  out += std::to_string(stats.edges_found);
+  out += ",\"stale\":";
+  out += stats.stale ? "true" : "false";
+  out += ",\"unique_crashes\":";
+  out += std::to_string(stats.unique_crashes);
+  out += ",\"unique_hangs\":";
+  out += std::to_string(stats.unique_hangs);
+  out += ",\"bitmap_cvg\":";
+  out += std::to_string(stats.bitmap_cvg);
+  out += ",\"stability\":";
+  out += std::to_string(stats.stability);
+  out += ",\"last_path\":";
+  out += std::to_string(stats.last_path);
+  out += ",\"recipe_hits\":";
+  out += std::to_string(stats.recipe_hits);
+  out += ",\"recipe_misses\":";
+  out += std::to_string(stats.recipe_misses);
+  out += ",\"raw\":{";
   bool first = true;
   for (const auto& [key, value] : stats.raw) {
     if (!first) {
-      out << ",";
+      out += ",";
     }
     first = false;
-    out << "\"" << json_escape(key) << "\":\"" << json_escape(value) << "\"";
+    out += "\"";
+    out += json_escape(key);
+    out += "\":\"";
+    out += json_escape(value);
+    out += "\"";
   }
-  out << "}}";
-  return out.str();
+  out += "}}";
+  return out;
 }
 
 std::string afl_stats_summary(const AflStats& stats) {
