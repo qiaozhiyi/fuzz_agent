@@ -293,24 +293,30 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     return response;
   }
 
-  std::ostringstream payload;
-  payload << "{";
-  payload << "\"model\":\"" << json_escape(model_) << "\",";
+  std::string payload_str;
+  payload_str.reserve(512 + request.system_prompt.size() + request.user_context_json.size());
+  payload_str += "{\"model\":\"";
+  payload_str += json_escape(model_);
+  payload_str += "\",";
   if (disable_thinking_) {
-    payload << "\"thinking\":{\"type\":\"disabled\"},";
+    payload_str += "\"thinking\":{\"type\":\"disabled\"},";
   }
-  payload << "\"messages\":[";
-  payload << "{\"role\":\"system\",\"content\":\"" << json_escape(request.system_prompt) << "\"},";
-  payload << "{\"role\":\"user\",\"content\":\"" << json_escape(request.user_context_json) << "\"}],";
-  payload << "\"response_format\":{\"type\":\"json_object\"},";
-  payload << "\"max_tokens\":" << request.max_output_tokens << ",";
-  payload << "\"temperature\":" << request.temperature << ",";
-  payload << "\"top_p\":" << request.top_p;
+  payload_str += "\"messages\":[{\"role\":\"system\",\"content\":\"";
+  payload_str += json_escape(request.system_prompt);
+  payload_str += "\"},{\"role\":\"user\",\"content\":\"";
+  payload_str += json_escape(request.user_context_json);
+  payload_str += "\"}],\"response_format\":{\"type\":\"json_object\"},\"max_tokens\":";
+  payload_str += std::to_string(request.max_output_tokens);
+  payload_str += ",\"temperature\":";
+  // Avoid locale-dependent formatting issues, keep it simple for floats if possible, but to_string works fine
+  payload_str += std::to_string(request.temperature);
+  payload_str += ",\"top_p\":";
+  payload_str += std::to_string(request.top_p);
   if (request.seed != 0) {
-    payload << ",\"seed\":" << request.seed;
+    payload_str += ",\"seed\":";
+    payload_str += std::to_string(request.seed);
   }
-  payload << "}";
-  const auto payload_str = payload.str();
+  payload_str += "}";
   // Persist the full payload on the response so the agent runtime can
   // write it to the replay log. The on-disk temp file is removed below.
   response.full_request_payload = payload_str;
