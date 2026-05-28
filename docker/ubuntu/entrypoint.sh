@@ -62,7 +62,7 @@ run_smoke() {
   if (( micro_budget < 1 )); then
     micro_budget=1
   fi
-  local timeout_sec=$((budget + 30))
+  local timeout_sec=$((budget + 120))
 
   bash scripts/paper01/preflight.sh --in-container
 
