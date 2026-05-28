@@ -802,6 +802,10 @@ RunSummary run_mvp(const RunOptions& requested_options) {
       options.ablation_mode != "baseline-afl" &&
       config.micro_campaign.enabled;
   std::size_t inline_intervention_count = 0;
+  // Wall-clock seconds at which the inline agent last fired (natural
+  // plateau OR heartbeat). Drives the heartbeat fallback so high-yield
+  // targets like libxml2 don't run 24h without invoking the agent.
+  int last_agent_trigger_at_sec = 0;
 
   auto trigger_inline_agent = [&](const PlateauEvent& plateau,
                                    const AflStats& stats) {
@@ -872,6 +876,39 @@ RunSummary run_mvp(const RunOptions& requested_options) {
       const auto stats = collector.sample(&error);
       if (stats) {
         process_stats(*stats);
+        // Heartbeat: synthesize a plateau if the natural detector has
+        // not fired since the last agent trigger. Targets that keep
+        // producing new edges (libxml2 in early hours) never plateau
+        // and the inline-agent loop would otherwise degenerate to
+        // baseline-AFL plus mutator overhead. Emit `plateau_detected`
+        // (with reason="heartbeat") so the aggregator's plateau-count
+        // acceptance gate counts heartbeats too; emit a sibling
+        // `agent_heartbeat_triggered` so analyses can still tell the
+        // two trigger paths apart.
+        if (agent_inline_enabled && summary.plateau_id.empty() &&
+            config.micro_campaign.agent_heartbeat_sec > 0 &&
+            elapsed_sec - last_agent_trigger_at_sec >=
+                config.micro_campaign.agent_heartbeat_sec) {
+          PlateauEvent heartbeat;
+          heartbeat.id = make_id("plateau_heartbeat");
+          heartbeat.run_id = summary.run_id;
+          heartbeat.campaign_id = summary.main_campaign_id;
+          heartbeat.detected_ts = static_cast<uint64_t>(stats->sampled_at);
+          heartbeat.window_sec = plateau_config.window_sec;
+          heartbeat.reason = "heartbeat";
+          summary.plateau_id = heartbeat.id;
+          const auto blackboard = plateau_blackboard_json(heartbeat, *stats);
+          db.insert_plateau(heartbeat, blackboard);
+          append_line(events_path,
+                      std::string("{\"event\":\"plateau_detected\",\"plateau\":") +
+                          plateau_event_json(heartbeat) + "}");
+          append_line(events_path,
+                      std::string("{\"event\":\"agent_heartbeat_triggered\","
+                                  "\"plateau_id\":\"") +
+                          json_escape(heartbeat.id) +
+                          "\",\"elapsed_sec\":" +
+                          std::to_string(elapsed_sec) + "}");
+        }
         if (agent_inline_enabled && !summary.plateau_id.empty()) {
           // Run the agent inline against this plateau, then reset the
           // detector so it can fire again later. AFL keeps running in the
@@ -887,6 +924,7 @@ RunSummary run_mvp(const RunOptions& requested_options) {
           plateau_for_agent.reason = "inline_plateau";
           try {
             trigger_inline_agent(plateau_for_agent, *stats);
+            last_agent_trigger_at_sec = elapsed_sec;
           } catch (const std::exception& ex) {
             append_line(events_path,
                         std::string("{\"event\":\"agent_inline_failed\",\"error\":\"") +

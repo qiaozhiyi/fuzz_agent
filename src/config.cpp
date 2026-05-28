@@ -163,6 +163,7 @@ void assign_section(AppConfig& config,
     else if (key == "budget_sec") config.micro_campaign.budget_sec = parse_int(value, config.micro_campaign.budget_sec);
     else if (key == "max_parallel") config.micro_campaign.max_parallel = parse_int(value, config.micro_campaign.max_parallel);
     else if (key == "promote_metric") config.micro_campaign.promote_metric = unquote(value);
+    else if (key == "agent_heartbeat_sec") config.micro_campaign.agent_heartbeat_sec = parse_int(value, config.micro_campaign.agent_heartbeat_sec);
   } else if (section == "mutation_strategy") {
     if (key == "enabled") config.mutation_strategy.enabled = parse_bool(value);
     else if (key == "recipe_store") config.mutation_strategy.recipe_store = unquote(value);
@@ -453,6 +454,9 @@ std::vector<std::string> validate_config(const AppConfig& config, bool check_run
   if (config.micro_campaign.budget_sec <= 0) {
     errors.push_back("micro_campaign.budget_sec must be positive");
   }
+  if (config.micro_campaign.agent_heartbeat_sec < 0) {
+    errors.push_back("micro_campaign.agent_heartbeat_sec must be >= 0 (0 disables heartbeat)");
+  }
   if (config.target.timeout_ms <= 0) {
     errors.push_back("target.timeout_ms must be positive");
   }
@@ -546,6 +550,7 @@ std::string summarize_config(const AppConfig& config) {
   out << "main_budget_sec=" << config.afl.main_budget_sec << "\n";
   out << "plateau_window_sec=" << config.afl.plateau_window_sec << "\n";
   out << "micro_budget_sec=" << config.micro_campaign.budget_sec << "\n";
+  out << "agent_heartbeat_sec=" << config.micro_campaign.agent_heartbeat_sec << "\n";
   out << "recipe_store=" << config.mutation_strategy.recipe_store.string() << "\n";
   out << "model_api_enabled=" << (config.model_api.enabled ? "true" : "false") << "\n";
   out << "model_provider=" << config.model_api.provider << "\n";

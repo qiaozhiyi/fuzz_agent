@@ -35,6 +35,11 @@ struct MicroCampaignConfig {
   int budget_sec = 180;
   int max_parallel = 1;
   std::string promote_metric = "new_edges";
+  // Inline-agent heartbeat. When > 0, the main loop synthesizes a
+  // plateau every N seconds if the natural detector has not fired
+  // since the last agent trigger. Set to 0 to disable and rely solely
+  // on the plateau detector (pre-heartbeat behavior).
+  int agent_heartbeat_sec = 1800;
 };
 
 struct MutationStrategyConfig {
