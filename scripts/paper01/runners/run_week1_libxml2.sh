@@ -28,6 +28,40 @@ NCPUS="${FUZZPILOT_PARALLEL:-4}"
 
 mkdir -p "${LOG_DIR}"
 
+[[ -f "${MANIFEST}" ]] || {
+  echo "missing manifest: ${MANIFEST}" >&2
+  exit 2
+}
+
+PER_RUN_REQUIRED_FILES="$(python3 - "${MANIFEST}" <<'PY'
+import sys, yaml
+manifest = yaml.safe_load(open(sys.argv[1])) or {}
+acceptance = manifest.get("acceptance", {}) or {}
+print(" ".join(acceptance.get("per_run_required_files", []) or []))
+PY
+)"
+
+PER_FULL_AGENT_REQUIRED_FILES="$(python3 - "${MANIFEST}" <<'PY'
+import sys, yaml
+manifest = yaml.safe_load(open(sys.argv[1])) or {}
+acceptance = manifest.get("acceptance", {}) or {}
+print(" ".join(acceptance.get("per_full_agent_required_files", []) or []))
+PY
+)"
+
+read -r MIN_RUN_TIME_SEC MIN_COVERAGE_CSV_ROWS MIN_PLATEAU_EVENTS MIN_AGENT_DECISIONS < <(python3 - "${MANIFEST}" <<'PY'
+import sys, yaml
+manifest = yaml.safe_load(open(sys.argv[1])) or {}
+acceptance = manifest.get("acceptance", {}) or {}
+print(
+    int(acceptance.get("min_run_time_sec", 0)),
+    int(acceptance.get("min_coverage_csv_rows", 0)),
+    int(acceptance.get("per_full_agent_min_plateau_events", 0)),
+    int(acceptance.get("per_full_agent_min_agent_decisions", 0)),
+)
+PY
+)
+
 DRY_RUN=0
 FROM_EXP=""
 while [[ $# -gt 0 ]]; do
@@ -53,6 +87,80 @@ fi
 
 status_set() {
   printf '[%s] %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "${STATUS}"
+}
+
+fail_run() {
+  local status_file="$1"
+  local status_value="$2"
+  local message="$3"
+  local exit_code="${4:-}"
+  echo "${status_value}" > "${status_file}"
+  if [[ -n "${exit_code}" ]]; then
+    printf '%s\n' "${exit_code}" > "${status_file%/status}/exit_code"
+  fi
+  status_set "${message}"
+}
+
+validate_run_artifacts() {
+  local run_id="$1"
+  local mode="$2"
+  local out_dir="$3"
+  local status_file="$4"
+  local required_file
+
+  for required_file in ${PER_RUN_REQUIRED_FILES}; do
+    if [[ ! -f "${out_dir}/${required_file}" ]]; then
+      fail_run "${status_file}" "failed" "failed ${run_id}: missing required file ${required_file}"
+      return 1
+    fi
+  done
+
+  if [[ "${mode}" == "full-agent" ]]; then
+    for required_file in ${PER_FULL_AGENT_REQUIRED_FILES}; do
+      if [[ ! -f "${out_dir}/${required_file}" ]]; then
+        fail_run "${status_file}" "failed" "failed ${run_id}: missing full-agent file ${required_file}"
+        return 1
+      fi
+    done
+  fi
+
+  if [[ "${MIN_COVERAGE_CSV_ROWS}" -gt 0 && -f "${out_dir}/coverage.csv" ]]; then
+    local coverage_rows
+    coverage_rows="$(awk 'END { print (NR > 0 ? NR - 1 : 0) }' "${out_dir}/coverage.csv")"
+    if [[ "${coverage_rows}" -lt "${MIN_COVERAGE_CSV_ROWS}" ]]; then
+      fail_run "${status_file}" "failed" "failed ${run_id}: coverage_rows=${coverage_rows} < min_coverage_csv_rows=${MIN_COVERAGE_CSV_ROWS}"
+      return 1
+    fi
+  fi
+
+  if [[ "${MIN_RUN_TIME_SEC}" -gt 0 && -f "${out_dir}/fuzzer_stats" ]]; then
+    local observed_run_time
+    observed_run_time="$(awk -F: '/^run_time/ {gsub(/ /, "", $2); print $2; exit}' "${out_dir}/fuzzer_stats")"
+    if [[ -n "${observed_run_time}" && "${observed_run_time}" -lt "${MIN_RUN_TIME_SEC}" ]]; then
+      fail_run "${status_file}" "failed-short-run" "failed ${run_id}: run_time=${observed_run_time}s < min_run_time_sec=${MIN_RUN_TIME_SEC}s"
+      return 1
+    fi
+  fi
+
+  if [[ "${mode}" == "full-agent" ]]; then
+    local observed_plateau=0 observed_decisions=0
+    if [[ -f "${out_dir}/events.jsonl" ]]; then
+      observed_plateau="$(grep -c '"event":"plateau_detected"' "${out_dir}/events.jsonl" 2>/dev/null || true)"
+    fi
+    if [[ -f "${out_dir}/agent_decisions.jsonl" ]]; then
+      observed_decisions="$(wc -l < "${out_dir}/agent_decisions.jsonl" | tr -d '[:space:]')"
+    fi
+    if [[ "${MIN_PLATEAU_EVENTS}" -gt 0 && "${observed_plateau:-0}" -lt "${MIN_PLATEAU_EVENTS}" ]]; then
+      fail_run "${status_file}" "failed" "failed ${run_id}: plateau_events=${observed_plateau} < per_full_agent_min_plateau_events=${MIN_PLATEAU_EVENTS}"
+      return 1
+    fi
+    if [[ "${MIN_AGENT_DECISIONS}" -gt 0 && "${observed_decisions:-0}" -lt "${MIN_AGENT_DECISIONS}" ]]; then
+      fail_run "${status_file}" "failed" "failed ${run_id}: agent_decisions=${observed_decisions} < per_full_agent_min_agent_decisions=${MIN_AGENT_DECISIONS}"
+      return 1
+    fi
+  fi
+
+  return 0
 }
 
 python_manifest() {
@@ -89,7 +197,13 @@ run_one() {
   # gateway silently falls back to FakeModelGateway and the LLM is never
   # called — the regression that broke W1b last time.
   case "${mode}" in
-    full-agent|rule-only|no-static-analysis|no-microcampaign|no-plateau)
+    full-agent|rule-only|no-static-analysis|no-microcampaign|no-plateau|no-mutator|controller-only)
+      # All agent-bearing modes need a real API key. Without this the
+      # gateway silently falls back to FakeModelGateway and the LLM is
+      # never called — the regression that broke W1b last time. Note
+      # that no-mutator and controller-only also run the agent layer
+      # (only the mutator is disabled, not the model calls), so they
+      # must be in this gate too.
       if [[ -z "${FUZZPILOT_MODEL_API_KEY:-}" ]]; then
         status_set "ABORT ${run_id}: FUZZPILOT_MODEL_API_KEY required for mode=${mode}"
         echo "missing-api-key" > "${status_file}"
@@ -127,13 +241,15 @@ run_one() {
       done
       [[ -f "${inner_run}/main_out/default/fuzzer_stats" ]] && cp -f "${inner_run}/main_out/default/fuzzer_stats" "${out_dir}/fuzzer_stats"
     fi
+    if ! validate_run_artifacts "${run_id}" "${mode}" "${out_dir}" "${status_file}"; then
+      return 1
+    fi
     echo "completed" > "${status_file}"
     status_set "complete ${run_id}"
     return 0
   fi
 
-  echo "failed" > "${status_file}"
-  status_set "failed ${run_id}"
+  fail_run "${status_file}" "failed" "failed ${run_id}" "1"
   return 1
 }
 
@@ -142,11 +258,15 @@ run_exp() {
   local exp_json
   exp_json="$(python_manifest "${exp_id}")"
 
-  local target_config target_name mode budget
+  local target_config target_name mode budget parallelism
   target_config="$(printf '%s' "${exp_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("target_config",""))')"
   target_name="$(printf '%s' "${exp_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["target"])')"
   mode="$(printf '%s' "${exp_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["mode"])')"
   budget="$(printf '%s' "${exp_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["budget_sec"])')"
+  parallelism="${NCPUS}"
+  if [[ "${mode}" == "full-agent" ]]; then
+    parallelism=1
+  fi
   local runs_file
   runs_file="$(mktemp)"
   printf '%s' "${exp_json}" | python3 -c 'import json,sys; [print(x) for x in json.load(sys.stdin)["runs"]]' > "${runs_file}"
@@ -154,7 +274,7 @@ run_exp() {
   local pids=()
   local fails=0
   while IFS= read -r run_id; do
-    while [[ "$(jobs -pr | wc -l | tr -d ' ')" -ge "${NCPUS}" ]]; do
+    while [[ "$(jobs -pr | wc -l | tr -d ' ')" -ge "${parallelism}" ]]; do
       sleep 2
     done
     run_one "${run_id}" "${mode}" "${REPO_ROOT}/${target_config}" "${target_name}" "${budget}" &

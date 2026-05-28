@@ -36,7 +36,7 @@ void usage() {
       << "commands:\n"
       << "  init [--root PATH]\n"
       << "  run --config PATH --stats PATH... [--afl-output-dir PATH] [--micro-stats PATH...] [--provider NAME]\n"
-      << "      [--ablation full-agent|baseline-afl|rule-only|no-static-analysis|no-mutator]\n"
+      << "      [--ablation full-agent|baseline-afl|rule-only|no-static-analysis|no-mutator|controller-only|no-microcampaign|no-plateau|random-recipe|random-reward|edges-only]\n"
       << "  check-config --config PATH [--runtime]\n"
       << "  m6-matrix --config PATH... [--out-dir PATH] [--work-dir PATH] [--repeats N]\n"
       << "  env --config PATH\n"

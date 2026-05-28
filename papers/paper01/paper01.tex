@@ -2070,6 +2070,34 @@ non-textual binary formats outside our scope; ours is on
 structured-text parsers outside theirs. \S\ref{sec:limits} states
 this scope split explicitly.
 
+\paragraph{Off-hot-path on language processors:
+HLPFuzz.}
+HLPFuzz~\cite{yang2025hlpfuzz} (USENIX Sec '25) also keeps the LLM
+out of the per-mutation hot path, but uses the model as a
+\emph{constraint solver} invoked when the fuzzer needs to traverse a
+multi-stage language-processor pipeline
+(lexer $\rightarrow$ parser $\rightarrow$ semantic check $\rightarrow$
+codegen) where the constraints required to reach deep program states
+are authored in the target's own source. The authors introduce
+\emph{hybrid centrality prioritization} and \emph{iterative context
+construction} to keep the LLM call rate low, and report
+$+190\%$ code coverage over the second-best fuzzer on $9$ popular
+language processors (compilers and interpreters) with $52$ bugs
+found ($37$ confirmed, $14$ fixed) and $5\times$ more bugs than the
+runner-up. HLPFuzz is the most direct competitor to FuzzPilot's
+\emph{intended} domain --- structured-text and language processors ---
+but the artifacts differ in kind: HLPFuzz emits concrete input
+fragments that satisfy a specific constraint, while FuzzPilot emits a
+schema-validated \emph{recipe} that re-tunes the host mutator's
+operator weights, dictionary, and protected ranges at the byte
+level. We do not run a head-to-head comparison in this preprint
+because FuzzPilot is evaluated on cJSON only, which is a single-stage
+tokenizer plus recursive parser without the deep constraint pipeline
+that HLPFuzz targets; a true comparison requires the
+language-processor benchmark used in
+HLPFuzz~\cite{yang2025hlpfuzz} and is the single most informative
+deferred experiment for the venue paper.
+
 \paragraph{Hybrid static-and-LLM fuzzers.}
 The hybrid fuzzer of Lin et al.~\cite{lin2025hybrid} integrates
 static analysis (CFG and data-flow extracted via LLVM IR or angr)
@@ -2233,6 +2261,7 @@ Table~\ref{tab:related} summarizes the comparison axis-by-axis.
     Mut4All~\cite{ye2025mut4all}       & offline       & mutator code    & manual          & bug reports    & no   & compilers               \\
     MALF~\cite{malf2025}               & multi-agent in-loop & input seqs & coverage       & protocol KB    & no   & industrial protocols    \\
     G\textsuperscript{2}FUZZ~\cite{liu2025g2fuzz} & \textbf{off-hot-path} & Python generator (code) & downstream coverage & LLM-extracted features & no & non-textual binary (JPEG / TIFF / MP4) \\
+    HLPFuzz~\cite{yang2025hlpfuzz} & \textbf{off-hot-path} (constraint solve) & input fragments + constraint witnesses & downstream coverage & source + grammar (hybrid centrality) & no & language processors (compilers / interpreters) \\
     \midrule
     \textbf{FuzzPilot} (ours)          & \textbf{off-hot-path} & \textbf{schema-validated recipe (data)} & \textbf{$N$-sec micro-campaign} & \textbf{Ghidra headless} & \textbf{yes} & \textbf{cJSON (preliminary; designed for structured-text parsers)} \\
     \bottomrule
@@ -2422,6 +2451,119 @@ finding is that neither closes the plateau gap, but
 FuzzPilot arm ($269$). \S\ref{sec:repro} pins the dict file and
 the cmplog binary so reviewers can re-run the comparison
 themselves.
+
+\paragraph{Internal code audit: implementation findings (A1, A2,
+A4, A5).}
+While preparing the venue-extension matrix we ran a focused
+code-level audit of the FuzzPilot controller, custom mutator, and
+agent runtime. The audit surfaced four implementation findings that
+the cJSON-only evaluation cannot expose but that materially shape
+how the preprint numbers should be read and how the deferred
+multi-target experiments are interpreted. We disclose them in full
+so that reviewers can stress-test our claims against the source.
+(Finding ``A3'' --- the missing \texttt{cmplog}/dictionary fairness
+baseline --- is covered in the previous paragraph.)
+
+\emph{A1: Plateau detector is single-shot and gated by
+\texttt{last\_path} staleness.}
+The detector in
+\texttt{src/plateau/detector.cpp} is guarded by an internal
+\texttt{emitted\_} flag that turns true on the first qualifying
+event and is only cleared by an explicit \texttt{reset()} call from
+the controller. It additionally requires that AFL++'s reported
+\texttt{last\_path} timestamp has aged out by the full window (the
+\texttt{stale\_last\_path} gate at
+\texttt{src/plateau/detector.cpp:92--93}). On cJSON this behavior
+is benign because the $269$-edge ceiling is reached well before the
+window expires and \texttt{last\_path} naturally stales; the
+preprint's cJSON plateau measurements are unaffected. On a
+high-yield target such as \texttt{libxml2} (${\sim}6.6$\,s per new
+edge in pilot smoke runs), \texttt{last\_path} refreshes
+continuously and the natural plateau never fires. To compensate, the
+controller (\texttt{src/controller/run.cpp}) carries an
+\texttt{agent\_heartbeat\_sec} mechanism that synthesizes a plateau
+event after a configurable interval; the agent layer's behavior on
+non-saturated targets is therefore a function of the heartbeat rate
+rather than the natural detector. Reviewers should not transfer the
+cJSON-trace single-plateau pattern to other targets without
+checking the heartbeat configuration.
+
+\emph{A2: Agent calls are sequential per plateau.}
+The eight default agents
+(\texttt{CoordinatorAgent}, \texttt{PlateauDiagnosisAgent},
+\texttt{SchedulerAgent}, \texttt{CmpAgent}, \texttt{MutatorAgent},
+\texttt{DictionaryAgent}, \texttt{FormatAgent}, \texttt{CorpusAgent})
+are invoked in a sequential \texttt{for}-loop in
+\texttt{src/agents/agent\_runtime.cpp::run\_agent\_tasks}. The
+\texttt{agent\_runtime.max\_parallel\_model\_calls} configuration
+field is declared in \texttt{include/fuzzpilot/config.hpp} but is
+not consumed by the agent runtime in this release. With the default
+$30$\,s per-agent timeout, the worst-case wall-clock for a full
+plateau response is bounded by
+$8 \times 30\,\text{s} = 240\,\text{s}$ of model-bound time before
+any mutator weights are updated. The intra-plateau deadline
+(\texttt{deadline\_unix\_sec} in
+\texttt{run\_agent\_tasks}) prevents this from cascading past the
+plateau budget but does not eliminate per-plateau blocking. On
+saturated targets like cJSON the absolute number of plateau events
+is small and the sequential cost is hidden; on a multi-plateau
+target it becomes the dominant scheduling constraint, and an
+honest interpretation of throughput parity must factor in the
+sequential block. The venue evaluation will report the realized
+parallelism factor and a parallel agent runtime if the measurement
+justifies the engineering.
+
+\emph{A4: Recipe-miss fallback uses a 3-operator simplified havoc.}
+When the recipe cache has no recipe for the current seed
+(\texttt{recipe\_hit=false}), the FuzzPilot custom mutator
+dispatches against a hard-coded \texttt{global\_} default of
+$\{\texttt{BitFlip}{:}0.45,\ \texttt{OverwriteRange}{:}0.35,\
+\texttt{Arith}{:}0.20\}$
+(\texttt{mutators/fuzzpilot/recipe\_cache.cpp:205--211}).
+AFL++'s native havoc stage uses on the order of $15$ stacked
+operators including \texttt{splice}, \texttt{interest}-value
+substitution, dictionary overwrites, and havoc-stacking; the
+FuzzPilot fallback path is therefore \emph{strictly weaker} than
+native havoc on any seed that the LLM has not yet covered with a
+recipe. This is the leading code-level hypothesis for why the
+\texttt{full-agent} arm can underperform \texttt{baseline-afl} on
+non-saturated targets: until recipe coverage is wide enough, the
+fallback path \emph{is} the mutator's main hot path. The deferred
+\texttt{controller-only} ablation
+(\S\ref{sec:eval:rq4-ablation}) --- in which the FuzzPilot plateau
+detector and agent layer run but the custom-mutator stage is
+disabled so AFL++ uses native havoc --- is designed to isolate
+exactly this contribution and is the highest-priority ablation in
+the venue matrix.
+
+\emph{A5: \texttt{baseline-afl} and \texttt{full-agent} differ by
+two environment variables.}
+For transparency: at process-launch time the only difference
+between the two modes is whether
+\texttt{AFL\_CUSTOM\_MUTATOR\_LIBRARY} and
+\texttt{FUZZPILOT\_RECIPE\_STORE} are exported into AFL++'s
+environment (\texttt{src/runner/afl\_runner.cpp}, under the
+\texttt{config.mutation\_strategy.enabled} branch). The full-agent
+pipeline (plateau detector, agent runtime, micro-campaign, recipe
+store) is then \emph{controller-side} machinery that mutates the
+recipe store while AFL++ runs. This means that any
+\texttt{full-agent} versus \texttt{baseline-afl} delta is
+mechanistically attributable to (i) the recipe-cache custom mutator
+(A4 above), (ii) any controller-driven corpus/seed-energy
+reorganization, or (iii) the env-var presence itself triggering an
+AFL++ codepath change --- and \emph{not} to any per-mutation LLM
+call, which by design never happens. We surface this so that the
+``LLM-in-the-loop'' framing common in prior LLM-augmented fuzzing
+work is not silently assumed about FuzzPilot.
+
+These four findings do not invalidate the cJSON numbers reported in
+this preprint --- our null-result reporting is consistent with
+A1/A2/A4 and the cJSON evaluation runs to its $269$-edge ceiling
+within budget --- but they reshape what the cJSON null tells us
+about the \emph{architecture} and what the deferred multi-target
+experiments need to disambiguate. We surface them in full rather
+than wait for the venue extension to make the implementation risk
+visible.
 
 \paragraph{Reward / hyperparameter sensitivity is fixed, not
 swept.}

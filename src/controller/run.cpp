@@ -406,6 +406,15 @@ void apply_run_overrides(AppConfig& config, RunOptions& options) {
     options.ablation_mode = "full-agent";
   } else if (options.ablation_mode == "baseline") {
     options.ablation_mode = "baseline-afl";
+  } else if (options.ablation_mode == "controller-only") {
+    // controller-only is the paper-side name for the ablation in which
+    // the FuzzPilot controller (plateau detector + agent runtime +
+    // micro-campaign + LLM proposals) is fully active but the
+    // recipe-guided custom mutator is disabled so AFL++ falls back to
+    // its native havoc stage. That is mechanistically identical to the
+    // no-mutator arm; we alias here so the manifest can carry the
+    // paper terminology without diverging from the implementation.
+    options.ablation_mode = "no-mutator";
   }
 
   if (options.ablation_mode == "baseline-afl") {
