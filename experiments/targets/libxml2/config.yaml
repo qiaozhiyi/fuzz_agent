@@ -29,6 +29,7 @@ plateau:
 micro_campaign:
   budget_sec: 120
   num_candidates: 4
+  agent_heartbeat_sec: 300
 
 mutation_strategy:
   enabled: true
