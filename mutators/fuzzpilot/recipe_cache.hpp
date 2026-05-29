@@ -60,6 +60,16 @@ struct CompactRecipe {
 
 class RecipeCache {
  public:
+  // P0.1: hard caps on recipe storage. seed_id_recipes_ is append-only via
+  // add_recipe() (called from load_from_environment / reload_if_stale); on
+  // long runs with promoted_recipes accumulating in the store, the vector
+  // grew unbounded and the mutator process OOM-killed at ~6h24m (rc=137).
+  // Eviction policy is priority-asc (lowest priority dropped first) because
+  // the vector is already stable-sorted by (priority desc, id asc) in
+  // add_recipe — so back() is the lowest-priority entry and pop_back() is O(1).
+  static constexpr std::size_t kMaxSeedIdRecipes = 4096;
+  static constexpr std::size_t kMaxHashEntries = 8192;
+
   RecipeCache();
 
   void load_from_environment();
@@ -91,6 +101,9 @@ class RecipeCache {
   bool has_seed_specific() const {
     return !seed_id_recipes_.empty() || !seed_hash_recipes_.empty();
   }
+  // P0.1 visibility for diagnostics and tests: post-eviction sizes.
+  std::size_t seed_id_recipe_count() const { return seed_id_recipes_.size(); }
+  std::size_t seed_hash_recipe_count() const { return seed_hash_recipes_.size(); }
   // Compute the stable input hash used by the seed_hash matching key.
   // Public so the mutator can cache it once per seed.
   static std::string compute_seed_hash(const unsigned char* data, std::size_t size);

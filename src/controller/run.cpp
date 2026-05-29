@@ -848,6 +848,12 @@ RunSummary run_mvp(const RunOptions& requested_options) {
                     std::to_string(inline_intervention_count) + "}");
   };
 
+  // P0.3/P0.4: hoisted out of the else-block so the post-loop aggregation
+  // (which classifies the exit reason as loop_budget / early_exit /
+  // signal_term) can read them. Declared as plain locals in run_mvp.
+  std::string early_exit_reason;
+  bool received_term_signal = false;
+
   if (options.dry_run) {
     for (const auto& stats_path : options.main_stats_paths) {
       auto stats = read_stats_or_throw(stats_path);
@@ -878,6 +884,8 @@ RunSummary run_mvp(const RunOptions& requested_options) {
         append_line(events_path,
                     std::string("{\"event\":\"termination_signal\",\"signal\":") +
                         std::to_string(*termination_flag) + "}");
+        // P0.4: hoisted flag so post-loop aggregation can classify exit.
+        received_term_signal = true;
         break;
       }
 
@@ -965,7 +973,17 @@ RunSummary run_mvp(const RunOptions& requested_options) {
                             (status.signaled ? "true" : "false") + ",\"error\":\"" +
                             json_escape(last_telemetry_error) + "\"}");
             summary.main_pid = -1;
-            throw std::runtime_error(message.str());
+            // P0.3: do NOT throw — let the post-loop pipeline (forced
+            // plateau, agent block, micro campaigns, report writing)
+            // still run against whatever main_samples we accumulated.
+            // The downstream "if (main_samples.empty()) throw" at the
+            // top of the post-loop block still guards the no-data edge
+            // case where AFL died before producing a single sample.
+            early_exit_reason = message.str();
+            append_line(events_path,
+                        std::string("{\"event\":\"main_afl_early_exit\",\"reason\":\"") +
+                            json_escape(early_exit_reason) + "\"}");
+            break;
           }
         }
       }
@@ -976,6 +994,36 @@ RunSummary run_mvp(const RunOptions& requested_options) {
     throw std::runtime_error(options.dry_run
                                  ? "dry-run requires at least one --stats sample"
                                  : "real run finished without any AFL++ telemetry samples");
+  }
+  // P0.4: aggregate peaks across all collected samples. Done once here so
+  // both the baseline early-return and the full-agent path see the same
+  // honest peak numbers. paths_total / edges_found are monotone in AFL so
+  // .back() would suffice in the happy path, but max() defends against
+  // bogus rollbacks (e.g. AFL writes a half-flushed file before crash).
+  {
+    for (const auto& sample : main_samples) {
+      if (sample.edges_found > summary.peak_bitmap_edges) {
+        summary.peak_bitmap_edges = sample.edges_found;
+      }
+      if (sample.bitmap_cvg > summary.peak_coverage_pct) {
+        summary.peak_coverage_pct = sample.bitmap_cvg;
+      }
+      if (sample.paths_total > summary.cumulative_corpus_items) {
+        summary.cumulative_corpus_items = sample.paths_total;
+      }
+    }
+    if (main_samples.size() >= 2) {
+      const auto first_ts = static_cast<int64_t>(main_samples.front().sampled_at);
+      const auto last_ts = static_cast<int64_t>(main_samples.back().sampled_at);
+      summary.total_main_runtime_sec = last_ts - first_ts;
+    }
+    if (!early_exit_reason.empty()) {
+      summary.main_afl_exit_reason = "early_exit";
+    } else if (received_term_signal) {
+      summary.main_afl_exit_reason = "signal_term";
+    } else {
+      summary.main_afl_exit_reason = "loop_budget";
+    }
   }
   if (!options.dry_run && config.micro_campaign.enabled && summary.main_pid > 0) {
     const auto status = stop_afl_process(summary.main_pid, 5000);
@@ -1385,7 +1433,16 @@ std::string run_summary_json(const RunSummary& summary) {
   out << "\"llm_output_tokens\":" << summary.llm_output_tokens << ",";
   out << "\"llm_failed_calls\":" << summary.llm_failed_calls << ",";
   out << "\"llm_total_latency_ms\":" << summary.llm_total_latency_ms << ",";
-  out << "\"main_pid\":" << summary.main_pid;
+  out << "\"main_pid\":" << summary.main_pid << ",";
+  // P0.4: honest aggregates across all collected samples. Old field
+  // telemetry_count above is sample-count of successful stats reads;
+  // these new fields are the actual coverage / corpus peaks reached
+  // even if AFL later crashed and reset its visible stats.
+  out << "\"peak_bitmap_edges\":" << summary.peak_bitmap_edges << ",";
+  out << "\"peak_coverage_pct\":" << summary.peak_coverage_pct << ",";
+  out << "\"cumulative_corpus_items\":" << summary.cumulative_corpus_items << ",";
+  out << "\"total_main_runtime_sec\":" << summary.total_main_runtime_sec << ",";
+  out << "\"main_afl_exit_reason\":\"" << json_escape(summary.main_afl_exit_reason) << "\"";
   out << "}";
   return out.str();
 }

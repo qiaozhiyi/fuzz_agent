@@ -28,6 +28,12 @@ struct AflConfig {
   int main_budget_sec = 3600;
   int plateau_window_sec = 600;
   int plateau_min_new_edges = 0;
+  // P0.2: cap AFL++ testcache size (MB). AFL's default is 50 MB, which
+  // is fine for baseline but compounds with the libfuzzpilot_mutator
+  // recipe cache during full-agent runs and contributes to OOM at ~6h24m.
+  // -1 == leave unset (AFL uses its own 50 MB default). Per-experiment
+  // TOML overrides this for full-agent (recommended 10 MB).
+  int testcache_size_mb = -1;
 };
 
 struct MicroCampaignConfig {

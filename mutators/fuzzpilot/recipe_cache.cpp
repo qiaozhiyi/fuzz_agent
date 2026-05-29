@@ -351,6 +351,14 @@ void RecipeCache::add_recipe(CompactRecipe recipe) {
                 }
                 return lhs.id < rhs.id;
               });
+    // P0.1: cap memory. Vector is sorted by (priority desc, id asc) so
+    // back() is the lowest-priority candidate. pop_back() is O(1) and
+    // safe — lookup() runs on the AFL fork-server thread which never
+    // overlaps with add_recipe() (load_from_environment is only called
+    // at init or from reload_if_stale, both before mutator hot path).
+    while (seed_id_recipes_.size() > kMaxSeedIdRecipes) {
+      seed_id_recipes_.pop_back();
+    }
   } else if (recipe.selector_mode == "seed_hash") {
     const auto key = recipe.selector_key;
     const auto it = seed_hash_recipes_.find(key);
@@ -362,6 +370,23 @@ void RecipeCache::add_recipe(CompactRecipe recipe) {
         recipe.priority > it->second.priority ||
         (recipe.priority == it->second.priority && recipe.id < it->second.id)) {
       seed_hash_recipes_[key] = std::move(recipe);
+    }
+    // P0.1: cap unordered_map memory. Map has no inherent ordering so we
+    // do an O(N) scan to find lowest (priority, id) victim. Only runs on
+    // overflow (typically N == cap+1), so amortized cost is O(1) per insert
+    // once steady state is reached. Won't deadlock — same single-threaded
+    // invariant as the seed_id branch above.
+    if (seed_hash_recipes_.size() > kMaxHashEntries) {
+      auto victim = seed_hash_recipes_.begin();
+      for (auto it2 = seed_hash_recipes_.begin();
+           it2 != seed_hash_recipes_.end(); ++it2) {
+        if (it2->second.priority < victim->second.priority ||
+            (it2->second.priority == victim->second.priority &&
+             it2->second.id > victim->second.id)) {
+          victim = it2;
+        }
+      }
+      seed_hash_recipes_.erase(victim);
     }
   }
 }

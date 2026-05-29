@@ -122,15 +122,19 @@ std::optional<AflStats> TelemetryCollector::sample(std::string* error) {
 }
 
 std::filesystem::path find_fuzzer_stats_file(const std::filesystem::path& campaign_dir) {
-  const auto direct = campaign_dir / "fuzzer_stats";
-  if (std::filesystem::exists(direct)) {
-    return direct;
-  }
+  // P0.5: try the -M/-S worker subdirectory first. With the explicit
+  // -M default flag added in build_main_afl_spec, AFL++ writes its
+  // stats to campaign_dir/default/fuzzer_stats. The legacy direct path
+  // is kept as a fallback for older runs or alternate launch paths.
   const auto default_worker = campaign_dir / "default" / "fuzzer_stats";
   if (std::filesystem::exists(default_worker)) {
     return default_worker;
   }
-  return direct;
+  const auto direct = campaign_dir / "fuzzer_stats";
+  if (std::filesystem::exists(direct)) {
+    return direct;
+  }
+  return default_worker;
 }
 
 std::filesystem::path find_mutator_telemetry_file(const std::filesystem::path& campaign_dir) {

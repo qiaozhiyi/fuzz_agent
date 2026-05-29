@@ -158,6 +158,7 @@ void assign_section(AppConfig& config,
     else if (key == "main_budget_sec") config.afl.main_budget_sec = parse_int(value, config.afl.main_budget_sec);
     else if (key == "plateau_window_sec") config.afl.plateau_window_sec = parse_int(value, config.afl.plateau_window_sec);
     else if (key == "plateau_min_new_edges") config.afl.plateau_min_new_edges = parse_int(value, config.afl.plateau_min_new_edges);
+    else if (key == "testcache_size_mb") config.afl.testcache_size_mb = parse_int(value, config.afl.testcache_size_mb);
   } else if (section == "micro_campaign") {
     if (key == "enabled") config.micro_campaign.enabled = parse_bool(value);
     else if (key == "budget_sec") config.micro_campaign.budget_sec = parse_int(value, config.micro_campaign.budget_sec);

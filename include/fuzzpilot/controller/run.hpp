@@ -74,6 +74,18 @@ struct RunSummary {
   double llm_total_latency_ms = 0.0;
   int main_pid = -1;
   std::string ablation_mode;
+  // P0.4: peak / cumulative aggregates over main_samples. The legacy
+  // fields above reflect the LAST AFL state; if AFL crashed and the
+  // controller re-launched, last-state under-reports the real progress.
+  // These peaks survive crashes and are the honest paper numbers.
+  uint64_t peak_bitmap_edges = 0;
+  double peak_coverage_pct = 0.0;
+  uint64_t cumulative_corpus_items = 0;
+  int64_t total_main_runtime_sec = 0;
+  // "loop_budget" == loop ran to completion normally;
+  // "early_exit"  == AFL died and P0.3 broke the loop;
+  // "signal_term" == SIGINT/SIGTERM from the runner.
+  std::string main_afl_exit_reason;
 };
 
 RunSummary run_mvp(const RunOptions& options);
