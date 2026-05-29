@@ -127,7 +127,7 @@ launch_one() {
   fi
 }
 export -f launch_one
-export RUNS_ROOT REPO FUZZPILOT_BIN BUDGET_SEC STATUS DRY
+export RUNS_ROOT REPO FUZZPILOT_BIN BUDGET_SEC STATUS DRY RUN_PREFIX
 
 # run_mode_batch: launch N reps of one (target,mode), 4-way parallel,
 # CPU-pinned. Blocks until all N finished.
