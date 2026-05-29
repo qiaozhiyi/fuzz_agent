@@ -24,7 +24,7 @@
 # Per-target wall: 168h ≈ 7 days
 # 3 targets sequential: ~21 days
 #
-# Usage: run_venue_stage1.sh [--dry-run] [--target <name>] [--from <mode>]
+# Usage: run_venue_stage1.sh [--dry-run] [--target <name>] [--from <mode>] [--run-prefix <prefix>]
 #
 # Configurable: set BUDGET_SEC env var to override (default 86400).
 
@@ -33,7 +33,7 @@ set -o pipefail
 # missing key trips strict mode even when guarded; we manage required-vars
 # explicitly.
 
-REPO=/root/fuzz_agent
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 RUNS_ROOT="$REPO/results/paper01_ai_recipe_mutation/runs"
 LOGS="$RUNS_ROOT/_logs"
 STATUS="$LOGS/venue_stage1.status"
@@ -46,11 +46,13 @@ mkdir -p "$LOGS"
 DRY=0
 ONLY_TARGET=""
 FROM_MODE=""
+RUN_PREFIX="p1_v"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY=1; shift ;;
     --target)  ONLY_TARGET="$2"; shift 2 ;;
     --from)    FROM_MODE="$2"; shift 2 ;;
+    --run-prefix) RUN_PREFIX="$2"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -81,7 +83,7 @@ MODE_ORDER=(baseline-afl full-agent rule-only no-mutator no-static-analysis)
 # Args: <target> <mode> <rep> <cpu> <cfg>
 launch_one() {
   local target="$1" mode="$2" rep="$3" cpu="$4" cfg="$5"
-  local run_id="p1_v_${target}_${mode}_r$(printf '%02d' "$rep")"
+  local run_id="${RUN_PREFIX}_${target}_${mode}_r$(printf '%02d' "$rep")"
   local out_dir="$RUNS_ROOT/$run_id"
   mkdir -p "$out_dir"
   local log="$out_dir/runner.log"
@@ -105,25 +107,18 @@ launch_one() {
     rd=$(find "$out_dir/work" -maxdepth 1 -type d -name 'run_*' | head -1)
     if [ -n "$rd" ]; then
       for f in fuzzer_stats coverage.csv events.jsonl agent_decisions.jsonl \
-               agent_memory.jsonl main_launch.sh run_metadata.json report.md; do
-        [ -f "$rd/$f" ] && cp -n "$rd/$f" "$out_dir/$f" 2>/dev/null
+               agent_memory.jsonl fuzzpilot.sqlite main_launch.sh run_metadata.json report.md; do
+        [ -f "$rd/$f" ] && cp -f "$rd/$f" "$out_dir/$f" 2>/dev/null
       done
       [ -f "$rd/main_out/default/fuzzer_stats" ] && \
-        cp -n "$rd/main_out/default/fuzzer_stats" "$out_dir/fuzzer_stats" 2>/dev/null
+        cp -f "$rd/main_out/default/fuzzer_stats" "$out_dir/fuzzer_stats" 2>/dev/null
     fi
   fi
-  # Disk hygiene: 3 venue targets × 19 runs × 24h would produce
-  #   * git.patch  ~920 MB/run (working-tree diff at launch; not needed
-  #     once the SHA in run_metadata.json + main_launch.sh are kept)
-  #   * work/      ~50 MB/run  (AFL queue / crashes / hangs; we keep
-  #     fuzzer_stats / events.jsonl / coverage.csv copies above)
-  #   * fuzzpilot.sqlite + WAL/SHM: ~30 MB/run (raw event store, the
-  #     same info is in events.jsonl which we keep)
-  # Removing these saves ~1 GB / run = ~60 GB across the full pilot,
-  # which is the difference between fitting on /www and overflowing it.
+  # Disk hygiene: keep the promoted top-level fuzzpilot.sqlite for
+  # prepare_paper01_data.py, but still remove nested work trees to
+  # bound disk usage.
   rm -rf "$out_dir/work" \
-         "$out_dir/git.patch" \
-         "$out_dir/fuzzpilot.sqlite"* 2>/dev/null
+         "$out_dir/git.patch" 2>/dev/null
   if [ "$rc" = "0" ]; then
     echo completed > "$out_dir/status"
   else
