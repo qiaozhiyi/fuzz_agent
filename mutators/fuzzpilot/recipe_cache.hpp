@@ -110,9 +110,14 @@ class RecipeCache {
 
  private:
   void add_recipe(CompactRecipe recipe);
+  void rebuild_seed_id_index();
 
   CompactRecipe global_;
   std::vector<CompactRecipe> seed_id_recipes_;
+  // O(1) index: selector_key → position in seed_id_recipes_.
+  // Rebuilt after any bulk load; lookup() uses this instead of a
+  // linear scan (was O(N) per mutation, N up to 4096).
+  std::unordered_map<std::string, std::size_t> seed_id_index_;
   std::unordered_map<std::string, CompactRecipe> seed_hash_recipes_;
   bool loaded_ = false;
   // Captured at load_from_environment so reload_if_stale can detect

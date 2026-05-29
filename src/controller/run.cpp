@@ -1292,7 +1292,7 @@ RunSummary run_mvp(const RunOptions& requested_options) {
         have_second = true;
       }
     }
-    const double abs_margin = 0.5;       // arbitrary small-reward floor
+    const double abs_margin = 0.1;       // lowered from 0.5: large targets need 120s+ micro budgets to show edge delta
     const double rel_margin = 0.05;      // 5% relative margin
     const bool significant = !have_second ||
         (winner_it->reward - second_best) >

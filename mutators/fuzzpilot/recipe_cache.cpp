@@ -282,6 +282,22 @@ void RecipeCache::load_from_environment() {
     loaded_ = true;
   }
 
+  // Batch sort + eviction + index rebuild — previously done per-insert
+  // in add_recipe (O(N² log N) on full reload). Now O(N log N) once.
+  if (!seed_id_recipes_.empty()) {
+    std::stable_sort(seed_id_recipes_.begin(), seed_id_recipes_.end(),
+              [](const CompactRecipe& lhs, const CompactRecipe& rhs) {
+                if (lhs.priority != rhs.priority) {
+                  return lhs.priority > rhs.priority;
+                }
+                return lhs.id < rhs.id;
+              });
+    while (seed_id_recipes_.size() > kMaxSeedIdRecipes) {
+      seed_id_recipes_.pop_back();
+    }
+    rebuild_seed_id_index();
+  }
+
   // Remember the store + mtimes so reload_if_stale() can pick up any
   // recipe the controller writes after this point. Without this, the
   // mutator was stuck on whatever existed at AFL fork-server start
@@ -319,18 +335,25 @@ void RecipeCache::reload_if_stale() {
   // global.recipe exists; otherwise it retains the previous value (better
   // than dropping back to the constructor default mid-run).
   seed_id_recipes_.clear();
+  seed_id_index_.clear();
   seed_hash_recipes_.clear();
   load_from_environment();
   fprintf(stderr, "[M5] reload_if_stale: recipe store refreshed (seed_ids=%zu, seed_hashes=%zu)\n",
           seed_id_recipes_.size(), seed_hash_recipes_.size());
 }
 
+void RecipeCache::rebuild_seed_id_index() {
+  seed_id_index_.clear();
+  seed_id_index_.reserve(seed_id_recipes_.size());
+  for (std::size_t i = 0; i < seed_id_recipes_.size(); ++i) {
+    const auto& key = seed_id_recipes_[i].selector_key;
+    if (key.empty()) continue;
+    seed_id_index_.emplace(key, i);
+  }
+}
+
 void RecipeCache::add_recipe(CompactRecipe recipe) {
   normalize(recipe.weights);
-  // Pre-sort the protect/focus ranges so the mutator hot path can
-  // binary-search them instead of scanning. Recipes are loaded once at
-  // mutator init, so the O(N log N) sort cost is paid once per
-  // process; on the hot path we save a linear scan on every mutation.
   std::sort(recipe.protect_ranges.begin(), recipe.protect_ranges.end(),
             [](const CompactRange& a, const CompactRange& b) {
               return a.begin < b.begin;
@@ -341,24 +364,6 @@ void RecipeCache::add_recipe(CompactRecipe recipe) {
             });
   if (recipe.selector_mode == "seed_id") {
     seed_id_recipes_.push_back(std::move(recipe));
-    // Stable sort by (priority desc, id asc) so the tie-breaking is
-    // reproducible across platforms — previously ties depended on
-    // filesystem iteration order, which differs between APFS / ext4.
-    std::stable_sort(seed_id_recipes_.begin(), seed_id_recipes_.end(),
-              [](const CompactRecipe& lhs, const CompactRecipe& rhs) {
-                if (lhs.priority != rhs.priority) {
-                  return lhs.priority > rhs.priority;
-                }
-                return lhs.id < rhs.id;
-              });
-    // P0.1: cap memory. Vector is sorted by (priority desc, id asc) so
-    // back() is the lowest-priority candidate. pop_back() is O(1) and
-    // safe — lookup() runs on the AFL fork-server thread which never
-    // overlaps with add_recipe() (load_from_environment is only called
-    // at init or from reload_if_stale, both before mutator hot path).
-    while (seed_id_recipes_.size() > kMaxSeedIdRecipes) {
-      seed_id_recipes_.pop_back();
-    }
   } else if (recipe.selector_mode == "seed_hash") {
     const auto key = recipe.selector_key;
     const auto it = seed_hash_recipes_.find(key);
@@ -407,21 +412,14 @@ const CompactRecipe& RecipeCache::lookup(const std::string& seed_name,
     *hit = false;
   }
 
-  // Cheap path first: seed-name based selectors. Exact match only.
-  // Previous code also accepted `seed_name.find(selector_key) != npos`,
-  // which let a recipe targeting `id:000001` accidentally bind to
-  // `id:0000010`, `id:000001,orig:foo`, etc. (cpp audit 5-C). Recipes
-  // are referenced by AFL corpus basename, which is stable, so exact
-  // string equality is the correct selector semantics.
-  if (!seed_id_recipes_.empty()) {
-    for (const auto& recipe : seed_id_recipes_) {
-      if (recipe.selector_key.empty()) continue;
-      if (seed_name == recipe.selector_key) {
-        if (hit != nullptr) {
-          *hit = true;
-        }
-        return recipe;
+  // O(1) seed-name lookup via hash index (was O(N) linear scan).
+  if (!seed_id_index_.empty()) {
+    const auto it = seed_id_index_.find(seed_name);
+    if (it != seed_id_index_.end() && it->second < seed_id_recipes_.size()) {
+      if (hit != nullptr) {
+        *hit = true;
       }
+      return seed_id_recipes_[it->second];
     }
   }
 

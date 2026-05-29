@@ -3,7 +3,7 @@ target:
   name: "libxml2_parser"
   binary: "experiments/targets/libxml2/libxml2_fuzzer"
   input_dir: "experiments/targets/libxml2/seeds"
-  dict: ""
+  dict: "experiments/targets/libxml2/xml.dict"
   args: ["@@"]
   timeout_ms: 1000
   memory_mb: 1024
@@ -27,7 +27,7 @@ plateau:
   threshold_paths: 1
 
 micro_campaign:
-  budget_sec: 30
+  budget_sec: 120
   num_candidates: 4
 
 mutation_strategy:

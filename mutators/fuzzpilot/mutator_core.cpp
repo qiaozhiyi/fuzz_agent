@@ -242,12 +242,18 @@ void apply_structural_repairs(FpMutator& mutator, const CompactRecipe& recipe) {
         }
       }
     } else if (field.type == FieldType::Checksum) {
-      // Simple XOR Checksum repair for demonstration
-      std::uint8_t xor_sum = 0;
+      // XOR-subtract: whole-buffer XOR minus the field's own bytes.
+      // Branchless inner loop is auto-vectorizable (vs old code that
+      // had a branch per byte blocking SIMD).
+      std::uint8_t whole_xor = 0;
       for (std::size_t i = 0; i < mutator.out.size(); i++) {
-        if (i >= field.offset && i < field.offset + field.size) continue;
-        xor_sum ^= mutator.out[i];
+        whole_xor ^= mutator.out[i];
       }
+      std::uint8_t field_xor = 0;
+      for (std::size_t i = field.offset; i < field.offset + field.size; i++) {
+        field_xor ^= mutator.out[i];
+      }
+      const std::uint8_t xor_sum = whole_xor ^ field_xor;
       if (field.size == 1) {
         mutator.out[field.offset] = xor_sum;
       }

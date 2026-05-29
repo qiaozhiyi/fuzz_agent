@@ -35,4 +35,6 @@ endif()
 
 target_compile_options(fuzzpilot_mutator PRIVATE
   $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic>
+  $<$<CONFIG:Release>:-O3 -DNDEBUG>
+  $<$<CONFIG:RelWithDebInfo>:-O2 -g -DNDEBUG>
 )

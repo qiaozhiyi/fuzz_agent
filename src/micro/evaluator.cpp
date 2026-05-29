@@ -67,10 +67,9 @@ MicroResult evaluate_micro_result(const std::string& intervention_id,
       break;
     case RewardMode::kEdgeWeighted:
     default: {
-      // Primary signal: edges if available, otherwise paths-as-edges fallback.
       const double coverage_score = result.edges_unavailable
                                         ? result.path_score
-                                        : result.edge_score;
+                                        : result.edge_score + result.path_score * 0.1;
       result.reward = coverage_score + result.crash_score + result.recipe_score;
       break;
     }
