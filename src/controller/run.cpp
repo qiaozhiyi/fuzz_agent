@@ -1149,7 +1149,7 @@ RunSummary run_mvp(const RunOptions& requested_options) {
   }
 
   const auto specs = plan_micro_campaigns(
-      config, summary.plateau_id, snapshot_dir, summary.run_dir / "micro", options.dry_run);
+      config, summary.plateau_id, snapshot_dir, summary.run_dir / "micro", options.dry_run, &db, summary.run_id);
   prepare_micro_campaigns(specs);
   summary.micro_campaign_count = specs.size();
 

@@ -3,6 +3,8 @@
 
 #include "fuzzpilot/ids.hpp"
 #include "fuzzpilot/mutation/recipe_store.hpp"
+#include "fuzzpilot/storage/db.hpp"
+#include "fuzzpilot/json_utils.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -81,9 +83,50 @@ std::vector<MicroCampaignSpec> plan_micro_campaigns(const AppConfig& config,
                                                     const std::string& plateau_id,
                                                     const std::filesystem::path& snapshot_dir,
                                                     const std::filesystem::path& work_dir,
-                                                    bool dry_run) {
+                                                    bool dry_run,
+                                                    Database* db,
+                                                    const std::string& run_id) {
   std::vector<MicroCampaignSpec> specs;
-  const auto interventions = default_v0_interventions(config.micro_campaign.budget_sec);
+
+  // Try to use LLM-generated decisions from database if available
+  std::vector<Intervention> interventions;
+  if (db != nullptr && !run_id.empty()) {
+    const auto decisions = db->get_recent_decisions(run_id, 20);
+    for (const auto& decision_json : decisions) {
+      // Parse each decision JSON to extract interventions
+      auto interventions_array = extract_top_level_json_value(decision_json, "interventions");
+      if (interventions_array) {
+        // Extract action from each intervention in the array
+        std::string json = *interventions_array;
+        // Simple JSON array parsing - look for "action" fields
+        size_t pos = 0;
+        while ((pos = json.find("\"action\"", pos)) != std::string::npos) {
+          size_t colon = json.find(":", pos);
+          size_t quote1 = json.find("\"", colon + 1);
+          size_t quote2 = json.find("\"", quote1 + 1);
+          if (quote1 != std::string::npos && quote2 != std::string::npos) {
+            std::string action = json.substr(quote1 + 1, quote2 - quote1 - 1);
+            Intervention intv;
+            intv.id = make_id("intv_llm");
+            intv.action = action;
+            intv.agent = "LLM";
+            intv.hypothesis = "LLM-generated intervention";
+            intv.expected_signal = "new_edges";
+            intv.risk = "medium";
+            intv.reproducible = true;
+            interventions.push_back(intv);
+          }
+          pos = quote2 + 1;
+        }
+      }
+    }
+  }
+
+  // Fallback to default interventions if no LLM decisions found
+  if (interventions.empty()) {
+    interventions = default_v0_interventions(config.micro_campaign.budget_sec);
+  }
+
   for (const auto& intervention : interventions) {
     MicroCampaignSpec spec;
     spec.id = make_id("micro");

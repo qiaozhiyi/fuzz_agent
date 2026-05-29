@@ -10,6 +10,8 @@
 
 namespace fuzzpilot {
 
+class Database;
+
 struct CorpusSnapshotResult {
   std::filesystem::path source_queue;
   std::filesystem::path snapshot_dir;
@@ -35,7 +37,9 @@ std::vector<MicroCampaignSpec> plan_micro_campaigns(const AppConfig& config,
                                                     const std::string& plateau_id,
                                                     const std::filesystem::path& snapshot_dir,
                                                     const std::filesystem::path& work_dir,
-                                                    bool dry_run);
+                                                    bool dry_run,
+                                                    Database* db = nullptr,
+                                                    const std::string& run_id = "");
 
 void prepare_micro_campaigns(const std::vector<MicroCampaignSpec>& specs);
 std::string corpus_snapshot_json(const CorpusSnapshotResult& snapshot);
