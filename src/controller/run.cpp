@@ -505,6 +505,27 @@ std::unique_ptr<IModelGateway> make_gateway(const RunOptions& options, const App
     return std::make_unique<OpenAICompatibleGateway>(endpoint, model_name, api_key_env, true);
   }
 
+  if (provider == "gemini") {
+    const auto endpoint = options.model_endpoint.empty()
+                              ? env_or_fallback(config.model_api.endpoint_env,
+                                                config.model_api.endpoint)
+                              : options.model_endpoint;
+    const auto model_name = options.model_name.empty() ? config.model_api.model
+                                                       : options.model_name;
+    const auto api_key_env = options.api_key_env.empty() ? config.model_api.api_key_env
+                                                         : options.api_key_env;
+    if (endpoint.empty()) {
+      throw std::runtime_error("missing model endpoint for gemini provider");
+    }
+    if (model_name.empty()) {
+      throw std::runtime_error("missing model name for gemini provider");
+    }
+    if (api_key_env.empty()) {
+      throw std::runtime_error("missing api_key_env for gemini provider");
+    }
+    return std::make_unique<GeminiGateway>(endpoint, model_name, api_key_env);
+  }
+
   throw std::runtime_error("unsupported model provider: " + provider);
 }
 

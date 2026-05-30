@@ -446,4 +446,150 @@ ModelResponse FakeModelGateway::complete_json(const ModelRequest& request) {
   return response;
 }
 
+GeminiGateway::GeminiGateway(std::string endpoint,
+                             std::string model,
+                             std::string api_key_env)
+    : endpoint_(std::move(endpoint)),
+      model_(std::move(model)),
+      api_key_env_(std::move(api_key_env)) {}
+
+ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
+  const auto start = std::chrono::steady_clock::now();
+  ModelResponse response;
+  response.provider = "gemini";
+  response.model = model_;
+  response.request_id = make_id("model_req");
+  response.context_hash = stable_text_hash(request.agent_name + request.user_context_json);
+
+  if (!is_valid_env_name(api_key_env_)) {
+    response.error = "invalid API key environment variable name: " + api_key_env_;
+    response.error_kind = "auth_error";
+    response.response_hash = stable_text_hash(response.error);
+    return response;
+  }
+
+  const char* api_key = std::getenv(api_key_env_.c_str());
+  if (api_key == nullptr || api_key[0] == '\0') {
+    response.error = "missing API key environment variable: " + api_key_env_;
+    response.error_kind = "auth_error";
+    response.response_hash = stable_text_hash(response.error);
+    return response;
+  }
+
+  // Build Gemini API request payload
+  std::ostringstream payload;
+  payload << "{";
+  payload << "\"contents\":[{";
+  payload << "\"role\":\"user\",";
+  payload << "\"parts\":[{";
+  payload << "\"text\":\"" << json_escape(request.system_prompt + "\n\n" + request.user_context_json) << "\"";
+  payload << "}]";
+  payload << "}],";
+  payload << "\"generationConfig\":{";
+  payload << "\"temperature\":" << request.temperature << ",";
+  payload << "\"topP\":" << request.top_p << ",";
+  payload << "\"maxOutputTokens\":" << request.max_output_tokens << ",";
+  payload << "\"responseMimeType\":\"application/json\"";
+  payload << "}";
+  payload << "}";
+  const auto payload_str = payload.str();
+  response.full_request_payload = payload_str;
+
+  // Create temp files for payload
+  ScopedTempFile payload_path(make_private_tempfile("fuzzpilot.payload.", payload_str));
+  if (payload_path.empty()) {
+    response.error = "failed to create private model request tempfile";
+    response.error_kind = "spawn_error";
+    response.response_hash = stable_text_hash(response.error);
+    return response;
+  }
+
+  // Build Gemini API URL with key as query parameter
+  const std::string url = endpoint_ + "/" + model_ + ":generateContent?key=" + std::string(api_key);
+  const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
+
+  const std::vector<std::string> argv = {
+      "curl",
+      "-sS",
+      "--connect-timeout", "10",
+      "--max-time", max_time,
+      "-H", "Content-Type: application/json",
+      "-d", "@" + payload_path.path().string(),
+      url,
+  };
+
+  auto curl = run_process_capture("curl", argv, {}, true, 1024 * 1024,
+                                  static_cast<int>(request.timeout_ms + 2000));
+  auto raw = process_capture_text(curl);
+
+  // Retry on transient errors
+  if (is_transient_transport_error(curl, raw)) {
+    ++response.retry_count;
+    const auto retry = run_process_capture("curl", argv, {}, true, 1024 * 1024,
+                                           static_cast<int>(request.timeout_ms + 2000));
+    const auto retry_raw = process_capture_text(retry);
+    if (!is_transient_transport_error(retry, retry_raw)) {
+      curl = retry;
+      raw = retry_raw;
+    } else if (raw.empty() && !retry_raw.empty()) {
+      curl = retry;
+      raw = retry_raw;
+    }
+  }
+
+  response.full_raw_response = raw;
+
+  // Extract content from Gemini response format: candidates[0].content.parts[0].text
+  std::string content;
+  const std::string needle = "\"text\":\"";
+  auto pos = raw.find(needle);
+  if (pos != std::string::npos) {
+    content = decode_json_string_at(raw, pos + needle.size());
+  } else {
+    content = raw;
+  }
+  response.response_json = content;
+  response.response_hash = stable_text_hash(response.response_json);
+
+  // Extract token usage from Gemini response
+  response.input_tokens = extract_uint_field(raw, "promptTokenCount");
+  response.output_tokens = extract_uint_field(raw, "candidatesTokenCount");
+  if (response.input_tokens == 0) {
+    response.input_tokens = (request.system_prompt.size() + request.user_context_json.size()) / 4;
+  }
+  if (response.output_tokens == 0) {
+    response.output_tokens = response.response_json.size() / 4;
+  }
+
+  response.error_kind = classify_error(curl, raw);
+
+  const bool truncated = curl.error.find("truncated") != std::string::npos;
+  const bool transport_ok = curl.spawned && curl.exited && curl.exit_code == 0 && !truncated;
+  const bool schema_ok = transport_ok &&
+                         json_object_satisfies_required_schema(response.response_json,
+                                                               request.output_schema_json) &&
+                         raw.find("\"error\"") == std::string::npos;
+  response.schema_valid = schema_ok;
+
+  if (!schema_ok) {
+    if (truncated) {
+      response.error_kind = "schema_invalid_truncated";
+      response.error = "response truncated at 1MB cap before schema validation";
+    } else if (transport_ok && response.error_kind == "ok") {
+      response.error_kind = "schema_invalid";
+    }
+    if (response.error.empty()) {
+      response.error = transport_ok
+                           ? "model response did not satisfy required output schema: " +
+                                 response.response_json.substr(0, 512)
+                           : raw.substr(0, 512);
+    }
+  }
+
+  const auto end = std::chrono::steady_clock::now();
+  response.latency_ms = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+  return response;
+}
+
 }  // namespace fuzzpilot

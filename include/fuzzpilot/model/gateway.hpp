@@ -74,6 +74,20 @@ class OpenAICompatibleGateway final : public IModelGateway {
   bool disable_thinking_ = true;
 };
 
+class GeminiGateway final : public IModelGateway {
+ public:
+  GeminiGateway(std::string endpoint,
+                std::string model,
+                std::string api_key_env);
+
+  ModelResponse complete_json(const ModelRequest& request) override;
+
+ private:
+  std::string endpoint_;
+  std::string model_;
+  std::string api_key_env_;
+};
+
 std::string stable_text_hash(const std::string& text);
 
 }  // namespace fuzzpilot
