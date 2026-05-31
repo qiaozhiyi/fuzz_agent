@@ -495,17 +495,19 @@ ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
   const auto payload_str = payload.str();
   response.full_request_payload = payload_str;
 
-  // Create temp files for payload
+  // Create temp files for payload and auth header
   ScopedTempFile payload_path(make_private_tempfile("fuzzpilot.payload.", payload_str));
-  if (payload_path.empty()) {
-    response.error = "failed to create private model request tempfile";
+  ScopedTempFile auth_header_path(make_private_tempfile(
+      "fuzzpilot.auth.", std::string("x-goog-api-key: ") + api_key + "\n"));
+  if (payload_path.empty() || auth_header_path.empty()) {
+    response.error = "failed to create private model request tempfiles";
     response.error_kind = "spawn_error";
     response.response_hash = stable_text_hash(response.error);
     return response;
   }
 
-  // Build Gemini API URL with key as query parameter
-  const std::string url = endpoint_ + "/" + model_ + ":generateContent?key=" + std::string(api_key);
+  // Build Gemini API URL
+  const std::string url = endpoint_ + "/" + model_ + ":generateContent";
   const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
 
   const std::vector<std::string> argv = {
@@ -514,6 +516,7 @@ ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
       "--connect-timeout", "10",
       "--max-time", max_time,
       "-H", "Content-Type: application/json",
+      "-H", "@" + auth_header_path.path().string(),
       "-d", "@" + payload_path.path().string(),
       url,
   };
