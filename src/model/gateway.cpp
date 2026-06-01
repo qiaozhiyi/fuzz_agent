@@ -6,9 +6,9 @@
 #include "fuzzpilot/runner/process.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <chrono>
-#include <cctype>
 #include <cstdlib>
 #include <fcntl.h>
 #include <filesystem>
@@ -21,7 +21,7 @@
 namespace fuzzpilot {
 namespace {
 
-bool is_valid_env_name(const std::string& value) {
+bool is_valid_env_name(const std::string &value) {
   if (value.empty()) {
     return false;
   }
@@ -34,7 +34,7 @@ bool is_valid_env_name(const std::string& value) {
   });
 }
 
-std::string decode_json_string_at(const std::string& text, std::size_t cursor) {
+std::string decode_json_string_at(const std::string &text, std::size_t cursor) {
   std::string out;
   for (; cursor < text.size(); ++cursor) {
     const char c = text[cursor];
@@ -44,12 +44,24 @@ std::string decode_json_string_at(const std::string& text, std::size_t cursor) {
     if (c == '\\' && cursor + 1 < text.size()) {
       const char next = text[++cursor];
       switch (next) {
-        case 'n': out.push_back('\n'); break;
-        case 'r': out.push_back('\r'); break;
-        case 't': out.push_back('\t'); break;
-        case '\\': out.push_back('\\'); break;
-        case '"': out.push_back('"'); break;
-        default: out.push_back(next); break;
+      case 'n':
+        out.push_back('\n');
+        break;
+      case 'r':
+        out.push_back('\r');
+        break;
+      case 't':
+        out.push_back('\t');
+        break;
+      case '\\':
+        out.push_back('\\');
+        break;
+      case '"':
+        out.push_back('"');
+        break;
+      default:
+        out.push_back(next);
+        break;
       }
     } else {
       out.push_back(c);
@@ -58,7 +70,7 @@ std::string decode_json_string_at(const std::string& text, std::size_t cursor) {
   return out;
 }
 
-std::string extract_content_field(const std::string& response) {
+std::string extract_content_field(const std::string &response) {
   const std::string needle = "\"content\":\"";
   const auto pos = response.find(needle);
   if (pos == std::string::npos) {
@@ -70,15 +82,17 @@ std::string extract_content_field(const std::string& response) {
 // Retained for callers that need to overwrite a known path with 0600
 // permission semantics. The hot model-request path now uses
 // make_private_tempfile() instead, which is atomic and TOCTOU-safe.
-[[maybe_unused]] bool write_private_text_file(const std::filesystem::path& path,
-                                              const std::string& content) {
-  const int fd = open(path.string().c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+[[maybe_unused]] bool write_private_text_file(const std::filesystem::path &path,
+                                              const std::string &content) {
+  const int fd = open(path.string().c_str(), O_WRONLY | O_CREAT | O_TRUNC,
+                      S_IRUSR | S_IWUSR);
   if (fd < 0) {
     return false;
   }
   std::size_t written = 0;
   while (written < content.size()) {
-    const ssize_t n = write(fd, content.data() + written, content.size() - written);
+    const ssize_t n =
+        write(fd, content.data() + written, content.size() - written);
     if (n < 0) {
       if (errno == EINTR) {
         continue;
@@ -96,20 +110,22 @@ std::string extract_content_field(const std::string& response) {
 }
 
 class ScopedTempFile {
- public:
-  explicit ScopedTempFile(std::filesystem::path path) : path_(std::move(path)) {}
+public:
+  explicit ScopedTempFile(std::filesystem::path path)
+      : path_(std::move(path)) {}
   ~ScopedTempFile() {
     if (!path_.empty()) {
       std::error_code ec;
       std::filesystem::remove(path_, ec);
     }
   }
-  ScopedTempFile(const ScopedTempFile&) = delete;
-  ScopedTempFile& operator=(const ScopedTempFile&) = delete;
-  ScopedTempFile(ScopedTempFile&& other) noexcept : path_(std::move(other.path_)) {
+  ScopedTempFile(const ScopedTempFile &) = delete;
+  ScopedTempFile &operator=(const ScopedTempFile &) = delete;
+  ScopedTempFile(ScopedTempFile &&other) noexcept
+      : path_(std::move(other.path_)) {
     other.path_.clear();
   }
-  ScopedTempFile& operator=(ScopedTempFile&& other) noexcept {
+  ScopedTempFile &operator=(ScopedTempFile &&other) noexcept {
     if (this != &other) {
       if (!path_.empty()) {
         std::error_code ec;
@@ -120,10 +136,10 @@ class ScopedTempFile {
     }
     return *this;
   }
-  const std::filesystem::path& path() const { return path_; }
+  const std::filesystem::path &path() const { return path_; }
   bool empty() const { return path_.empty(); }
 
- private:
+private:
   std::filesystem::path path_;
 };
 
@@ -133,8 +149,8 @@ class ScopedTempFile {
 // caller must remove the file after use; we also write `content` to
 // the freshly-opened fd before closing so callers don't have a second
 // open() race.
-std::filesystem::path make_private_tempfile(const std::string& prefix,
-                                            const std::string& content) {
+std::filesystem::path make_private_tempfile(const std::string &prefix,
+                                            const std::string &content) {
   auto tmp_dir = std::filesystem::temp_directory_path();
   // Template requires exactly six trailing X's that mkstemp replaces.
   std::string tmpl = (tmp_dir / (prefix + "XXXXXX")).string();
@@ -150,9 +166,11 @@ std::filesystem::path make_private_tempfile(const std::string& prefix,
   (void)fchmod(fd, S_IRUSR | S_IWUSR);
   std::size_t written = 0;
   while (written < content.size()) {
-    const ssize_t n = write(fd, content.data() + written, content.size() - written);
+    const ssize_t n =
+        write(fd, content.data() + written, content.size() - written);
     if (n < 0) {
-      if (errno == EINTR) continue;
+      if (errno == EINTR)
+        continue;
       close(fd);
       unlink(buf.data());
       return {};
@@ -171,7 +189,7 @@ std::filesystem::path make_private_tempfile(const std::string& prefix,
   return std::filesystem::path(buf.data());
 }
 
-std::string process_capture_text(const ProcessCaptureResult& result) {
+std::string process_capture_text(const ProcessCaptureResult &result) {
   if (!result.output.empty()) {
     return result.output;
   }
@@ -182,21 +200,21 @@ std::string process_capture_text(const ProcessCaptureResult& result) {
     return "process terminated by signal " + std::to_string(result.term_signal);
   }
   if (result.exited) {
-    return "process exited with code " + std::to_string(result.exit_code) + " without output";
+    return "process exited with code " + std::to_string(result.exit_code) +
+           " without output";
   }
   return "process produced no output";
 }
 
-bool is_transient_transport_error(const ProcessCaptureResult& result,
-                                  const std::string& raw) {
+bool is_transient_transport_error(const ProcessCaptureResult &result,
+                                  const std::string &raw) {
   if (!result.spawned || !result.exited || result.signaled) {
     return true;
   }
   if (result.exit_code == 0 && !raw.empty()) {
     return false;
   }
-  return raw.empty() ||
-         raw.find("TLS connect error") != std::string::npos ||
+  return raw.empty() || raw.find("TLS connect error") != std::string::npos ||
          raw.find("SSL") != std::string::npos ||
          raw.find("timed out") != std::string::npos ||
          raw.find("Timeout") != std::string::npos ||
@@ -207,16 +225,20 @@ bool is_transient_transport_error(const ProcessCaptureResult& result,
 // Extract a top-level numeric field from a JSON blob. Used to read
 // `usage.prompt_tokens` / `usage.completion_tokens` from OpenAI-compatible
 // responses. Best-effort: returns 0 if not present or unparseable.
-uint64_t extract_uint_field(const std::string& blob, const std::string& key) {
+uint64_t extract_uint_field(const std::string &blob, const std::string &key) {
   const std::string needle = "\"" + key + "\":";
   auto pos = blob.find(needle);
   if (pos == std::string::npos) {
     return 0;
   }
   pos += needle.size();
-  while (pos < blob.size() && std::isspace(static_cast<unsigned char>(blob[pos]))) ++pos;
+  while (pos < blob.size() &&
+         std::isspace(static_cast<unsigned char>(blob[pos])))
+    ++pos;
   const auto start = pos;
-  while (pos < blob.size() && std::isdigit(static_cast<unsigned char>(blob[pos]))) ++pos;
+  while (pos < blob.size() &&
+         std::isdigit(static_cast<unsigned char>(blob[pos])))
+    ++pos;
   if (start == pos) {
     return 0;
   }
@@ -228,29 +250,36 @@ uint64_t extract_uint_field(const std::string& blob, const std::string& key) {
 }
 
 // Coarse error classification based on curl exit + raw body keywords.
-std::string classify_error(const ProcessCaptureResult& curl, const std::string& raw) {
-  if (!curl.spawned) return "spawn_error";
-  if (curl.signaled) return "signaled";
-  if (!curl.exited) return "transport_error";
+std::string classify_error(const ProcessCaptureResult &curl,
+                           const std::string &raw) {
+  if (!curl.spawned)
+    return "spawn_error";
+  if (curl.signaled)
+    return "signaled";
+  if (!curl.exited)
+    return "transport_error";
   if (curl.exit_code != 0) {
     if (raw.find("timed out") != std::string::npos ||
-        raw.find("Timeout") != std::string::npos) return "timeout";
+        raw.find("Timeout") != std::string::npos)
+      return "timeout";
     if (raw.find("Could not resolve") != std::string::npos ||
-        raw.find("Failed to connect") != std::string::npos) return "transport_error";
+        raw.find("Failed to connect") != std::string::npos)
+      return "transport_error";
     return "http_error";
   }
   if (raw.find("\"error\"") != std::string::npos) {
     if (raw.find("authentication") != std::string::npos ||
         raw.find("api key") != std::string::npos ||
-        raw.find("unauthorized") != std::string::npos) return "auth_error";
+        raw.find("unauthorized") != std::string::npos)
+      return "auth_error";
     return "http_error";
   }
   return "ok";
 }
 
-}  // namespace
+} // namespace
 
-std::string stable_text_hash(const std::string& text) {
+std::string stable_text_hash(const std::string &text) {
   uint64_t hash = 1469598103934665603ull;
   for (const unsigned char c : text) {
     hash ^= static_cast<uint64_t>(c);
@@ -265,27 +294,29 @@ OpenAICompatibleGateway::OpenAICompatibleGateway(std::string endpoint,
                                                  std::string model,
                                                  std::string api_key_env,
                                                  bool disable_thinking)
-    : endpoint_(std::move(endpoint)),
-      model_(std::move(model)),
+    : endpoint_(std::move(endpoint)), model_(std::move(model)),
       api_key_env_(std::move(api_key_env)),
       disable_thinking_(disable_thinking) {}
 
-ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request) {
+ModelResponse
+OpenAICompatibleGateway::complete_json(const ModelRequest &request) {
   const auto start = std::chrono::steady_clock::now();
   ModelResponse response;
   response.provider = "openai_compatible";
   response.model = model_;
   response.request_id = make_id("model_req");
-  response.context_hash = stable_text_hash(request.agent_name + request.user_context_json);
+  response.context_hash =
+      stable_text_hash(request.agent_name + request.user_context_json);
 
   if (!is_valid_env_name(api_key_env_)) {
-    response.error = "invalid API key environment variable name: " + api_key_env_;
+    response.error =
+        "invalid API key environment variable name: " + api_key_env_;
     response.error_kind = "auth_error";
     response.response_hash = stable_text_hash(response.error);
     return response;
   }
 
-  const char* api_key = std::getenv(api_key_env_.c_str());
+  const char *api_key = std::getenv(api_key_env_.c_str());
   if (api_key == nullptr || api_key[0] == '\0') {
     response.error = "missing API key environment variable: " + api_key_env_;
     response.error_kind = "auth_error";
@@ -300,8 +331,10 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     payload << "\"thinking\":{\"type\":\"disabled\"},";
   }
   payload << "\"messages\":[";
-  payload << "{\"role\":\"system\",\"content\":\"" << json_escape(request.system_prompt) << "\"},";
-  payload << "{\"role\":\"user\",\"content\":\"" << json_escape(request.user_context_json) << "\"}],";
+  payload << "{\"role\":\"system\",\"content\":\""
+          << json_escape(request.system_prompt) << "\"},";
+  payload << "{\"role\":\"user\",\"content\":\""
+          << json_escape(request.user_context_json) << "\"}],";
   payload << "\"response_format\":{\"type\":\"json_object\"},";
   payload << "\"max_tokens\":" << request.max_output_tokens << ",";
   payload << "\"temperature\":" << request.temperature << ",";
@@ -320,9 +353,11 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   // `{request_id}_payload.json` scheme allowed a local attacker on a
   // shared host to symlink-hijack the file between write and curl
   // read.
-  ScopedTempFile payload_path(make_private_tempfile("fuzzpilot.payload.", payload_str));
+  ScopedTempFile payload_path(
+      make_private_tempfile("fuzzpilot.payload.", payload_str));
   ScopedTempFile auth_header_path(make_private_tempfile(
-      "fuzzpilot.auth.", std::string("Authorization: Bearer ") + api_key + "\n"));
+      "fuzzpilot.auth.",
+      std::string("Authorization: Bearer ") + api_key + "\n"));
   if (payload_path.empty() || auth_header_path.empty()) {
     response.error = "failed to create private model request tempfiles";
     response.error_kind = "spawn_error";
@@ -330,16 +365,22 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     return response;
   }
 
-  const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
+  const std::string max_time =
+      std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
 
   const std::vector<std::string> argv = {
       "curl",
       "-sS",
-      "--connect-timeout", "10",
-      "--max-time", max_time,
-      "-H", "Content-Type: application/json",
-      "-H", "@" + auth_header_path.path().string(),
-      "-d", "@" + payload_path.path().string(),
+      "--connect-timeout",
+      "10",
+      "--max-time",
+      max_time,
+      "-H",
+      "Content-Type: application/json",
+      "-H",
+      "@" + auth_header_path.path().string(),
+      "-d",
+      "@" + payload_path.path().string(),
       endpoint_,
   };
 
@@ -348,8 +389,9 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   auto raw = process_capture_text(curl);
   if (is_transient_transport_error(curl, raw)) {
     ++response.retry_count;
-    const auto retry = run_process_capture("curl", argv, {}, true, 1024 * 1024,
-                                           static_cast<int>(request.timeout_ms + 2000));
+    const auto retry =
+        run_process_capture("curl", argv, {}, true, 1024 * 1024,
+                            static_cast<int>(request.timeout_ms + 2000));
     const auto retry_raw = process_capture_text(retry);
     if (!is_transient_transport_error(retry, retry_raw)) {
       // Only adopt the retry when it cleanly succeeded; never concatenate
@@ -372,7 +414,8 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   response.input_tokens = extract_uint_field(raw, "prompt_tokens");
   response.output_tokens = extract_uint_field(raw, "completion_tokens");
   if (response.input_tokens == 0) {
-    response.input_tokens = (request.system_prompt.size() + request.user_context_json.size()) / 4;
+    response.input_tokens =
+        (request.system_prompt.size() + request.user_context_json.size()) / 4;
   }
   if (response.output_tokens == 0) {
     response.output_tokens = response.response_json.size() / 4;
@@ -385,11 +428,13 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   // mid-JSON cut might happen to contain the required top-level keys
   // and pass schema validation while actually being corrupted.
   const bool truncated = curl.error.find("truncated") != std::string::npos;
-  const bool transport_ok = curl.spawned && curl.exited && curl.exit_code == 0 && !truncated;
-  const bool schema_ok = transport_ok &&
-                         json_object_satisfies_required_schema(response.response_json,
-                                                               request.output_schema_json) &&
-                         raw.find("\"error\"") == std::string::npos;
+  const bool transport_ok =
+      curl.spawned && curl.exited && curl.exit_code == 0 && !truncated;
+  const bool schema_ok =
+      transport_ok &&
+      json_object_satisfies_required_schema(response.response_json,
+                                            request.output_schema_json) &&
+      raw.find("\"error\"") == std::string::npos;
   response.schema_valid = schema_ok;
   if (!schema_ok) {
     if (truncated) {
@@ -399,25 +444,28 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
       response.error_kind = "schema_invalid";
     }
     if (response.error.empty()) {
-      response.error = transport_ok
-                           ? "model response did not satisfy required output schema: " +
-                                 response.response_json.substr(0, 512)
-                           : raw.substr(0, 512);
+      response.error =
+          transport_ok
+              ? "model response did not satisfy required output schema: " +
+                    response.response_json.substr(0, 512)
+              : raw.substr(0, 512);
     }
   }
   const auto end = std::chrono::steady_clock::now();
   response.latency_ms = static_cast<uint64_t>(
-      std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+          .count());
   return response;
 }
 
-ModelResponse FakeModelGateway::complete_json(const ModelRequest& request) {
+ModelResponse FakeModelGateway::complete_json(const ModelRequest &request) {
   const auto start = std::chrono::steady_clock::now();
   ModelResponse response;
   response.provider = "fake";
   response.model = "fake-fuzzpilot-agent";
   response.request_id = make_id("model_req");
-  response.context_hash = stable_text_hash(request.agent_name + request.user_context_json);
+  response.context_hash =
+      stable_text_hash(request.agent_name + request.user_context_json);
 
   if (json_object_satisfies_required_schema(
           "{\"agent\":\"Fake\",\"memory_patch\":{},\"critique\":\"ok\"}",
@@ -425,11 +473,13 @@ ModelResponse FakeModelGateway::complete_json(const ModelRequest& request) {
     response.response_json =
         std::string("{\"agent\":\"") + request.agent_name +
         "\",\"memory_patch\":{\"kind\":\"smoke\",\"confidence\":0.5},"
-        "\"critique\":\"fake model result analysis for deterministic smoke test\"}";
+        "\"critique\":\"fake model result analysis for deterministic smoke "
+        "test\"}";
   } else {
     response.response_json =
         std::string("{\"agent\":\"") + request.agent_name +
-        "\",\"status\":\"ok\",\"interventions\":[{\"action\":\"per_seed_recipe_probe\","
+        "\",\"status\":\"ok\",\"interventions\":[{\"action\":\"per_seed_recipe_"
+        "probe\","
         "\"hypothesis\":\"fake model proposal for deterministic smoke test\","
         "\"expected_signal\":\"new_edges\",\"risk\":\"low\"}],"
         "\"seed_strategies\":[{\"selector\":{\"mode\":\"global\"},"
@@ -438,37 +488,38 @@ ModelResponse FakeModelGateway::complete_json(const ModelRequest& request) {
         "\"memory_patch\":{\"kind\":\"smoke\",\"confidence\":0.5}}";
   }
   response.response_hash = stable_text_hash(response.response_json);
-  response.schema_valid = json_object_satisfies_required_schema(response.response_json,
-                                                                request.output_schema_json);
+  response.schema_valid = json_object_satisfies_required_schema(
+      response.response_json, request.output_schema_json);
   const auto end = std::chrono::steady_clock::now();
   response.latency_ms = static_cast<uint64_t>(
-      std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+          .count());
   return response;
 }
 
-GeminiGateway::GeminiGateway(std::string endpoint,
-                             std::string model,
+GeminiGateway::GeminiGateway(std::string endpoint, std::string model,
                              std::string api_key_env)
-    : endpoint_(std::move(endpoint)),
-      model_(std::move(model)),
+    : endpoint_(std::move(endpoint)), model_(std::move(model)),
       api_key_env_(std::move(api_key_env)) {}
 
-ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
+ModelResponse GeminiGateway::complete_json(const ModelRequest &request) {
   const auto start = std::chrono::steady_clock::now();
   ModelResponse response;
   response.provider = "gemini";
   response.model = model_;
   response.request_id = make_id("model_req");
-  response.context_hash = stable_text_hash(request.agent_name + request.user_context_json);
+  response.context_hash =
+      stable_text_hash(request.agent_name + request.user_context_json);
 
   if (!is_valid_env_name(api_key_env_)) {
-    response.error = "invalid API key environment variable name: " + api_key_env_;
+    response.error =
+        "invalid API key environment variable name: " + api_key_env_;
     response.error_kind = "auth_error";
     response.response_hash = stable_text_hash(response.error);
     return response;
   }
 
-  const char* api_key = std::getenv(api_key_env_.c_str());
+  const char *api_key = std::getenv(api_key_env_.c_str());
   if (api_key == nullptr || api_key[0] == '\0') {
     response.error = "missing API key environment variable: " + api_key_env_;
     response.error_kind = "auth_error";
@@ -482,7 +533,10 @@ ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
   payload << "\"contents\":[{";
   payload << "\"role\":\"user\",";
   payload << "\"parts\":[{";
-  payload << "\"text\":\"" << json_escape(request.system_prompt + "\n\n" + request.user_context_json) << "\"";
+  payload << "\"text\":\""
+          << json_escape(request.system_prompt + "\n\n" +
+                         request.user_context_json)
+          << "\"";
   payload << "}]";
   payload << "}],";
   payload << "\"generationConfig\":{";
@@ -495,26 +549,36 @@ ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
   const auto payload_str = payload.str();
   response.full_request_payload = payload_str;
 
-  // Create temp files for payload
-  ScopedTempFile payload_path(make_private_tempfile("fuzzpilot.payload.", payload_str));
-  if (payload_path.empty()) {
-    response.error = "failed to create private model request tempfile";
+  // Create temp files for payload and auth header
+  ScopedTempFile payload_path(
+      make_private_tempfile("fuzzpilot.payload.", payload_str));
+  ScopedTempFile auth_header_path(make_private_tempfile(
+      "fuzzpilot.auth.", std::string("x-goog-api-key: ") + api_key + "\n"));
+  if (payload_path.empty() || auth_header_path.empty()) {
+    response.error = "failed to create private model request tempfiles";
     response.error_kind = "spawn_error";
     response.response_hash = stable_text_hash(response.error);
     return response;
   }
 
-  // Build Gemini API URL with key as query parameter
-  const std::string url = endpoint_ + "/" + model_ + ":generateContent?key=" + std::string(api_key);
-  const std::string max_time = std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
+  // Build Gemini API URL
+  const std::string url = endpoint_ + "/" + model_ + ":generateContent";
+  const std::string max_time =
+      std::to_string(std::max<uint32_t>(1, request.timeout_ms / 1000));
 
   const std::vector<std::string> argv = {
       "curl",
       "-sS",
-      "--connect-timeout", "10",
-      "--max-time", max_time,
-      "-H", "Content-Type: application/json",
-      "-d", "@" + payload_path.path().string(),
+      "--connect-timeout",
+      "10",
+      "--max-time",
+      max_time,
+      "-H",
+      "Content-Type: application/json",
+      "-H",
+      "@" + auth_header_path.path().string(),
+      "-d",
+      "@" + payload_path.path().string(),
       url,
   };
 
@@ -525,8 +589,9 @@ ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
   // Retry on transient errors
   if (is_transient_transport_error(curl, raw)) {
     ++response.retry_count;
-    const auto retry = run_process_capture("curl", argv, {}, true, 1024 * 1024,
-                                           static_cast<int>(request.timeout_ms + 2000));
+    const auto retry =
+        run_process_capture("curl", argv, {}, true, 1024 * 1024,
+                            static_cast<int>(request.timeout_ms + 2000));
     const auto retry_raw = process_capture_text(retry);
     if (!is_transient_transport_error(retry, retry_raw)) {
       curl = retry;
@@ -539,7 +604,8 @@ ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
 
   response.full_raw_response = raw;
 
-  // Extract content from Gemini response format: candidates[0].content.parts[0].text
+  // Extract content from Gemini response format:
+  // candidates[0].content.parts[0].text
   std::string content;
   const std::string needle = "\"text\":\"";
   auto pos = raw.find(needle);
@@ -555,7 +621,8 @@ ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
   response.input_tokens = extract_uint_field(raw, "promptTokenCount");
   response.output_tokens = extract_uint_field(raw, "candidatesTokenCount");
   if (response.input_tokens == 0) {
-    response.input_tokens = (request.system_prompt.size() + request.user_context_json.size()) / 4;
+    response.input_tokens =
+        (request.system_prompt.size() + request.user_context_json.size()) / 4;
   }
   if (response.output_tokens == 0) {
     response.output_tokens = response.response_json.size() / 4;
@@ -564,11 +631,13 @@ ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
   response.error_kind = classify_error(curl, raw);
 
   const bool truncated = curl.error.find("truncated") != std::string::npos;
-  const bool transport_ok = curl.spawned && curl.exited && curl.exit_code == 0 && !truncated;
-  const bool schema_ok = transport_ok &&
-                         json_object_satisfies_required_schema(response.response_json,
-                                                               request.output_schema_json) &&
-                         raw.find("\"error\"") == std::string::npos;
+  const bool transport_ok =
+      curl.spawned && curl.exited && curl.exit_code == 0 && !truncated;
+  const bool schema_ok =
+      transport_ok &&
+      json_object_satisfies_required_schema(response.response_json,
+                                            request.output_schema_json) &&
+      raw.find("\"error\"") == std::string::npos;
   response.schema_valid = schema_ok;
 
   if (!schema_ok) {
@@ -579,17 +648,19 @@ ModelResponse GeminiGateway::complete_json(const ModelRequest& request) {
       response.error_kind = "schema_invalid";
     }
     if (response.error.empty()) {
-      response.error = transport_ok
-                           ? "model response did not satisfy required output schema: " +
-                                 response.response_json.substr(0, 512)
-                           : raw.substr(0, 512);
+      response.error =
+          transport_ok
+              ? "model response did not satisfy required output schema: " +
+                    response.response_json.substr(0, 512)
+              : raw.substr(0, 512);
     }
   }
 
   const auto end = std::chrono::steady_clock::now();
   response.latency_ms = static_cast<uint64_t>(
-      std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+          .count());
   return response;
 }
 
-}  // namespace fuzzpilot
+} // namespace fuzzpilot
