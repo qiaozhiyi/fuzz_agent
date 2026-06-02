@@ -4,6 +4,7 @@
 #include "fuzzpilot/ids.hpp"
 #include "fuzzpilot/json_utils.hpp"
 #include "fuzzpilot/runner/process.hpp"
+#include <cstdint>
 
 #include <algorithm>
 #include <cctype>
