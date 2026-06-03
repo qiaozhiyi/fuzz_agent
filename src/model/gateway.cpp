@@ -104,6 +104,41 @@ std::string extract_openai_content_with_reasoning_fallback(const std::string& re
   return response;
 }
 
+class ScopedFileDescriptor {
+ public:
+  explicit ScopedFileDescriptor(int fd) : fd_(fd) {}
+  ~ScopedFileDescriptor() {
+    if (fd_ >= 0) {
+      close(fd_);
+    }
+  }
+  ScopedFileDescriptor(const ScopedFileDescriptor&) = delete;
+  ScopedFileDescriptor& operator=(const ScopedFileDescriptor&) = delete;
+  int get() const { return fd_; }
+  int release() {
+    int fd = fd_;
+    fd_ = -1;
+    return fd;
+  }
+ private:
+  int fd_;
+};
+
+class ScopedUnlink {
+ public:
+  explicit ScopedUnlink(const char* path) : path_(path) {}
+  ~ScopedUnlink() {
+    if (path_) {
+      unlink(path_);
+    }
+  }
+  ScopedUnlink(const ScopedUnlink&) = delete;
+  ScopedUnlink& operator=(const ScopedUnlink&) = delete;
+  void release() { path_ = nullptr; }
+ private:
+  const char* path_;
+};
+
 // Retained for callers that need to overwrite a known path with 0600
 // permission semantics. The hot model-request path now uses
 // make_private_tempfile() instead, which is atomic and TOCTOU-safe.
@@ -113,23 +148,22 @@ std::string extract_openai_content_with_reasoning_fallback(const std::string& re
   if (fd < 0) {
     return false;
   }
+  ScopedFileDescriptor fd_guard(fd);
   std::size_t written = 0;
   while (written < content.size()) {
-    const ssize_t n = write(fd, content.data() + written, content.size() - written);
+    const ssize_t n = write(fd_guard.get(), content.data() + written, content.size() - written);
     if (n < 0) {
       if (errno == EINTR) {
         continue;
       }
-      close(fd);
       return false;
     }
     if (n == 0) {
-      close(fd);
       return false;
     }
     written += static_cast<std::size_t>(n);
   }
-  return close(fd) == 0;
+  return close(fd_guard.release()) == 0;
 }
 
 class ScopedTempFile {
@@ -183,28 +217,28 @@ std::filesystem::path make_private_tempfile(const std::string& prefix,
   if (fd < 0) {
     return {};
   }
+  ScopedFileDescriptor fd_guard(fd);
+  ScopedUnlink unlink_guard(buf.data());
+
   // mkstemp creates 0600 already, but be defensive in case umask differs.
-  (void)fchmod(fd, S_IRUSR | S_IWUSR);
+  (void)fchmod(fd_guard.get(), S_IRUSR | S_IWUSR);
   std::size_t written = 0;
   while (written < content.size()) {
-    const ssize_t n = write(fd, content.data() + written, content.size() - written);
+    const ssize_t n = write(fd_guard.get(), content.data() + written, content.size() - written);
     if (n < 0) {
       if (errno == EINTR) continue;
-      close(fd);
-      unlink(buf.data());
       return {};
     }
     if (n == 0) {
-      close(fd);
-      unlink(buf.data());
       return {};
     }
     written += static_cast<std::size_t>(n);
   }
-  if (close(fd) != 0) {
-    unlink(buf.data());
+
+  if (close(fd_guard.release()) != 0) {
     return {};
   }
+  unlink_guard.release();
   return std::filesystem::path(buf.data());
 }
 
