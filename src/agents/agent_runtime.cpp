@@ -3,12 +3,15 @@
 
 #include "fuzzpilot/ids.hpp"
 #include "fuzzpilot/json_utils.hpp"
+#include "fuzzpilot/mutation/token_extractor.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <ctime>
 #include <set>
 #include <sstream>
+#include <thread>
+#include <chrono>
 
 namespace fuzzpilot {
 namespace {
@@ -80,8 +83,16 @@ std::vector<AgentTask> make_default_agent_tasks(const std::string& plateau_id,
     task.action_schema_json =
         "{\"allowed_actions\":[\"default_control\",\"dictionary_probe\","
         "\"seed_focus_probe\",\"per_seed_recipe_probe\"]}";
+    // Schema requires "interventions" at the top level. The GLM model
+    // consistently returns {"interventions":[...]} without an extra
+    // "answer" wrapper. Using the flat schema avoids spurious
+    // schema_invalid rejections from CoordinatorAgent and others.
     task.output_schema_json =
-        "{\"required\":[\"agent\",\"interventions\",\"seed_strategies\"]}";
+        "{\"type\":\"object\","
+        "\"required\":[\"interventions\"],"
+        "\"properties\":{"
+          "\"interventions\":{\"type\":\"array\"}"
+        "}}";
     task.budget_sec = budget_sec;
     tasks.push_back(std::move(task));
   }
@@ -274,20 +285,38 @@ std::vector<AgentDecision> run_agent_tasks(IModelGateway& gateway,
     request.agent_name = task.agent_name;
     const std::string role = task.role_description.empty() ? role_for(task.agent_name)
                                                            : task.role_description;
-    request.system_prompt =
-        std::string("You are FuzzPilot's ") + task.agent_name + ". " + role +
-        " You are part of an Advanced Agentic Fuzzing loop (M4+). "
-        "When binary intelligence (static_context) is available, leverage it for "
-        "'Structural & Semantic Mutation': "
-        "1. Structural Fields: specify `fields` with type Length/Magic/Checksum and "
-        "`target_begin`/`target_end` where applicable. "
-        "2. Data-flow Mapping: focus mutations on offsets that reach sinks. "
-        "3. CFG Constraints: for unreached branches propose the exact magic values. "
-        "Justify the strategy based on structural metadata. "
-        "Return strict compact JSON following the requested output schema. "
-        "Do not include Markdown, comments, trailing commas, NaN/Infinity, or hex literals. "
-        "Represent byte/address constants as quoted strings such as \"0xDEADBEEF\". "
-        "Stay strictly within the action_schema.allowed_actions list — never invent new actions.";
+    const bool result_analysis_task =
+        task.agent_name == "ResultAnalysisAgent" ||
+        task.output_schema_json.find("\"memory_patch\"") != std::string::npos;
+    if (result_analysis_task) {
+      request.system_prompt =
+          std::string("You are FuzzPilot's ") + task.agent_name + ". " + role +
+          " Summarize the validated micro-campaign results and convert the observed "
+          "winner, reward deltas, and failure signals into reusable agent memory. "
+          "Return strict compact JSON with exactly this top-level shape: "
+          "{\"agent\":\"ResultAnalysisAgent\",\"memory_patch\":{...},\"critique\":\"...\"}. "
+          "The memory_patch object must be concise and should include winner, reward_signal, "
+          "and avoid_patterns when the blackboard shows failed campaigns. "
+          "Output the JSON object directly. Do not include Markdown, comments, trailing commas, "
+          "NaN/Infinity, or hex literals.";
+    } else {
+      request.system_prompt =
+          std::string("You are FuzzPilot's ") + task.agent_name + ". " + role +
+          " You are part of an Advanced Agentic Fuzzing loop (M4+). "
+          "When binary intelligence (static_context) is available, leverage it for "
+          "'Structural & Semantic Mutation': "
+          "1. Structural Fields: specify `fields` with type Length/Magic/Checksum and "
+          "`target_begin`/`target_end` where applicable. "
+          "2. Data-flow Mapping: focus mutations on offsets that reach sinks. "
+          "3. CFG Constraints: for unreached branches propose the exact magic values. "
+          "Justify the strategy based on structural metadata. "
+          "Return strict compact JSON with the following structure: "
+          "{\"interventions\":[{\"action\":\"<action>\",\"hypothesis\":\"...\",\"tokens\":[...]},...]}. "
+          "Do NOT wrap in an 'answer' field. Output the JSON object directly. "
+          "Do not include Markdown, comments, trailing commas, NaN/Infinity, or hex literals. "
+          "Represent byte/address constants as quoted strings such as \"0xDEADBEEF\". "
+          "Stay strictly within the action_schema.allowed_actions list — never invent new actions.";
+    }
     // In-context RL: append GOOD/BAD examples from prior decisions and the
     // edge-growth credit they earned. The model is told to prefer GOOD
     // patterns and avoid BAD ones. Empty when no prior decisions exist.
@@ -308,6 +337,7 @@ std::vector<AgentDecision> run_agent_tasks(IModelGateway& gateway,
     decision.task_json = agent_task_json(task);
     decision.model_response = gateway.complete_json(request);
     decision.proposal_json = decision.model_response.response_json;
+    decision.extracted_tokens = extract_dictionary_tokens_from_proposal(decision.proposal_json);
     decision.created_ts = static_cast<uint64_t>(std::time(nullptr));
 
     // Guardrail layer: structural + action-space validation. A response
@@ -323,6 +353,12 @@ std::vector<AgentDecision> run_agent_tasks(IModelGateway& gateway,
       decision.fallback_used = true;
     }
     decisions.push_back(std::move(decision));
+
+    // Stagger API calls by 1 second to completely prevent triggering
+    // the API gateway's instantaneous concurrency limit blocks.
+    if (&task != &tasks.back()) {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
   }
   return decisions;
 }

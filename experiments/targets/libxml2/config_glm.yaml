@@ -1,0 +1,54 @@
+project: "libxml2_fuzz"
+target:
+  name: "libxml2_parser"
+  binary: "experiments/targets/libxml2/libxml2_fuzzer"
+  input_dir: "experiments/targets/libxml2/seeds"
+  dict: "experiments/targets/libxml2/xml.dict"
+  args: ["@@"]
+  timeout_ms: 1000
+  memory_mb: 1024
+
+afl:
+  base_env:
+    AFL_MAP_SIZE: "65536"
+    AFL_NO_UI: "1"
+    AFL_SKIP_CPUFREQ: "1"
+  main_budget_sec: 600
+  plateau_window_sec: 30
+
+fuzzer:
+  engine: "afl++"
+  threads: 1
+  timeout_ms: 1000
+
+plateau:
+  window_sec: 30
+  threshold_execs: 200
+  threshold_paths: 1
+
+micro_campaign:
+  enabled: true
+  budget_sec: 60
+  num_candidates: 4
+  agent_heartbeat_sec: 300
+
+mutation_strategy:
+  enabled: true
+  recipe_store: "work_libxml2/recipes"
+  custom_mutator_path: "./build/mutators/fuzzpilot/libfuzzpilot_mutator"
+
+static_analysis:
+  enabled: true
+  backend: "ghidra"
+  python_bin: "python3"
+  ghidra_home: "/opt/ghidra"
+  extractor_script: "scripts/ghidra/FuzzPilotGhidraExtract.java"
+  context_path: "experiments/targets/libxml2/precomputed_static_context.json"
+  timeout_sec: 120
+
+model_api:
+  provider: "openai_compatible"
+  endpoint: "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+  model: "glm-4-flash"
+  api_key_env: "FUZZPILOT_MODEL_API_KEY"
+  disable_thinking: true

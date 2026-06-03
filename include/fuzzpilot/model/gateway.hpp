@@ -1,6 +1,8 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
+#include <mutex>
 #include <string>
 
 namespace fuzzpilot {
@@ -72,22 +74,12 @@ class OpenAICompatibleGateway final : public IModelGateway {
   std::string model_;
   std::string api_key_env_;
   bool disable_thinking_ = true;
-};
-
-class GeminiGateway final : public IModelGateway {
- public:
-  GeminiGateway(std::string endpoint,
-                std::string model,
-                std::string api_key_env);
-
-  ModelResponse complete_json(const ModelRequest& request) override;
-
- private:
-  std::string endpoint_;
-  std::string model_;
-  std::string api_key_env_;
+  // Rate limiting for free-tier APIs (GLM, etc.)
+  std::mutex request_mutex_;
+  std::chrono::steady_clock::time_point last_request_time_;
 };
 
 std::string stable_text_hash(const std::string& text);
+std::string classify_openai_compatible_http_error(const std::string& raw, int http_status);
 
 }  // namespace fuzzpilot

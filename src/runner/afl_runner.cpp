@@ -25,7 +25,9 @@ std::string quote_for_preview(const std::string& value) {
 
 AflLaunchSpec build_main_afl_spec(const AppConfig& config,
                                   const std::filesystem::path& output_dir,
-                                  const std::filesystem::path& recipe_store) {
+                                  const std::filesystem::path& recipe_store,
+                                  bool resume,
+                                  const std::filesystem::path& resume_input_dir) {
   AflLaunchSpec spec;
   spec.afl_fuzz = config.afl.afl_fuzz;
   spec.output_dir = output_dir;
@@ -57,7 +59,11 @@ AflLaunchSpec build_main_afl_spec(const AppConfig& config,
   spec.argv.push_back("-M");
   spec.argv.push_back("default");
   spec.argv.push_back("-i");
-  spec.argv.push_back(config.target.input_dir.string());
+  if (resume) {
+    spec.argv.push_back(resume_input_dir.empty() ? "-" : resume_input_dir.string());
+  } else {
+    spec.argv.push_back(config.target.input_dir.string());
+  }
   spec.argv.push_back("-o");
   spec.argv.push_back(output_dir.string());
   spec.argv.push_back("-m");
@@ -88,6 +94,23 @@ AflLaunchSpec build_main_afl_spec(const AppConfig& config,
     spec.argv.push_back(arg);
   }
   return spec;
+}
+
+std::filesystem::path main_restart_output_dir(
+    const std::filesystem::path& run_dir,
+    std::size_t restart_index) {
+  return run_dir / ("main_out_restart_" + std::to_string(restart_index));
+}
+
+AflLaunchSpec build_main_restart_afl_spec(
+    const AppConfig& config,
+    const std::filesystem::path& run_dir,
+    const std::filesystem::path& recipe_store,
+    std::size_t restart_index,
+    const std::filesystem::path& restart_input_dir) {
+  return build_main_afl_spec(config, main_restart_output_dir(run_dir, restart_index),
+                             recipe_store, !restart_input_dir.empty(),
+                             restart_input_dir);
 }
 
 AflLaunchSpec build_micro_afl_spec(const AppConfig& config,

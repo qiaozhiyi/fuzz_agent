@@ -108,6 +108,7 @@ struct StaticAnalysisConfig {
   std::filesystem::path extractor_script = "./scripts/ghidra/FuzzPilotGhidraExtract.java";
   std::filesystem::path ghidra_home;
   std::filesystem::path ghidra_headless = "analyzeHeadless";
+  std::filesystem::path context_path;
   int timeout_sec = 60;
 };
 

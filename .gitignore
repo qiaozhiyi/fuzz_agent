@@ -5,8 +5,14 @@ cmake-build-*/
 experiments/targets/libxml2/build/
 experiments/targets/libxml2/libxml2_fuzzer
 .idea/
+.claude/
+.opencode/
+.antigravitycli/
+.backup_codex/
+.ruff_cache/
 work/
 work_*/
+results_*/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

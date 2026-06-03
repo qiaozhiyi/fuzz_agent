@@ -2,10 +2,15 @@
 
 #include "fuzzpilot/telemetry/afl_stats.hpp"
 
+#include <cstddef>
 #include <cstdint>
+#include <set>
 #include <string>
+#include <vector>
 
 namespace fuzzpilot {
+
+struct MicroCampaignSpec;
 
 struct MicroResult {
   std::string id;
@@ -31,6 +36,16 @@ struct MicroResult {
   bool promoted = false;
 };
 
+struct MicroWinnerSelection {
+  bool has_valid_results = false;
+  bool selected = false;
+  std::size_t result_index = 0;
+  uint64_t valid_results = 0;
+  double control_reward = 0.0;
+  double winner_reward = 0.0;
+  double improvement_over_control = 0.0;
+};
+
 // Reward computation policy. Production default is `kEdgeWeighted`, but the
 // CLI / experiment matrix can override to `kEdgesOnly` or `kRandom` for
 // ablation studies.
@@ -47,7 +62,16 @@ MicroResult evaluate_micro_result(const std::string& intervention_id,
                                   const AflStats& micro,
                                   RewardMode mode = RewardMode::kEdgeWeighted);
 
+MicroWinnerSelection select_micro_winner_against_control(
+    const std::vector<MicroResult>& results,
+    const std::vector<MicroCampaignSpec>& specs,
+    const std::set<std::string>& failed_campaign_ids,
+    double abs_margin = 0.1,
+    double rel_margin = 0.05);
+
+bool should_persist_micro_result(const MicroResult& result,
+                                 const std::set<std::string>& failed_campaign_ids);
+
 std::string micro_result_json(const MicroResult& result);
 
 }  // namespace fuzzpilot
-

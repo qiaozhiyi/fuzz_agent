@@ -24,7 +24,11 @@ SWAP_SCRIPT="${REPO_ROOT}/scripts/paper01/swap_to_nvidia.sh"
 # 阈值（可通过环境变量 override）
 BAL_THRESHOLD="${BAL_THRESHOLD:-0.5}"
 POLL_SEC="${POLL_SEC:-300}"    # 默认 5 分钟一次
-DEEPSEEK_KEY="${DEEPSEEK_KEY:-sk-c2d7d08c539049fe8192353ce0f6529b}"
+DEEPSEEK_KEY="${DEEPSEEK_KEY:-}"
+if [ -z "${DEEPSEEK_KEY}" ]; then
+  echo "DEEPSEEK_KEY must be set in the environment" >&2
+  exit 2
+fi
 
 LOG_DIR="${RESULTS_ROOT}/runs/_logs"
 mkdir -p "${LOG_DIR}"

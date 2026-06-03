@@ -26,8 +26,26 @@ struct MicroCampaignSpec {
   std::filesystem::path input_dir;
   std::filesystem::path output_dir;
   std::filesystem::path recipe_store;
+  std::vector<std::string> tokens;
+  std::string agent;
+  std::string source_decision_id;
+  std::string params_json;
+  int spiral_stage = 0;
+  double priority = 0.0;
+  std::string depends_on_intervention_id;
   uint32_t budget_sec = 0;
   bool dry_run = true;
+};
+
+struct MicroBanditCandidate {
+  std::string campaign_id;
+  double mean_reward = 0.0;
+  uint32_t budget_sec = 0;
+};
+
+struct MicroBanditRank {
+  std::string campaign_id;
+  double score = 0.0;
 };
 
 CorpusSnapshotResult snapshot_corpus(const std::filesystem::path& afl_output_dir,
@@ -41,9 +59,13 @@ std::vector<MicroCampaignSpec> plan_micro_campaigns(const AppConfig& config,
                                                     Database* db = nullptr,
                                                     const std::string& run_id = "");
 
-void prepare_micro_campaigns(const std::vector<MicroCampaignSpec>& specs);
+void prepare_micro_campaigns(const std::vector<MicroCampaignSpec>& specs,
+                             const std::vector<std::string>& llm_tokens = {});
+std::vector<MicroBanditRank> rank_micro_bandit_candidates(
+    const std::vector<MicroBanditCandidate>& candidates,
+    double total_budget_sec,
+    double exploration_c);
 std::string corpus_snapshot_json(const CorpusSnapshotResult& snapshot);
 std::string micro_campaign_spec_json(const MicroCampaignSpec& spec);
 
 }  // namespace fuzzpilot
-

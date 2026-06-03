@@ -169,7 +169,9 @@ void Database::finalize_all() {
   fin(stmt_insert_micro_result_);
   fin(stmt_insert_agent_decision_);
   fin(stmt_insert_agent_memory_);
+  fin(stmt_insert_intervention_);
   fin(stmt_get_recent_decisions_);
+  fin(stmt_get_recent_agent_decisions_);
   fin(stmt_get_agent_memory_);
 }
 
@@ -400,10 +402,35 @@ void Database::insert_agent_memory(const std::string& id,
   step_or_throw(db_, stmt, "insert_agent_memory");
 }
 
+void Database::insert_intervention(const std::string& id,
+                                   const std::string& plateau_id,
+                                   const std::string& agent,
+                                   const std::string& action,
+                                   const std::string& params_json,
+                                   const std::string& hypothesis,
+                                   const std::string& expected_signal,
+                                   const std::string& status) {
+  static constexpr const char* kSql =
+      "INSERT OR REPLACE INTO interventions (id, plateau_id, agent, action, params_json, "
+      "hypothesis, expected_signal, status) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+  auto* stmt = prepared(&stmt_insert_intervention_, kSql);
+  bind_text(stmt, 1, id);
+  bind_text(stmt, 2, plateau_id);
+  bind_text(stmt, 3, agent);
+  bind_text(stmt, 4, action);
+  bind_text(stmt, 5, params_json);
+  bind_text(stmt, 6, hypothesis);
+  bind_text(stmt, 7, expected_signal);
+  bind_text(stmt, 8, status);
+  step_or_throw(db_, stmt, "insert_intervention");
+}
+
 std::vector<std::string> Database::get_recent_decisions(const std::string& run_id, int limit) {
   std::vector<std::string> decisions;
   static constexpr const char* kSql =
-      "SELECT proposal_json FROM agent_decisions WHERE run_id = ? "
+      "SELECT proposal_json FROM agent_decisions "
+      "WHERE run_id = ? AND error_kind = 'ok' "
       "ORDER BY created_ts DESC LIMIT ?";
   sqlite3_stmt* stmt = nullptr;
   try {
@@ -416,6 +443,43 @@ std::vector<std::string> Database::get_recent_decisions(const std::string& run_i
   while (sqlite3_step(stmt) == SQLITE_ROW) {
     const unsigned char* text = sqlite3_column_text(stmt, 0);
     if (text) decisions.push_back(reinterpret_cast<const char*>(text));
+  }
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+  return decisions;
+}
+
+std::vector<RecentAgentDecision> Database::get_recent_agent_decisions(const std::string& run_id, int limit) {
+  std::vector<RecentAgentDecision> decisions;
+  static constexpr const char* kSql =
+      "SELECT id, run_id, plateau_id, agent, error_kind, schema_valid, fallback_used, "
+      "proposal_json, created_ts FROM agent_decisions "
+      "WHERE run_id = ? AND error_kind = 'ok' AND schema_valid = 1 AND fallback_used = 0 "
+      "ORDER BY created_ts DESC LIMIT ?";
+  sqlite3_stmt* stmt = nullptr;
+  try {
+    stmt = prepared(&stmt_get_recent_agent_decisions_, kSql);
+  } catch (...) {
+    return decisions;
+  }
+  bind_text(stmt, 1, run_id);
+  sqlite3_bind_int(stmt, 2, limit);
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    RecentAgentDecision decision;
+    auto text_col = [&](int column) -> std::string {
+      const unsigned char* text = sqlite3_column_text(stmt, column);
+      return text ? reinterpret_cast<const char*>(text) : "";
+    };
+    decision.id = text_col(0);
+    decision.run_id = text_col(1);
+    decision.plateau_id = text_col(2);
+    decision.agent = text_col(3);
+    decision.error_kind = text_col(4);
+    decision.schema_valid = sqlite3_column_int(stmt, 5) != 0;
+    decision.fallback_used = sqlite3_column_int(stmt, 6) != 0;
+    decision.proposal_json = text_col(7);
+    decision.created_ts = static_cast<uint64_t>(sqlite3_column_int64(stmt, 8));
+    decisions.push_back(std::move(decision));
   }
   sqlite3_reset(stmt);
   sqlite3_clear_bindings(stmt);

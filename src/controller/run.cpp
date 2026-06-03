@@ -10,6 +10,7 @@
 #include "fuzzpilot/micro/manager.hpp"
 #include "fuzzpilot/model/gateway.hpp"
 #include "fuzzpilot/mutation/recipe_store.hpp"
+#include "fuzzpilot/mutation/token_extractor.hpp"
 #include "fuzzpilot/mutation/recipe_reward_tracker.hpp"
 #include "fuzzpilot/plateau/detector.hpp"
 #include "fuzzpilot/runner/afl_runner.hpp"
@@ -22,7 +23,9 @@
 #include <chrono>
 #include <ctime>
 #include <fstream>
+#include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -61,6 +64,13 @@ std::string telemetry_event_json(const std::string& run_id,
   return std::string("{\"event\":\"telemetry_tick\",\"run_id\":\"") + json_escape(run_id) +
          "\",\"campaign_id\":\"" + json_escape(campaign_id) + "\",\"stats\":" +
          afl_stats_json(stats) + "}";
+}
+
+RewardMode reward_mode_from_string(const std::string& value) {
+  if (value == "edges_only") return RewardMode::kEdgesOnly;
+  if (value == "paths_only") return RewardMode::kPathsOnly;
+  if (value == "random") return RewardMode::kRandom;
+  return RewardMode::kEdgeWeighted;
 }
 
 std::string plateau_blackboard_json(const PlateauEvent& plateau, const AflStats& stats,
@@ -104,6 +114,22 @@ std::string read_text_or_error(const std::filesystem::path& path,
   std::ostringstream ss;
   ss << ifs.rdbuf();
   return ss.str();
+}
+
+std::string read_precomputed_static_context(const std::filesystem::path& path) {
+  std::ifstream ifs(path);
+  if (!ifs) {
+    throw std::runtime_error("failed to read static_analysis.context_path: " +
+                             path.string());
+  }
+  std::ostringstream ss;
+  ss << ifs.rdbuf();
+  auto content = ss.str();
+  if (content.empty()) {
+    throw std::runtime_error("static_analysis.context_path is empty: " +
+                             path.string());
+  }
+  return content;
 }
 
 std::string run_static_extractor(const StaticAnalysisConfig& sa_config,
@@ -448,16 +474,46 @@ void apply_run_overrides(AppConfig& config, RunOptions& options) {
     options.reward_mode = "random";
   } else if (options.ablation_mode == "edges-only") {
     options.reward_mode = "edges_only";
+  } else if (options.ablation_mode == "ai-direct") {
+    options.direct_promote_without_microcampaign = true;
+  } else if (options.ablation_mode == "single-agent-coordinator") {
+    options.disabled_agents = {
+        "PlateauDiagnosisAgent", "SchedulerAgent", "CmpAgent", "MutatorAgent",
+        "DictionaryAgent", "FormatAgent", "CorpusAgent"};
+  } else if (options.ablation_mode == "single-agent-dictionary") {
+    options.disabled_agents = {
+        "CoordinatorAgent", "PlateauDiagnosisAgent", "SchedulerAgent", "CmpAgent",
+        "MutatorAgent", "FormatAgent", "CorpusAgent"};
+  } else if (options.ablation_mode == "no-semantic-context") {
+    options.suppress_semantic_context = true;
+    config.static_analysis.enabled = false;
+    options.disable_static_analysis = true;
   } else if (options.ablation_mode != "full-agent") {
     throw std::runtime_error("unsupported ablation mode: " + options.ablation_mode);
   }
 }
 
-void configure_agent_tasks(std::vector<AgentTask>& tasks, const AppConfig& config) {
+void configure_agent_tasks(std::vector<AgentTask>& tasks, const AppConfig& config,
+                           const RunOptions& options) {
   for (auto& task : tasks) {
     task.timeout_ms = static_cast<uint32_t>(std::max(1000, config.agent_runtime.per_agent_timeout_ms));
     task.max_output_tokens = static_cast<uint32_t>(std::max(256, config.model_api.max_output_tokens));
   }
+  tasks = filter_disabled_agents(std::move(tasks), options.disabled_agents);
+}
+
+uint64_t agent_block_deadline_unix_sec(const std::vector<AgentTask>& tasks,
+                                       uint64_t max_budget_sec = 1800) {
+  uint64_t budget_sec = 5;
+  for (const auto& task : tasks) {
+    budget_sec += std::max<uint64_t>(1, (static_cast<uint64_t>(task.timeout_ms) + 999) / 1000);
+    budget_sec += 1;  // run_agent_tasks staggers provider calls.
+  }
+  budget_sec = std::max<uint64_t>(60, budget_sec);
+  if (max_budget_sec > 0) {
+    budget_sec = std::min(budget_sec, max_budget_sec);
+  }
+  return static_cast<uint64_t>(std::time(nullptr)) + budget_sec;
 }
 
 std::string env_or_fallback(const std::string& env_name, const std::string& fallback) {
@@ -502,28 +558,20 @@ std::unique_ptr<IModelGateway> make_gateway(const RunOptions& options, const App
     if (api_key_env.empty()) {
       throw std::runtime_error("missing api_key_env for openai-compatible provider");
     }
+    auto lowercase = [](std::string value) {
+      std::transform(value.begin(), value.end(), value.begin(),
+                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      return value;
+    };
+    const auto lower_endpoint = lowercase(endpoint);
+    const auto lower_model = lowercase(model_name);
+    const bool glm_endpoint = lower_endpoint.find("open.bigmodel.cn") != std::string::npos ||
+                              lower_endpoint.find("bigmodel.cn/api/paas") != std::string::npos;
+    const bool glm_model = lower_model.rfind("glm-", 0) == 0;
+    if ((glm_endpoint || glm_model) && model_name != "glm-4-flash") {
+      throw std::runtime_error("GLM provider is restricted to model glm-4-flash");
+    }
     return std::make_unique<OpenAICompatibleGateway>(endpoint, model_name, api_key_env, true);
-  }
-
-  if (provider == "gemini") {
-    const auto endpoint = options.model_endpoint.empty()
-                              ? env_or_fallback(config.model_api.endpoint_env,
-                                                config.model_api.endpoint)
-                              : options.model_endpoint;
-    const auto model_name = options.model_name.empty() ? config.model_api.model
-                                                       : options.model_name;
-    const auto api_key_env = options.api_key_env.empty() ? config.model_api.api_key_env
-                                                         : options.api_key_env;
-    if (endpoint.empty()) {
-      throw std::runtime_error("missing model endpoint for gemini provider");
-    }
-    if (model_name.empty()) {
-      throw std::runtime_error("missing model name for gemini provider");
-    }
-    if (api_key_env.empty()) {
-      throw std::runtime_error("missing api_key_env for gemini provider");
-    }
-    return std::make_unique<GeminiGateway>(endpoint, model_name, api_key_env);
   }
 
   throw std::runtime_error("unsupported model provider: " + provider);
@@ -597,6 +645,48 @@ std::string micro_results_json(const std::vector<MicroResult>& results) {
   return out.str();
 }
 
+SeedMutationStrategy build_promoted_strategy(const RunOptions& options,
+                                             const std::string& run_id,
+                                             const std::string& winner_id,
+                                             const std::string& agent,
+                                             std::vector<std::string> tokens) {
+  if (tokens.empty()) {
+    tokens = {"PROMOTED", winner_id, "FUZZ", "TOKEN"};
+  } else {
+    tokens.insert(tokens.begin(), winner_id);
+    tokens.insert(tokens.begin(), "PROMOTED");
+  }
+
+  SeedMutationStrategy promoted;
+  if (options.recipe_source == "random") {
+    const uint64_t seed_value = std::hash<std::string>{}(run_id);
+    promoted = make_random_recipe_strategy(seed_value, tokens);
+  } else {
+    promoted = make_default_dictionary_strategy(std::move(tokens));
+    if (!agent.empty()) {
+      promoted.agent = agent;
+    }
+  }
+  promoted.id = make_id("strategy_promoted");
+  return promoted;
+}
+
+std::filesystem::path write_promoted_recipe_index(const std::filesystem::path& recipe_store_dir,
+                                                  const RunOptions& options,
+                                                  const std::string& run_id,
+                                                  const std::string& winner_id,
+                                                  const std::string& agent,
+                                                  std::vector<std::string> tokens) {
+  RecipeStore promoted_store(recipe_store_dir);
+  const auto index_path = promoted_store.write_compact_recipes({
+      build_promoted_strategy(options, run_id, winner_id, agent, std::move(tokens))});
+  const auto global_path = recipe_store_dir / "global.recipe";
+  if (std::filesystem::exists(global_path)) {
+    return global_path;
+  }
+  return index_path;
+}
+
 void write_report(const RunSummary& summary,
                   const AppConfig& config,
                   const std::vector<AflStats>& main_samples,
@@ -653,6 +743,23 @@ void write_report(const RunSummary& summary,
 
 }  // namespace
 
+std::optional<AgentDecision> select_direct_promotion_for_test(
+    const std::vector<AgentDecision>& decisions) {
+  for (const auto& decision : decisions) {
+    if (!decision.model_response.schema_valid) {
+      continue;
+    }
+    if (decision.proposal_json.find("\"interventions\"") == std::string::npos) {
+      continue;
+    }
+    if (decision.proposal_json.find("\"default_control\"") != std::string::npos) {
+      continue;
+    }
+    return decision;
+  }
+  return std::nullopt;
+}
+
 RunSummary run_mvp(const RunOptions& requested_options) {
   RunOptions options = requested_options;
   if (options.config_path.empty()) {
@@ -677,6 +784,7 @@ RunSummary run_mvp(const RunOptions& requested_options) {
   std::filesystem::create_directories(summary.run_dir);
   const auto events_path = summary.run_dir / "events.jsonl";
   const auto main_output_dir = summary.run_dir / "main_out";
+  auto active_main_output_dir = main_output_dir;
   const auto main_recipe_store = summary.run_dir / "main_recipes";
   const auto now = static_cast<uint64_t>(std::time(nullptr));
 
@@ -692,7 +800,11 @@ RunSummary run_mvp(const RunOptions& requested_options) {
 
   if (config.mutation_strategy.enabled) {
     RecipeStore main_store(main_recipe_store);
-    main_store.write_compact_recipes({make_default_dictionary_strategy({"FUZZ", "MAGIC", "TOKEN"})});
+    auto initial_tokens = load_tokens_from_dict(config.target.dict);
+    if (initial_tokens.empty()) {
+      initial_tokens = {"FUZZ", "MAGIC", "TOKEN"};
+    }
+    main_store.write_compact_recipes({make_default_dictionary_strategy(initial_tokens)});
   }
   const auto main_launch = build_main_afl_spec(config, main_output_dir, main_recipe_store);
   write_text_file(summary.main_launch_path,
@@ -757,7 +869,17 @@ RunSummary run_mvp(const RunOptions& requested_options) {
   std::string base_intelligence_json = "{}";
   if (config.static_analysis.enabled) {
     const auto intel_path = summary.run_dir / "base_intelligence.json";
-    if (!std::filesystem::exists(intel_path)) {
+    if (!config.static_analysis.context_path.empty()) {
+      base_intelligence_json =
+          read_precomputed_static_context(config.static_analysis.context_path);
+      write_text_file(intel_path, base_intelligence_json);
+      append_line(events_path,
+                  std::string("{\"event\":\"static_context_precomputed_loaded\","
+                              "\"path\":\"") +
+                      json_escape(config.static_analysis.context_path.string()) +
+                      "\",\"context_size\":" +
+                      std::to_string(base_intelligence_json.size()) + "}");
+    } else if (!std::filesystem::exists(intel_path)) {
       append_line(events_path,
                   std::string("{\"event\":\"static_initial_scan_started\",\"backend\":\"") +
                       json_escape(normalize_static_backend(config.static_analysis.backend)) + "\"}");
@@ -836,21 +958,58 @@ RunSummary run_mvp(const RunOptions& requested_options) {
   // plateau OR heartbeat). Drives the heartbeat fallback so high-yield
   // targets like libxml2 don't run 24h without invoking the agent.
   int last_agent_trigger_at_sec = 0;
+  // Helper to merge new seeds from a micro campaign queue back to the main fuzzer queue
+  auto merge_micro_queue_to_main = [](const std::filesystem::path& micro_queue_dir,
+                                       const std::filesystem::path& main_queue_dir,
+                                       const std::string& prefix) {
+    if (!std::filesystem::exists(micro_queue_dir) || !std::filesystem::is_directory(micro_queue_dir)) {
+      return;
+    }
+    if (!std::filesystem::exists(main_queue_dir) || !std::filesystem::is_directory(main_queue_dir)) {
+      return;
+    }
+
+    std::cerr << "[DEBUG] Merging micro queue " << micro_queue_dir << " to main queue " << main_queue_dir << "\n";
+    std::size_t copied_count = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(micro_queue_dir)) {
+      if (entry.is_regular_file()) {
+        const auto filename = entry.path().filename().string();
+        // Skip AFL++ metadata files and README
+        if (filename.rfind(".", 0) == 0 || filename == "README.txt") {
+          continue;
+        }
+        // Prefix to prevent collisions
+        const auto target_filename = prefix + "_" + filename;
+        const auto target_path = main_queue_dir / target_filename;
+        try {
+          std::filesystem::copy_file(entry.path(), target_path, std::filesystem::copy_options::overwrite_existing);
+          copied_count++;
+        } catch (const std::exception& ex) {
+          std::cerr << "[DEBUG] Failed to copy seed " << filename << ": " << ex.what() << "\n";
+        }
+      }
+    }
+    std::cerr << "[DEBUG] Successfully merged " << copied_count << " seeds from micro campaign queue.\n";
+  };
+
+  std::vector<MicroResult> layered_micro_results;
+  std::string early_exit_reason;
+  bool received_term_signal = false;
+  TelemetryCollector collector(active_main_output_dir, "");
 
   auto trigger_inline_agent = [&](const PlateauEvent& plateau,
                                    const AflStats& stats) {
     const auto recent = db.get_recent_decisions(summary.run_id, 10);
     const auto mem = db.get_agent_memory(summary.run_id);
     const auto bb = plateau_blackboard_json(plateau, stats,
-                                            base_intelligence_json,
+                                            options.suppress_semantic_context ? "{}" : base_intelligence_json,
                                             recent, mem);
     auto tasks = make_default_agent_tasks(
         plateau.id, bb,
         static_cast<uint32_t>(config.micro_campaign.budget_sec),
         format_few_shot_block());
-    configure_agent_tasks(tasks, config);
-    const auto deadline =
-        static_cast<uint64_t>(std::time(nullptr)) + 300;
+    configure_agent_tasks(tasks, config, options);
+    const auto deadline = agent_block_deadline_unix_sec(tasks);
     auto decisions = run_agent_tasks(*inline_gateway, summary.run_id,
                                      plateau.id, tasks, deadline);
     for (const auto& d : decisions) {
@@ -859,6 +1018,303 @@ RunSummary run_mvp(const RunOptions& requested_options) {
           d.id, d.agent, short_proposal_summary(d.proposal_json),
           static_cast<uint64_t>(d.created_ts));
     }
+    std::vector<std::string> new_tokens;
+    for (const auto& d : decisions) {
+      auto tokens = extract_dictionary_tokens_from_proposal(d.proposal_json);
+      new_tokens.insert(new_tokens.end(), tokens.begin(), tokens.end());
+    }
+
+    // Create and execute micro campaigns from agent decisions
+    if (options.direct_promote_without_microcampaign) {
+      const auto direct = select_direct_promotion_for_test(decisions);
+      if (direct) {
+        const auto direct_tokens =
+            extract_dictionary_tokens_from_proposal(direct->proposal_json);
+        summary.winner_status = WinnerStatus::kSelected;
+        summary.winner_intervention_id = direct->id;
+        summary.winner_campaign_id.clear();
+        summary.promoted_recipe_index = write_promoted_recipe_index(
+            main_recipe_store, options, summary.run_id, direct->id,
+            direct->agent, direct_tokens);
+        append_line(events_path,
+                    std::string("{\"event\":\"ai_direct_promoted\",\"ts\":") +
+                        std::to_string(static_cast<uint64_t>(std::time(nullptr))) +
+                        ",\"decision_count\":" + std::to_string(decisions.size()) +
+                        ",\"source\":\"inline_agent\","
+                        "\"decision_id\":\"" + json_escape(direct->id) +
+                        "\",\"agent\":\"" + json_escape(direct->agent) +
+                        "\",\"token_count\":" +
+                        std::to_string(direct_tokens.size()) +
+                        ",\"recipe_index\":\"" +
+                        json_escape(summary.promoted_recipe_index.string()) + "\"}");
+      } else {
+        append_line(events_path,
+                    std::string("{\"event\":\"ai_direct_no_candidate\",\"ts\":") +
+                        std::to_string(static_cast<uint64_t>(std::time(nullptr))) +
+                        ",\"decision_count\":" +
+                        std::to_string(decisions.size()) +
+                        ",\"source\":\"inline_agent\"}");
+      }
+    }
+
+    if (config.micro_campaign.enabled && !decisions.empty() &&
+        !options.direct_promote_without_microcampaign) {
+      std::cerr << "[DEBUG] Creating micro campaigns from " << decisions.size() << " agent decisions\n";
+      // Take a fresh corpus snapshot for this inline intervention.
+      // Each inline intervention gets its own numbered snapshot so they
+      // don't overwrite each other.
+      const auto snapshot_dir = summary.run_dir /
+          ("corpus_snapshot_inline_" + std::to_string(inline_intervention_count));
+      const auto micro_dir = summary.run_dir / ("micro_inline_" + std::to_string(inline_intervention_count));
+
+      // Snapshot the current AFL output corpus
+      bool snapshot_ok = false;
+      if (!options.dry_run) {
+        try {
+          snapshot_corpus(active_main_output_dir, snapshot_dir);
+          snapshot_ok = true;
+          append_line(events_path,
+                      std::string("{\"event\":\"inline_corpus_snapshot\",\"snapshot_dir\":\"") +
+                          json_escape(snapshot_dir.string()) + "\"}");
+        } catch (const std::exception& ex) {
+          std::cerr << "[DEBUG] Inline corpus snapshot failed: " << ex.what() << "\n";
+          append_line(events_path,
+                      std::string("{\"event\":\"inline_corpus_snapshot_failed\",\"error\":\"") +
+                          json_escape(ex.what()) + "\"}");
+        }
+      } else {
+        // Dry-run: use a pre-existing snapshot or input dir
+        snapshot_ok = true;
+      }
+
+      if (snapshot_ok) {
+        const auto snapshot_input = options.dry_run ? config.target.input_dir : snapshot_dir;
+        const auto specs = plan_micro_campaigns(
+            config, plateau.id, snapshot_input, micro_dir,
+            options.dry_run, &db, summary.run_id);
+
+        std::cerr << "[DEBUG] plan_micro_campaigns returned " << specs.size() << " specs\n";
+
+        if (!specs.empty()) {
+          std::cerr << "[DEBUG] Entering if (!specs.empty()) block\n";
+          prepare_micro_campaigns(specs, new_tokens);
+          std::cerr << "[DEBUG] prepare_micro_campaigns completed\n";
+          append_line(events_path,
+                      std::string("{\"event\":\"inline_micro_campaigns_created\",\"count\":") +
+                          std::to_string(specs.size()) + "}");
+
+          // Execute one full control -> dictionary -> seed-focus ->
+          // per-seed spiral inline. plan_micro_campaigns() coalesces
+          // agent proposals to at most these four stages, so this gives
+          // each heartbeat a complete micro ladder without reopening the
+          // old "one campaign per agent proposal" budget blow-up.
+          const size_t max_inline_micros = std::min(size_t(4), specs.size());
+          std::cerr << "[DEBUG] Executing top " << max_inline_micros << " micro campaigns inline\n";
+          std::cerr << "[DEBUG] options.dry_run=" << options.dry_run << ", max_inline_micros=" << max_inline_micros << "\n";
+
+          if (!options.dry_run && max_inline_micros > 0) {
+            // Stop main AFL temporarily
+            if (summary.main_pid > 0) {
+              std::cerr << "[DEBUG] Stopping main AFL (pid=" << summary.main_pid << ") for inline micro campaigns\n";
+              const auto stop_status = stop_afl_process(summary.main_pid, 5000);
+              append_line(events_path,
+                          std::string("{\"event\":\"main_afl_stopped_for_inline_micro\",\"pid\":") +
+                              std::to_string(summary.main_pid) +
+                              ",\"exited\":" + (stop_status.exited ? "true" : "false") + "}");
+              summary.main_pid = -1;
+            }
+
+            std::filesystem::path previous_spiral_queue;
+
+            // Execute the spiral stages in order. Each successful stage's
+            // queue becomes the next stage's input corpus, so dictionary
+            // probing can lift seed focus, and seed focus can lift per-seed
+            // recipes instead of all stages competing from the same snapshot.
+            for (size_t i = 0; i < max_inline_micros; ++i) {
+              const auto& spec = specs[i];
+              auto runtime_spec = spec;
+              if (!previous_spiral_queue.empty() &&
+                  std::filesystem::is_directory(previous_spiral_queue)) {
+                runtime_spec.input_dir = previous_spiral_queue;
+                append_line(events_path,
+                            std::string("{\"event\":\"micro_spiral_input_selected\","
+                                        "\"campaign_id\":\"") +
+                                json_escape(runtime_spec.id) +
+                                "\",\"input_dir\":\"" +
+                                json_escape(runtime_spec.input_dir.string()) +
+                                "\",\"depends_on_intervention_id\":\"" +
+                                json_escape(runtime_spec.depends_on_intervention_id) +
+                                "\"}");
+              }
+              const auto campaign_start_ts = static_cast<uint64_t>(std::time(nullptr));
+
+              std::cerr << "[DEBUG] Launching inline micro campaign " << (i+1) << "/" << max_inline_micros
+                        << " (intervention: " << runtime_spec.intervention_id << ")\n";
+
+              db.insert_campaign(runtime_spec.id, summary.run_id, "micro_inline", summary.main_campaign_id,
+                               runtime_spec.intervention_id, runtime_spec.output_dir, campaign_start_ts, runtime_spec.budget_sec, "running");
+
+              // Use empty dict path for inline micro campaigns (they use the prepared recipes)
+              const auto micro_launch = build_micro_afl_spec(config, runtime_spec, std::filesystem::path());
+              write_text_file(runtime_spec.output_dir / "launch.sh", "#!/usr/bin/env sh\n" + shell_preview(micro_launch) + "\n");
+
+              const auto process = spawn_process(micro_launch.afl_fuzz.string(), micro_launch.argv, micro_launch.env);
+
+              if (process.pid > 0) {
+                std::cerr << "[DEBUG] Micro campaign launched with pid=" << process.pid << "\n";
+                append_line(events_path,
+                            std::string("{\"event\":\"inline_micro_afl_launched\",\"pid\":") +
+                                std::to_string(process.pid) + ",\"campaign_id\":\"" + runtime_spec.id + "\"}");
+
+                // Wait for micro campaign to complete
+                const int max_wait_ms = runtime_spec.budget_sec * 1000 + 5000;
+                const auto wait_status = wait_process(process.pid, max_wait_ms);
+
+                if (!wait_status.exited && !wait_status.signaled) {
+                  std::cerr << "[DEBUG] Micro campaign timeout, killing pid=" << process.pid << "\n";
+                  stop_afl_process(process.pid, 3000);
+                }
+
+                // Parse results
+                std::string error;
+                auto micro_stats = parse_fuzzer_stats(runtime_spec.output_dir / "default" / "fuzzer_stats", &error);
+
+                const auto campaign_end_ts = static_cast<uint64_t>(std::time(nullptr));
+                if (micro_stats) {
+                  db.finish_campaign(runtime_spec.id, campaign_end_ts, "completed", "completed");
+                  std::cerr << "[DEBUG] Micro campaign completed: edges=" << micro_stats->edges_found << "\n";
+
+                  AflStats micro_parent_baseline;
+                  auto result = evaluate_micro_result(runtime_spec.intervention_id, runtime_spec.id, micro_parent_baseline,
+                                                      *micro_stats, reward_mode_from_string(options.reward_mode));
+                  db.insert_micro_result(result);
+                  layered_micro_results.push_back(result);
+                  ++summary.micro_campaign_count;
+                  append_line(events_path,
+                              std::string("{\"event\":\"micro_layer_result\",\"layer_index\":") +
+                                  std::to_string(inline_intervention_count) +
+                                  ",\"agent\":\"" + json_escape(runtime_spec.agent) +
+                                  "\",\"action\":\"" + json_escape(runtime_spec.name) +
+                                  "\",\"source_decision_id\":\"" + json_escape(runtime_spec.source_decision_id) +
+                                  "\",\"intervention_id\":\"" + json_escape(runtime_spec.intervention_id) +
+                                  "\",\"campaign_id\":\"" + json_escape(runtime_spec.id) +
+                                  "\",\"parent_edges\":" + std::to_string(stats.edges_found) +
+                                  ",\"micro_edges\":" + std::to_string(micro_stats->edges_found) +
+                                  ",\"new_edges\":" + std::to_string(result.new_edges) +
+                                  ",\"new_paths\":" + std::to_string(result.new_paths) +
+                                  ",\"reward\":" + std::to_string(result.reward) + "}");
+
+                  // Dynamic feedback synchronization (Left foot stepping on right foot!)
+                  const auto micro_queue = runtime_spec.output_dir / "default" / "queue";
+                  const auto main_queue = active_main_output_dir / "default" / "queue";
+                  const std::string prefix = "micro_r" + std::to_string(inline_intervention_count) + "_" + runtime_spec.id;
+                  merge_micro_queue_to_main(micro_queue, main_queue, prefix);
+                  if (std::filesystem::is_directory(micro_queue)) {
+                    previous_spiral_queue = micro_queue;
+                  }
+                } else {
+                  db.finish_campaign(runtime_spec.id, campaign_end_ts, "failed", "stats_unreadable");
+                  std::cerr << "[DEBUG] Micro campaign failed: " << error << "\n";
+                }
+              } else {
+                std::cerr << "[DEBUG] Failed to launch micro campaign: " << process.error << "\n";
+                const auto fail_ts = static_cast<uint64_t>(std::time(nullptr));
+                db.finish_campaign(runtime_spec.id, fail_ts, "failed", "spawn_failed");
+              }
+            }
+
+            // Restart main AFL from a clean seed directory captured after
+            // queue merge. AFL++'s in-place `-i -` resume is fragile after
+            // controller-side queue edits and has aborted with `_resume
+            // directory cleanup failed` on libxml2. A clean input dir keeps
+            // the restart explicit and reproducible.
+            std::filesystem::path restart_input_dir;
+            try {
+              restart_input_dir = summary.run_dir /
+                  ("main_restart_input_" + std::to_string(inline_intervention_count));
+              snapshot_corpus(active_main_output_dir, restart_input_dir);
+              append_line(events_path,
+                          std::string("{\"event\":\"main_afl_restart_input_prepared\","
+                                      "\"input_dir\":\"") +
+                              json_escape(restart_input_dir.string()) + "\"}");
+            } catch (const std::exception& ex) {
+              append_line(events_path,
+                          std::string("{\"event\":\"main_afl_restart_input_failed\","
+                                      "\"error\":\"") +
+                              json_escape(ex.what()) + "\"}");
+              restart_input_dir.clear();
+            }
+
+            // Restart main AFL
+            std::cerr << "[DEBUG] Restarting main AFL after inline micro campaigns\n";
+            const auto main_launch = build_main_restart_afl_spec(
+                config, summary.run_dir, main_recipe_store,
+                inline_intervention_count, restart_input_dir);
+            const auto main_process = spawn_process(main_launch.afl_fuzz.string(), main_launch.argv, main_launch.env);
+
+	            if (main_process.pid > 0) {
+	              summary.main_pid = main_process.pid;
+	              active_main_output_dir = main_launch.output_dir;
+	              collector = TelemetryCollector(active_main_output_dir, "");
+	              std::cerr << "[DEBUG] Main AFL restarted with pid=" << main_process.pid << "\n";
+	              bool restart_exited = false;
+	              ProcessStatus restart_status;
+	              for (int poll = 0; poll < 20; ++poll) {
+	                restart_status = wait_process(main_process.pid, 0);
+	                if (restart_status.exited || restart_status.signaled) {
+	                  restart_exited = true;
+	                  break;
+	                }
+	                if (std::filesystem::exists(
+	                        find_fuzzer_stats_file(active_main_output_dir))) {
+	                  break;
+	                }
+	                std::this_thread::sleep_for(std::chrono::milliseconds(250));
+	              }
+	              if (restart_exited) {
+	                std::ostringstream message;
+	                message << "AFL++ main restart exited before fresh telemetry";
+	                if (restart_status.exited) {
+	                  message << " with exit_code=" << restart_status.exit_code;
+	                }
+	                if (restart_status.signaled) {
+	                  message << " from signal=" << restart_status.term_signal;
+	                }
+	                early_exit_reason = message.str();
+	                summary.main_pid = -1;
+	                append_line(events_path,
+	                            std::string("{\"event\":\"main_afl_restart_failed\","
+	                                        "\"exit_code\":") +
+	                                std::to_string(restart_status.exit_code) +
+	                                ",\"signaled\":" +
+	                                (restart_status.signaled ? "true" : "false") +
+	                                ",\"output_dir\":\"" +
+	                                json_escape(active_main_output_dir.string()) +
+	                                "\",\"error\":\"" +
+	                                json_escape(early_exit_reason) + "\"}");
+	              } else {
+	                append_line(events_path,
+	                            std::string("{\"event\":\"main_afl_restarted_after_inline_micro\","
+	                                        "\"pid\":") +
+	                                std::to_string(main_process.pid) +
+	                                ",\"output_dir\":\"" +
+	                                json_escape(active_main_output_dir.string()) + "\"}");
+	              }
+	            } else {
+	              std::cerr << "[DEBUG] Failed to restart main AFL: " << main_process.error << "\n";
+	              early_exit_reason = "failed to restart AFL++ main campaign: " + main_process.error;
+	              append_line(events_path,
+	                          std::string("{\"event\":\"main_afl_restart_failed\",\"error\":\"") +
+	                              json_escape(main_process.error) + "\"}");
+            }
+          } else {
+            std::cerr << "[DEBUG] Micro campaigns prepared but not executed (dry_run or no specs)\n";
+          }
+        }
+      }
+    }
+
+
     ++inline_intervention_count;
     append_line(events_path,
                 std::string("{\"event\":\"agent_inline_triggered\",\"plateau_id\":\"") +
@@ -869,28 +1325,20 @@ RunSummary run_mvp(const RunOptions& requested_options) {
                     std::to_string(inline_intervention_count) + "}");
   };
 
-  // P0.3/P0.4: hoisted out of the else-block so the post-loop aggregation
-  // (which classifies the exit reason as loop_budget / early_exit /
-  // signal_term) can read them. Declared as plain locals in run_mvp.
-  std::string early_exit_reason;
-  bool received_term_signal = false;
-
   if (options.dry_run) {
     for (const auto& stats_path : options.main_stats_paths) {
       auto stats = read_stats_or_throw(stats_path);
       process_stats(stats);
     }
   } else {
-    TelemetryCollector collector(main_output_dir, "");
     int elapsed_sec = 0;
     std::string last_telemetry_error;
-    // Reserve a tail of the budget for the post-loop agent pipeline
-    // (forced plateau + run_agent_tasks + micro campaigns + DB cleanup).
-    // Without this, a long fuzz with no plateau detection eats the
-    // entire budget and the agent block races SIGTERM. 30 min for
-    // long runs, 10% for short ones — whichever is smaller.
-    const int agent_reserve_sec = std::min(
-        1800, std::max(60, config.afl.main_budget_sec / 10));
+    // Reserve a tail of the budget for post-loop cleanup. For short
+    // 10-minute validation runs, keep substantive agent/micro work inline
+    // and avoid stealing a full minute from the main fuzzing window.
+    const int agent_reserve_sec = config.afl.main_budget_sec <= 900
+        ? std::min(15, std::max(5, config.afl.main_budget_sec / 40))
+        : std::min(1800, std::max(60, config.afl.main_budget_sec / 10));
     const int loop_budget_sec = std::max(60, config.afl.main_budget_sec - agent_reserve_sec);
     // Subscribe to the SIGINT/SIGTERM flag installed in main(). When
     // the signal arrives we break out of the main sampling loop,
@@ -963,15 +1411,43 @@ RunSummary run_mvp(const RunOptions& requested_options) {
           try {
             trigger_inline_agent(plateau_for_agent, *stats);
             last_agent_trigger_at_sec = elapsed_sec;
+            // P0.2: Check if most recent decisions failed with auth_error.
+            // Use 80% threshold (4 of 5) to catch both complete failures (bad
+            // API key) and high partial failure rates (rate limits, quota issues).
+            const auto recent = db.get_recent_decisions(summary.run_id, 5);
+            if (!recent.empty()) {
+              int auth_error_count = 0;
+              for (const auto& decision_json : recent) {
+                if (decision_json.find("\"error_kind\":\"auth_error\"") != std::string::npos) {
+                  ++auth_error_count;
+                }
+              }
+              const int threshold = std::max(1, static_cast<int>(recent.size() * 0.8));
+              if (auth_error_count >= threshold) {
+                std::ostringstream warning;
+                warning << "WARNING: " << auth_error_count << " of " << recent.size()
+                        << " recent LLM calls failed with authentication errors. "
+                        << "Check API key and endpoint configuration.";
+                std::cerr << warning.str() << std::endl;
+                append_line(events_path,
+                           std::string("{\"event\":\"llm_auth_failure_detected\",\"severity\":\"high\","
+                                       "\"failed_count\":") + std::to_string(auth_error_count) +
+                                       ",\"total_count\":" + std::to_string(recent.size()) +
+                                       ",\"message\":\"" + json_escape(warning.str()) + "\"}");
+              }
+            }
           } catch (const std::exception& ex) {
             append_line(events_path,
                         std::string("{\"event\":\"agent_inline_failed\",\"error\":\"") +
                             json_escape(ex.what()) + "\"}");
           }
-          detector.reset();
-          summary.plateau_id.clear();
-        }
-      } else {
+	          detector.reset();
+	          summary.plateau_id.clear();
+	          if (!early_exit_reason.empty()) {
+	            break;
+	          }
+	        }
+	      } else {
         last_telemetry_error = error;
         if (summary.main_pid > 0) {
           const auto status = wait_process(summary.main_pid, 0);
@@ -1016,6 +1492,31 @@ RunSummary run_mvp(const RunOptions& requested_options) {
                                  ? "dry-run requires at least one --stats sample"
                                  : "real run finished without any AFL++ telemetry samples");
   }
+
+  // --- Stop AFL and capture the final telemetry sample ---
+  if (!options.dry_run && summary.main_pid > 0) {
+    const auto status = stop_afl_process(summary.main_pid, 5000);
+    append_line(events_path,
+                std::string("{\"event\":\"main_afl_stopped_for_analysis\",\"pid\":") +
+                    std::to_string(summary.main_pid) + ",\"exited\":" +
+                    (status.exited ? "true" : "false") + ",\"signaled\":" +
+                    (status.signaled ? "true" : "false") + "}");
+    summary.main_pid = -1;
+
+    // Reset incremental state to bypass mtime cache and force parsing the newly written final stats file
+    std::string final_error;
+    collector.reset_incremental_state();
+    const auto final_stats = collector.sample(&final_error);
+    if (final_stats) {
+      // Append the absolute final stats on exit to main_samples and events
+      main_samples.push_back(*final_stats);
+      db.insert_telemetry(summary.main_campaign_id, *final_stats);
+      ++summary.telemetry_count;
+      append_line(summary.coverage_csv_path, coverage_csv_row(*final_stats));
+      append_line(events_path, telemetry_event_json(summary.run_id, summary.main_campaign_id, *final_stats));
+    }
+  }
+
   // P0.4: aggregate peaks across all collected samples. Done once here so
   // both the baseline early-return and the full-agent path see the same
   // honest peak numbers. paths_total / edges_found are monotone in AFL so
@@ -1046,15 +1547,7 @@ RunSummary run_mvp(const RunOptions& requested_options) {
       summary.main_afl_exit_reason = "loop_budget";
     }
   }
-  if (!options.dry_run && config.micro_campaign.enabled && summary.main_pid > 0) {
-    const auto status = stop_afl_process(summary.main_pid, 5000);
-    append_line(events_path,
-                std::string("{\"event\":\"main_afl_stopped_for_analysis\",\"pid\":") +
-                    std::to_string(summary.main_pid) + ",\"exited\":" +
-                    (status.exited ? "true" : "false") + ",\"signaled\":" +
-                    (status.signaled ? "true" : "false") + "}");
-    summary.main_pid = -1;
-  }
+
   if (!config.micro_campaign.enabled) {
     std::vector<MicroResult> micro_results;
     std::vector<AgentDecision> decisions;
@@ -1068,10 +1561,6 @@ RunSummary run_mvp(const RunOptions& requested_options) {
     db.finish_run(summary.run_id, done, "completed",
                   to_string(summary.winner_status), totals);
 
-    if (!options.dry_run && summary.main_pid > 0) {
-      stop_afl_process(summary.main_pid, 5000);
-      summary.main_pid = -1;
-    }
     append_line(events_path, "{\"event\":\"m6_baseline_completed\",\"micro_campaigns_enabled\":false}");
     return summary;
   }
@@ -1092,7 +1581,7 @@ RunSummary run_mvp(const RunOptions& requested_options) {
 
   const auto snapshot_dir = summary.run_dir / "corpus_snapshot";
   const auto source_output = options.main_afl_output_dir.empty()
-                                 ? (options.dry_run ? config.target.input_dir : main_output_dir)
+                                 ? (options.dry_run ? config.target.input_dir : active_main_output_dir)
                                  : options.main_afl_output_dir;
   const auto snapshot = snapshot_corpus(source_output, snapshot_dir);
   append_line(events_path, std::string("{\"event\":\"corpus_snapshot\",\"snapshot\":") +
@@ -1102,7 +1591,15 @@ RunSummary run_mvp(const RunOptions& requested_options) {
   std::string static_context_json = "{}";
   std::filesystem::path static_dict_path;
   if (config.static_analysis.enabled) {
-    if (base_intelligence_json != "{}") {
+    if (!config.static_analysis.context_path.empty()) {
+      static_context_json = base_intelligence_json;
+      write_text_file(summary.run_dir / "static_context.json", static_context_json);
+      append_line(events_path,
+                  std::string("{\"event\":\"static_extractor_reused\","
+                              "\"source\":\"precomputed_context\","
+                              "\"context_size\":") +
+                      std::to_string(static_context_json.size()) + "}");
+    } else if (base_intelligence_json != "{}") {
       static_context_json = base_intelligence_json;
       write_text_file(summary.run_dir / "static_context.json", static_context_json);
       append_line(events_path,
@@ -1143,8 +1640,9 @@ RunSummary run_mvp(const RunOptions& requested_options) {
   const auto agent_memory = db.get_agent_memory(summary.run_id);
 
   // Merge plateau-specific context with base intelligence.
-  std::string combined_intel = base_intelligence_json;
-  if (static_context_json != "{}" && static_context_json != base_intelligence_json) {
+  std::string combined_intel = options.suppress_semantic_context ? "{}" : base_intelligence_json;
+  if (!options.suppress_semantic_context &&
+      static_context_json != "{}" && static_context_json != base_intelligence_json) {
     combined_intel = static_context_json;
   }
 
@@ -1153,13 +1651,11 @@ RunSummary run_mvp(const RunOptions& requested_options) {
       summary.plateau_id, blackboard,
       static_cast<uint32_t>(config.micro_campaign.budget_sec),
       format_few_shot_block());
-  configure_agent_tasks(tasks, config);
-  // Wall-clock cap: budget the agent block to roughly the reserve window
-  // we held back in the main loop, capped at 30 min. Prevents 8 sequential
-  // LLM calls from blowing past the SIGTERM cut-off.
-  const auto agent_deadline =
-      static_cast<uint64_t>(std::time(nullptr)) +
-      static_cast<uint64_t>(std::min(1800, std::max(60, config.afl.main_budget_sec / 10)));
+  configure_agent_tasks(tasks, config, options);
+  // Wall-clock cap: budget enough time for each sequential agent timeout
+  // plus the provider stagger, capped at 30 min. A fixed 10%-of-run cap
+  // skipped the latter half of the agent set on short GLM validation runs.
+  const auto agent_deadline = agent_block_deadline_unix_sec(tasks);
   auto decisions = run_agent_tasks(*gateway, summary.run_id, summary.plateau_id, tasks, agent_deadline);
   for (const auto& decision : decisions) {
     persist_agent_decision(db, summary, config, decision, 0.0, events_path);
@@ -1169,9 +1665,59 @@ RunSummary run_mvp(const RunOptions& requested_options) {
         static_cast<uint64_t>(decision.created_ts));
   }
 
+  if (options.direct_promote_without_microcampaign) {
+    const auto direct = select_direct_promotion_for_test(decisions);
+    if (direct) {
+      const auto direct_tokens =
+          extract_dictionary_tokens_from_proposal(direct->proposal_json);
+      summary.winner_status = WinnerStatus::kSelected;
+      summary.winner_intervention_id = direct->id;
+      summary.winner_campaign_id.clear();
+      summary.promoted_recipe_index = write_promoted_recipe_index(
+          summary.run_dir / "promoted_recipes", options, summary.run_id,
+          direct->id, direct->agent, direct_tokens);
+      append_line(events_path,
+                  std::string("{\"event\":\"ai_direct_promoted\",\"ts\":") +
+                      std::to_string(static_cast<uint64_t>(std::time(nullptr))) +
+                      ",\"source\":\"post_loop_agent\","
+                      "\"decision_id\":\"" +
+                      json_escape(direct->id) +
+                      "\",\"agent\":\"" +
+                      json_escape(direct->agent) +
+                      "\",\"token_count\":" +
+                      std::to_string(direct_tokens.size()) +
+                      ",\"recipe_index\":\"" +
+                      json_escape(summary.promoted_recipe_index.string()) + "\"}");
+    } else {
+      summary.winner_status = WinnerStatus::kNoCandidates;
+      append_line(events_path,
+                  std::string("{\"event\":\"ai_direct_no_candidate\",\"ts\":") +
+                      std::to_string(static_cast<uint64_t>(std::time(nullptr))) +
+                      ",\"source\":\"post_loop_agent\"}");
+    }
+
+    std::vector<MicroResult> micro_results = layered_micro_results;
+    write_report(summary, config, main_samples, micro_results, decisions);
+    const auto done = static_cast<uint64_t>(std::time(nullptr));
+    db.finish_campaign(summary.main_campaign_id, done, "completed", "completed");
+    RunLlmTotals totals;
+    totals.calls = summary.llm_calls;
+    totals.failed_calls = summary.llm_failed_calls;
+    totals.input_tokens = summary.llm_input_tokens;
+    totals.output_tokens = summary.llm_output_tokens;
+    totals.total_latency_ms = summary.llm_total_latency_ms;
+    db.finish_run(summary.run_id, done, "completed",
+                  to_string(summary.winner_status), totals);
+    return summary;
+  }
+
   const auto specs = plan_micro_campaigns(
       config, summary.plateau_id, snapshot_dir, summary.run_dir / "micro", options.dry_run, &db, summary.run_id);
-  prepare_micro_campaigns(specs);
+  std::vector<std::string> micro_tokens;
+  for (const auto& d : decisions) {
+    micro_tokens.insert(micro_tokens.end(), d.extracted_tokens.begin(), d.extracted_tokens.end());
+  }
+  prepare_micro_campaigns(specs, micro_tokens);
   summary.micro_campaign_count = specs.size();
 
   if (!options.dry_run && summary.main_pid > 0) {
@@ -1183,18 +1729,34 @@ RunSummary run_mvp(const RunOptions& requested_options) {
     summary.main_pid = -1;
   }
 
-  std::vector<MicroResult> micro_results;
+  std::vector<MicroResult> micro_results = layered_micro_results;
+  // Track failed micro campaigns for exclusion from winner selection. This
+  // set is populated in the single-threaded sequential loop below (line 1219)
+  // and read during winner selection (line 1313), so no synchronization needed.
   std::set<std::string> failed_micro_campaigns;
-  const auto parent_stats = main_samples.back();
+  // Micro campaigns start fresh from a corpus snapshot with their own AFL++
+  // instance. The main `parent_stats` (from the full run) has accumulated
+  // thousands of edges, making all micro deltas saturate to zero (new_edges = 0).
+  // Instead, use a zero-baseline synthetic parent so we measure absolute
+  // edges/paths each micro campaign found — enabling meaningful relative
+  // comparison between competing intervention strategies.
+  AflStats micro_parent_baseline;  // Zero-initialized: all counters = 0
+  const auto parent_stats = micro_parent_baseline;
   // Resolve reward mode for this run (CLI / ablation override).
-  RewardMode reward_mode = RewardMode::kEdgeWeighted;
-  if (options.reward_mode == "edges_only") {
-    reward_mode = RewardMode::kEdgesOnly;
-  } else if (options.reward_mode == "paths_only") {
-    reward_mode = RewardMode::kPathsOnly;
-  } else if (options.reward_mode == "random") {
-    reward_mode = RewardMode::kRandom;
-  }
+  const RewardMode reward_mode = reward_mode_from_string(options.reward_mode);
+  struct MicroProcessInfo {
+    std::size_t index;
+    uint64_t campaign_start_ts;
+    int pid = -1;
+    std::string spawn_error;
+    bool is_dry_run = false;
+    AflStats dry_run_stats;
+  };
+
+  std::vector<MicroProcessInfo> launched_micros;
+  launched_micros.reserve(specs.size());
+
+  // Loop 1: Concurrently spawn all micro campaigns
   for (std::size_t i = 0; i < specs.size(); ++i) {
     const auto& spec = specs[i];
     const auto campaign_start_ts = static_cast<uint64_t>(std::time(nullptr));
@@ -1202,13 +1764,12 @@ RunSummary run_mvp(const RunOptions& requested_options) {
                        spec.intervention_id, spec.output_dir, campaign_start_ts, spec.budget_sec,
                        options.dry_run ? "dry_run" : "running");
 
-    AflStats micro_stats;
-    std::string termination_reason = "completed";
+    MicroProcessInfo info;
+    info.index = i;
+    info.campaign_start_ts = campaign_start_ts;
+    info.is_dry_run = options.dry_run;
+
     if (options.dry_run) {
-      // In dry-run mode the controller fakes AFL execution by reading
-      // pre-recorded stats files. If neither micro nor main stats paths
-      // were provided we have nothing to read — fail loudly rather
-      // than calling .back() on an empty vector (which is UB).
       if (options.micro_stats_paths.empty() && options.main_stats_paths.empty()) {
         throw std::runtime_error(
             "dry_run requires --stats (main) or --micro-stats; both are empty");
@@ -1216,26 +1777,55 @@ RunSummary run_mvp(const RunOptions& requested_options) {
       const auto stats_path = options.micro_stats_paths.empty()
                                   ? options.main_stats_paths.back()
                                   : options.micro_stats_paths[std::min(i, options.micro_stats_paths.size() - 1)];
-      micro_stats = read_stats_or_throw(stats_path);
-      termination_reason = "dry_run";
+      info.dry_run_stats = read_stats_or_throw(stats_path);
     } else {
       const auto micro_launch = build_micro_afl_spec(config, spec, static_dict_path);
       write_text_file(spec.output_dir / "launch.sh", "#!/usr/bin/env sh\n" + shell_preview(micro_launch) + "\n");
       const auto process = spawn_process(micro_launch.afl_fuzz.string(), micro_launch.argv, micro_launch.env);
       if (process.pid > 0) {
+        info.pid = process.pid;
         append_line(events_path, std::string("{\"event\":\"micro_afl_launched\",\"pid\":") +
                                      std::to_string(process.pid) + ",\"campaign_id\":\"" + spec.id + "\"}");
-        const auto status = wait_process(process.pid, spec.budget_sec * 1000 + 5000);
+      } else {
+        info.pid = -1;
+        info.spawn_error = process.error;
+      }
+    }
+    launched_micros.push_back(info);
+  }
+
+  // Loop 2: Sequentially wait, parse stats, and evaluate results
+  for (const auto& info : launched_micros) {
+    const auto& spec = specs[info.index];
+    AflStats micro_stats;
+    std::string termination_reason = "completed";
+    bool have_micro_stats = false;
+
+    if (info.is_dry_run) {
+      micro_stats = info.dry_run_stats;
+      termination_reason = "dry_run";
+      have_micro_stats = true;
+    } else {
+      if (info.pid > 0) {
+        // Dynamically calculate remaining budget timeout from spawning time
+        const uint64_t now_ts = static_cast<uint64_t>(std::time(nullptr));
+        const int elapsed_sec = static_cast<int>(now_ts - info.campaign_start_ts);
+        const int max_allowed_sec = spec.budget_sec + 5;
+        const int remaining_ms = std::max(0, (max_allowed_sec - elapsed_sec) * 1000);
+
+        const auto status = wait_process(info.pid, remaining_ms);
         if (!status.exited && !status.signaled) {
-          stop_afl_process(process.pid, 3000);
+          stop_afl_process(info.pid, 3000);
           termination_reason = "timeout_killed";
         } else if (status.signaled) {
           termination_reason = "signaled";
         }
+
         std::string error;
         auto live_stats = parse_fuzzer_stats(spec.output_dir / "default" / "fuzzer_stats", &error);
         if (live_stats) {
           micro_stats = *live_stats;
+          have_micro_stats = true;
         } else {
           const auto fail_ts = static_cast<uint64_t>(std::time(nullptr));
           db.finish_campaign(spec.id, fail_ts, "failed");
@@ -1244,10 +1834,9 @@ RunSummary run_mvp(const RunOptions& requested_options) {
                       std::string("{\"event\":\"micro_afl_failed\",\"campaign_id\":\"") +
                           json_escape(spec.id) + "\",\"intervention_id\":\"" +
                           json_escape(spec.intervention_id) + "\",\"start_ts\":" +
-                          std::to_string(campaign_start_ts) + ",\"end_ts\":" +
+                          std::to_string(info.campaign_start_ts) + ",\"end_ts\":" +
                           std::to_string(fail_ts) + ",\"reason\":\"stats_unreadable\",\"error\":\"" +
                           json_escape(error) + "\"}");
-          micro_stats = parent_stats; // fallback if failed to start/write
           termination_reason = "stats_unreadable";
         }
       } else {
@@ -1258,81 +1847,65 @@ RunSummary run_mvp(const RunOptions& requested_options) {
                     std::string("{\"event\":\"micro_afl_spawn_failed\",\"campaign_id\":\"") +
                         json_escape(spec.id) + "\",\"intervention_id\":\"" +
                         json_escape(spec.intervention_id) + "\",\"start_ts\":" +
-                        std::to_string(campaign_start_ts) + ",\"end_ts\":" +
+                        std::to_string(info.campaign_start_ts) + ",\"end_ts\":" +
                         std::to_string(fail_ts) + ",\"reason\":\"spawn_failed\",\"error\":\"" +
-                        json_escape(process.error) + "\"}");
-        micro_stats = parent_stats;
+                        json_escape(info.spawn_error) + "\"}");
         termination_reason = "spawn_failed";
       }
     }
-    auto result = evaluate_micro_result(spec.intervention_id, spec.id, parent_stats,
-                                        micro_stats, reward_mode);
+
     const auto campaign_end_ts = static_cast<uint64_t>(std::time(nullptr));
     append_line(events_path, std::string("{\"event\":\"micro_campaign_completed\",\"campaign_id\":\"") +
                                  json_escape(spec.id) + "\",\"start_ts\":" +
-                                 std::to_string(campaign_start_ts) + ",\"end_ts\":" +
+                                 std::to_string(info.campaign_start_ts) + ",\"end_ts\":" +
                                  std::to_string(campaign_end_ts) + ",\"duration_sec\":" +
-                                 std::to_string(campaign_end_ts - campaign_start_ts) +
+                                 std::to_string(campaign_end_ts - info.campaign_start_ts) +
                                  ",\"termination_reason\":\"" + termination_reason + "\"}");
+    if (!have_micro_stats) {
+      continue;
+    }
+    auto result = evaluate_micro_result(spec.intervention_id, spec.id, parent_stats,
+                                        micro_stats, reward_mode);
+    if (!should_persist_micro_result(result, failed_micro_campaigns)) {
+      continue;
+    }
     micro_results.push_back(result);
   }
 
-  // Winner selection with explicit status — distinguishes "no candidates"
-  // from "all failed" from "selected" so downstream analysis doesn't
-  // conflate them.
-  auto winner_it = micro_results.end();
-  uint64_t valid_results = 0;
-  for (auto it = micro_results.begin(); it != micro_results.end(); ++it) {
-    if (failed_micro_campaigns.find(it->campaign_id) != failed_micro_campaigns.end()) {
-      continue;
-    }
-    ++valid_results;
-    if (winner_it == micro_results.end() || it->reward > winner_it->reward) {
-      winner_it = it;
-    }
-  }
+  // Winner selection with explicit status. Stage-0 default_control is
+  // the control arm: an agent campaign only wins if it beats that
+  // baseline by a meaningful margin. This prevents "promoting" the
+  // control campaign, which is indistinguishable from no useful agent.
+  const auto winner_selection = select_micro_winner_against_control(
+      micro_results, specs, failed_micro_campaigns);
   summary.micro_campaigns_failed = failed_micro_campaigns.size();
   if (micro_results.empty()) {
     summary.winner_status = WinnerStatus::kNoCandidates;
-  } else if (winner_it == micro_results.end()) {
+  } else if (!winner_selection.has_valid_results) {
     summary.winner_status = WinnerStatus::kAllFailed;
+  } else if (winner_selection.selected &&
+             winner_selection.result_index < micro_results.size()) {
+    auto& winner = micro_results[winner_selection.result_index];
+    winner.promoted = true;
+    summary.winner_intervention_id = winner.intervention_id;
+    summary.winner_campaign_id = winner.campaign_id;
+    summary.winner_reward = winner_selection.improvement_over_control;
+    summary.winner_status = WinnerStatus::kSelected;
   } else {
-    // Naive significance check: require winner to beat the second-best by
-    // at least 5% of its own reward, or by an absolute small margin when
-    // reward magnitudes are tiny. Replaces the previous raw-comparison
-    // behaviour that promoted on any positive delta (which is statistical
-    // noise). For full significance use --micro-campaign-repeats >= 3 and
-    // run the offline Mann-Whitney pass.
-    double second_best = 0.0;
-    bool have_second = false;
-    for (const auto& r : micro_results) {
-      if (failed_micro_campaigns.count(r.campaign_id)) continue;
-      if (&r == &(*winner_it)) continue;
-      if (!have_second || r.reward > second_best) {
-        second_best = r.reward;
-        have_second = true;
-      }
-    }
-    const double abs_margin = 0.1;       // lowered from 0.5: large targets need 120s+ micro budgets to show edge delta
-    const double rel_margin = 0.05;      // 5% relative margin
-    const bool significant = !have_second ||
-        (winner_it->reward - second_best) >
-            std::max(abs_margin, std::abs(winner_it->reward) * rel_margin);
-    if (significant && winner_it->reward > 0.0) {
-      winner_it->promoted = true;
-      summary.winner_intervention_id = winner_it->intervention_id;
-      summary.winner_campaign_id = winner_it->campaign_id;
-      summary.winner_reward = winner_it->reward;
-      summary.winner_status = WinnerStatus::kSelected;
-    } else {
-      summary.winner_status = WinnerStatus::kNoSignificance;
-    }
+    summary.winner_status = WinnerStatus::kNoSignificance;
   }
-  append_line(events_path, std::string("{\"event\":\"winner_decided\",\"status\":\"") +
+  append_line(events_path, std::string("{\"event\":\"winner_decided\",\"ts\":") +
+                               std::to_string(static_cast<uint64_t>(std::time(nullptr))) +
+                               ",\"status\":\"" +
                                to_string(summary.winner_status) +
-                               "\",\"valid_results\":" + std::to_string(valid_results) +
+                               "\",\"valid_results\":" +
+                               std::to_string(winner_selection.valid_results) +
                                ",\"failed_results\":" +
                                std::to_string(summary.micro_campaigns_failed) +
+                               ",\"control_reward\":" +
+                               std::to_string(winner_selection.control_reward) +
+                               ",\"improvement_over_control\":" +
+                               std::to_string(winner_selection.improvement_over_control) +
                                ",\"winner_reward\":" +
                                std::to_string(summary.winner_reward) + "}");
 
@@ -1381,28 +1954,37 @@ RunSummary run_mvp(const RunOptions& requested_options) {
     // what makes the ablation actually compare "agent recipes vs
     // random recipes" rather than silently fall through to the agent
     // strategy (which was the bug noted in the post-fix review).
-    SeedMutationStrategy promoted;
-    if (options.recipe_source == "random") {
-      // Seed the RNG from the run_id hash so the same run reproduces
-      // the same recipe; different runs differ.
-      uint64_t seed_value = std::hash<std::string>{}(summary.run_id);
-      promoted = make_random_recipe_strategy(
-          seed_value, {"PROMOTED", summary.winner_intervention_id, "FUZZ", "TOKEN"});
-    } else {
-      promoted = make_default_dictionary_strategy(
-          {"PROMOTED", summary.winner_intervention_id, "FUZZ", "TOKEN"});
+    auto all_proposals = db.get_recent_decisions(summary.run_id, 1000);
+    std::vector<std::string> all_tokens;
+    std::set<std::string> unique_tokens;
+    std::string source_agent = "AgentCouncil";
+    for (const auto& prop : all_proposals) {
+      if (prop.find(summary.winner_intervention_id) != std::string::npos) {
+        source_agent = "ValidatedAgentProposal";
+      }
+      auto tokens = extract_dictionary_tokens_from_proposal(prop);
+      for (const auto& t : tokens) {
+        if (unique_tokens.find(t) == unique_tokens.end()) {
+          unique_tokens.insert(t);
+          all_tokens.push_back(t);
+        }
+      }
     }
-    promoted.id = make_id("strategy_promoted");
-    RecipeStore promoted_store(summary.run_dir / "promoted_recipes");
-    summary.promoted_recipe_index = promoted_store.write_compact_recipes({promoted});
-    append_line(events_path, std::string("{\"event\":\"promotion\",\"winner_intervention_id\":\"") +
+    summary.promoted_recipe_index = write_promoted_recipe_index(
+        summary.run_dir / "promoted_recipes", options, summary.run_id,
+        summary.winner_intervention_id, source_agent, all_tokens);
+    append_line(events_path, std::string("{\"event\":\"promotion\",\"ts\":") +
+                                 std::to_string(static_cast<uint64_t>(std::time(nullptr))) +
+                                 ",\"winner_intervention_id\":\"" +
                                  json_escape(summary.winner_intervention_id) +
                                  "\",\"recipe_source\":\"" +
                                  json_escape(options.recipe_source) +
                                  "\",\"recipe_index\":\"" +
                                  json_escape(summary.promoted_recipe_index.string()) + "\"}");
   } else {
-    append_line(events_path, "{\"event\":\"promotion_skipped\",\"reason\":\"no_successful_micro_campaign\"}");
+    append_line(events_path, std::string("{\"event\":\"promotion_skipped\",\"ts\":") +
+                                 std::to_string(static_cast<uint64_t>(std::time(nullptr))) +
+                                 ",\"reason\":\"no_successful_micro_campaign\"}");
   }
 
   write_report(summary, config, main_samples, micro_results, decisions);

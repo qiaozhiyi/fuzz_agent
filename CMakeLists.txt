@@ -29,6 +29,7 @@ add_library(fuzzpilot_core STATIC
   src/telemetry/mutation_events.cpp
   src/plateau/detector.cpp
   src/mutation/strategy.cpp
+  src/mutation/token_extractor.cpp
   src/mutation/recipe_store.cpp
   src/mutation/recipe_reward_tracker.cpp
   src/mutation/operator_sampler.cpp
@@ -76,12 +77,33 @@ target_link_libraries(fuzzpilot_process_capture_smoke PRIVATE fuzzpilot_core)
 add_executable(fuzzpilot_json_utils_smoke tools/json_utils_smoke.cpp)
 target_link_libraries(fuzzpilot_json_utils_smoke PRIVATE fuzzpilot_core)
 
+add_executable(fuzzpilot_token_extractor_smoke tools/token_extractor_smoke.cpp)
+target_link_libraries(fuzzpilot_token_extractor_smoke PRIVATE fuzzpilot_core)
+
+add_executable(fuzzpilot_model_gateway_smoke tools/model_gateway_smoke.cpp)
+target_link_libraries(fuzzpilot_model_gateway_smoke PRIVATE fuzzpilot_core)
+
+add_executable(fuzzpilot_spiral_micro_smoke tools/spiral_micro_smoke.cpp)
+target_link_libraries(fuzzpilot_spiral_micro_smoke PRIVATE fuzzpilot_core)
+
+add_executable(fuzzpilot_agent_runtime_smoke tools/agent_runtime_smoke.cpp)
+target_link_libraries(fuzzpilot_agent_runtime_smoke PRIVATE fuzzpilot_core)
+
 enable_testing()
 add_test(NAME fuzzpilot_version COMMAND fuzzpilot --version)
 add_test(NAME fuzzpilot_process_capture_smoke COMMAND fuzzpilot_process_capture_smoke)
 add_test(NAME fuzzpilot_json_utils_smoke COMMAND fuzzpilot_json_utils_smoke)
-add_test(NAME fuzzpilot_check_example
-  COMMAND fuzzpilot check-config --config ${CMAKE_CURRENT_SOURCE_DIR}/configs/examples/libpng.yaml)
+add_test(NAME fuzzpilot_token_extractor_smoke COMMAND fuzzpilot_token_extractor_smoke)
+add_test(NAME fuzzpilot_model_gateway_smoke COMMAND fuzzpilot_model_gateway_smoke)
+add_test(NAME fuzzpilot_spiral_micro_smoke COMMAND fuzzpilot_spiral_micro_smoke)
+set_tests_properties(fuzzpilot_spiral_micro_smoke PROPERTIES
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+add_test(NAME fuzzpilot_agent_runtime_smoke COMMAND fuzzpilot_agent_runtime_smoke)
+add_test(NAME fuzzpilot_reject_bad_glm_model
+  COMMAND fuzzpilot check-config --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/config_bad_glm_model.yaml)
+set_tests_properties(fuzzpilot_reject_bad_glm_model PROPERTIES WILL_FAIL TRUE)
+add_test(NAME fuzzpilot_check_libxml2_glm
+  COMMAND fuzzpilot check-config --config ${CMAKE_CURRENT_SOURCE_DIR}/experiments/targets/libxml2/config_glm.yaml)
 add_test(NAME fuzzpilot_parse_stats
   COMMAND fuzzpilot parse-stats --stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fuzzer_stats_newer)
 add_test(NAME fuzzpilot_detect_plateau
@@ -143,7 +165,7 @@ add_test(NAME fuzzpilot_m3_snapshot_corpus
 set_tests_properties(fuzzpilot_m3_snapshot_corpus PROPERTIES FIXTURES_SETUP m3_snapshot)
 add_test(NAME fuzzpilot_m3_plan_micro
   COMMAND fuzzpilot plan-micro-campaigns
-    --config ${CMAKE_CURRENT_SOURCE_DIR}/configs/examples/libpng.yaml
+    --config ${CMAKE_CURRENT_SOURCE_DIR}/experiments/targets/libxml2/config_glm.yaml
     --snapshot-dir ${CMAKE_CURRENT_BINARY_DIR}/smoke/m3_snapshot
     --work-dir ${CMAKE_CURRENT_BINARY_DIR}/smoke/m3_micro
     --plateau-id plateau_m3_smoke)
@@ -165,8 +187,7 @@ add_test(NAME fuzzpilot_m4_run_model_agents
     --blackboard-json "{\"plateau\":{\"reason\":\"no_new_paths\"}}")
 add_test(NAME fuzzpilot_m6_matrix
   COMMAND fuzzpilot m6-matrix
-    --config ${CMAKE_CURRENT_SOURCE_DIR}/experiments/targets/cjson/config.yaml
-    --config ${CMAKE_CURRENT_SOURCE_DIR}/experiments/targets/libpng/config.yaml
+    --config ${CMAKE_CURRENT_SOURCE_DIR}/experiments/targets/libxml2/config_glm.yaml
     --out-dir ${CMAKE_CURRENT_BINARY_DIR}/smoke/m6_matrix
     --work-dir ${CMAKE_CURRENT_BINARY_DIR}/smoke/m6_work
     --repeats 1
@@ -174,7 +195,7 @@ add_test(NAME fuzzpilot_m6_matrix
     --micro-budget-sec 120)
 add_test(NAME fuzzpilot_mvp_run_dry
   COMMAND fuzzpilot run
-    --config ${CMAKE_CURRENT_SOURCE_DIR}/configs/examples/libpng.yaml
+    --config ${CMAKE_CURRENT_SOURCE_DIR}/experiments/targets/libxml2/config_glm.yaml
     --work-dir ${CMAKE_CURRENT_BINARY_DIR}/smoke/mvp_run
     --schema ${CMAKE_CURRENT_SOURCE_DIR}/db/schema.sql
     --afl-output-dir ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/afl_out
@@ -184,4 +205,6 @@ add_test(NAME fuzzpilot_mvp_run_dry
     --micro-stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fuzzer_stats_micro_dictionary
     --micro-stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fuzzer_stats_micro_seed_focus
     --micro-stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fuzzer_stats_micro_winner
-    --provider fake)
+    --provider fake
+    --dry-run)
+set_tests_properties(fuzzpilot_mvp_run_dry PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")

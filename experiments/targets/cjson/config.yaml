@@ -36,15 +36,17 @@ mutation_strategy:
   custom_mutator_path: "./build/mutators/fuzzpilot/libfuzzpilot_mutator"
 
 static_analysis:
-  enabled: false
+  enabled: true
   backend: "ghidra"
   python_bin: "python3"
   ghidra_home: "/opt/ghidra"
   extractor_script: "scripts/ghidra/FuzzPilotGhidraExtract.java"
+  context_path: "experiments/targets/cjson/precomputed_static_context.json"
   timeout_sec: 120
 
 model_api:
-  provider: "openai-compatible"
-  endpoint: "https://api.deepseek.com/chat/completions"
-  model: "deepseek-chat"
+  provider: "openai_compatible"
+  endpoint: "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+  model: "glm-4-flash"
   api_key_env: "FUZZPILOT_MODEL_API_KEY"
+  disable_thinking: true

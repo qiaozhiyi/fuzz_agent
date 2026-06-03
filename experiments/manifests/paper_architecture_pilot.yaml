@@ -1,0 +1,57 @@
+paper: "fuzzpilot_architecture_pilot"
+version: 1
+
+defaults:
+  out_root: "results/fuzzpilot_architecture_pilot/runs"
+  metadata_script: "scripts/capture_run_metadata.sh"
+  llm_parallel: 1
+  non_llm_parallel: 3
+
+targets:
+  - id: libxml2
+    name: libxml2_parser
+    config: "experiments/targets/libxml2/config_glm.yaml"
+
+modes:
+  - baseline-afl
+  - rule-only
+  - full-agent
+  - ai-direct
+  - no-static-analysis
+  - no-semantic-context
+  - single-agent-coordinator
+  - single-agent-dictionary
+  - no-mutator
+
+stages:
+  S:
+    description: "infrastructure drill: short non-paper subset before Stage A"
+    acceptance_profile: infrastructure
+    repeats: 1
+    budget_sec: 300
+    modes:
+      - baseline-afl
+      - full-agent
+      - ai-direct
+      - single-agent-coordinator
+  A:
+    description: "smoke: one short run per target/mode cell"
+    repeats: 1
+    budget_sec: 1200
+  B:
+    description: "pilot: three repeats per cell"
+    repeats: 3
+    budget_sec: 7200
+  C:
+    description: "paper pilot: five repeats per cell"
+    repeats: 5
+    budget_sec: 14400
+
+acceptance:
+  min_schema_valid_rate: 0.8
+  min_full_agent_throughput_ratio: 0.70
+  min_full_agent_decisions: 1
+  min_full_agent_plateau_events: 1
+  forbidden_secret_patterns:
+    - "[0-9a-fA-F]{32}\\.[A-Za-z0-9_-]{12,}"
+    - "Bearer[[:space:]]+[A-Za-z0-9._-]{12,}"

@@ -92,8 +92,7 @@ class JsonParser {
     }
     skip_space();
     if (consume('}')) {
-      skip_space();
-      return pos_ == text_.size();
+      return true;  // Empty object is valid
     }
 
     while (true) {
@@ -111,8 +110,7 @@ class JsonParser {
       }
       skip_space();
       if (consume('}')) {
-        skip_space();
-        return pos_ == text_.size();
+        return true;  // Successfully parsed object
       }
       if (!consume(',')) {
         return false;

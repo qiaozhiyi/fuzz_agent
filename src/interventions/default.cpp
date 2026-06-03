@@ -14,6 +14,12 @@ std::vector<Intervention> default_v0_interventions(int budget_sec) {
           .hypothesis = "control campaign for plateau validation",
           .action = "default_control",
           .params = {{"budget_sec", std::to_string(budget_sec)}},
+          .tokens = {},
+          .source_decision_id = "",
+          .params_json = "{}",
+          .spiral_stage = 0,
+          .priority = 1.0,
+          .depends_on_intervention_id = "",
           .expected_signal = "new_edges",
           .risk = "low",
           .reproducible = true,
@@ -24,6 +30,12 @@ std::vector<Intervention> default_v0_interventions(int budget_sec) {
           .hypothesis = "plateau may be caused by missing magic bytes or parser keywords",
           .action = "dictionary_probe",
           .params = {{"budget_sec", std::to_string(budget_sec)}},
+          .tokens = {},
+          .source_decision_id = "",
+          .params_json = "{}",
+          .spiral_stage = 1,
+          .priority = 0.9,
+          .depends_on_intervention_id = "",
           .expected_signal = "new_edges",
           .risk = "low",
           .reproducible = true,
@@ -34,6 +46,12 @@ std::vector<Intervention> default_v0_interventions(int budget_sec) {
           .hypothesis = "coverage may improve by focusing energy on recent or favored seeds",
           .action = "seed_focus_probe",
           .params = {{"budget_sec", std::to_string(budget_sec)}},
+          .tokens = {},
+          .source_decision_id = "",
+          .params_json = "{}",
+          .spiral_stage = 2,
+          .priority = 0.8,
+          .depends_on_intervention_id = "",
           .expected_signal = "new_edges",
           .risk = "medium",
           .reproducible = true,
@@ -44,6 +62,12 @@ std::vector<Intervention> default_v0_interventions(int budget_sec) {
           .hypothesis = "model-proposed per-seed mutation recipes may unlock narrow parser states",
           .action = "per_seed_recipe_probe",
           .params = {{"budget_sec", std::to_string(budget_sec)}},
+          .tokens = {},
+          .source_decision_id = "",
+          .params_json = "{}",
+          .spiral_stage = 3,
+          .priority = 0.7,
+          .depends_on_intervention_id = "",
           .expected_signal = "new_edges",
           .risk = "medium",
           .reproducible = true,
@@ -67,6 +91,9 @@ std::string intervention_json(const Intervention& intervention) {
   }
   out << "},";
   out << "\"expected_signal\":\"" << intervention.expected_signal << "\",";
+  out << "\"spiral_stage\":" << intervention.spiral_stage << ",";
+  out << "\"priority\":" << intervention.priority << ",";
+  out << "\"depends_on_intervention_id\":\"" << intervention.depends_on_intervention_id << "\",";
   out << "\"risk\":\"" << intervention.risk << "\",";
   out << "\"reproducible\":" << (intervention.reproducible ? "true" : "false");
   out << "}";

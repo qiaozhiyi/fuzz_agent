@@ -1,0 +1,27 @@
+project: "bad_glm_model"
+target:
+  name: "fixture"
+  binary: "tests/fixtures/bin"
+  input_dir: "tests/fixtures"
+  args: ["@@"]
+
+afl:
+  main_budget_sec: 120
+  plateau_window_sec: 30
+
+micro_campaign:
+  enabled: true
+  budget_sec: 10
+
+mutation_strategy:
+  enabled: false
+
+static_analysis:
+  enabled: false
+
+model_api:
+  enabled: true
+  provider: "openai_compatible"
+  endpoint: "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+  model: "glm-4.7-flash"
+  api_key_env: "FUZZPILOT_MODEL_API_KEY"

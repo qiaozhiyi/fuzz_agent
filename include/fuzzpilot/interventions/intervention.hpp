@@ -12,6 +12,12 @@ struct Intervention {
   std::string hypothesis;
   std::string action;
   std::map<std::string, std::string> params;
+  std::vector<std::string> tokens;
+  std::string source_decision_id;
+  std::string params_json;
+  int spiral_stage = 0;
+  double priority = 0.0;
+  std::string depends_on_intervention_id;
   std::string expected_signal = "new_edges";
   std::string risk = "low";
   bool reproducible = true;
@@ -21,4 +27,3 @@ std::vector<Intervention> default_v0_interventions(int budget_sec);
 std::string intervention_json(const Intervention& intervention);
 
 }  // namespace fuzzpilot
-

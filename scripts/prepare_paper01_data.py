@@ -233,6 +233,44 @@ def _read_target_from_metadata(run_dir: Path, fallback: str) -> str:
     return fallback
 
 
+FLAT_RUN_ID_MODE_HINTS = sorted(
+    {
+        *PAPER_MODE_BY_ABLATION.keys(),
+        "controller-only",
+        "no-microcampaign",
+        "no-plateau",
+    },
+    key=len,
+    reverse=True,
+)
+
+
+def _parse_flat_run_id(run_id: str) -> tuple[str, str, str] | None:
+    prefix, sep, repeat_suffix = run_id.rpartition("_r")
+    if not sep or not repeat_suffix.isdigit():
+        return None
+
+    target_mode_prefix = prefix
+    mode = ""
+    for candidate in FLAT_RUN_ID_MODE_HINTS:
+        mode_suffix = f"_{candidate}"
+        if prefix.endswith(mode_suffix):
+            target_mode_prefix = prefix[: -len(mode_suffix)]
+            mode = candidate
+            break
+
+    if not mode:
+        target_mode_prefix, sep, mode = prefix.rpartition("_")
+        if not sep:
+            return None
+
+    prefix_parts = target_mode_prefix.split("_", 2)
+    if len(prefix_parts) != 3:
+        return None
+
+    return prefix_parts[2], mode, parse_repeat(f"r{repeat_suffix}")
+
+
 def _record_from_run_dir(run_dir: Path, target: str, mode: str, repeat: str, run_id: str) -> RunRecord:
     record = RunRecord(
         target=target,
@@ -285,12 +323,10 @@ def discover_runs(run_root: Path) -> list[RunRecord]:
     for coverage_path in sorted(run_root.glob("*/coverage.csv")):
         run_dir = coverage_path.parent
         run_id = run_dir.name
-        parts = run_id.split("_")
-        if len(parts) < 5:
+        parsed = _parse_flat_run_id(run_id)
+        if parsed is None:
             continue  # not a p1_<exp>_<target>_<mode>_r<NN> id; skip
-        target_guess = parts[2]
-        mode = parts[3]
-        repeat = parse_repeat(parts[4])
+        target_guess, mode, repeat = parsed
         target = _read_target_from_metadata(run_dir, target_guess)
         records.append(_record_from_run_dir(run_dir, target, mode, repeat, run_id))
         seen_run_ids.add(run_id)

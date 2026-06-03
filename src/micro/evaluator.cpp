@@ -1,7 +1,11 @@
 #include "fuzzpilot/micro/evaluator.hpp"
 
 #include "fuzzpilot/ids.hpp"
+#include "fuzzpilot/micro/manager.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <map>
 #include <random>
 #include <sstream>
 
@@ -75,6 +79,89 @@ MicroResult evaluate_micro_result(const std::string& intervention_id,
     }
   }
   return result;
+}
+
+MicroWinnerSelection select_micro_winner_against_control(
+    const std::vector<MicroResult>& results,
+    const std::vector<MicroCampaignSpec>& specs,
+    const std::set<std::string>& failed_campaign_ids,
+    double abs_margin,
+    double rel_margin) {
+  MicroWinnerSelection selection;
+  if (results.empty()) {
+    return selection;
+  }
+
+  std::map<std::string, std::string> action_by_campaign;
+  for (const auto& spec : specs) {
+    action_by_campaign[spec.id] = spec.name;
+  }
+
+  bool have_control = false;
+  for (const auto& result : results) {
+    if (failed_campaign_ids.count(result.campaign_id) > 0) {
+      continue;
+    }
+    ++selection.valid_results;
+    selection.has_valid_results = true;
+    const auto action_it = action_by_campaign.find(result.campaign_id);
+    if (action_it != action_by_campaign.end() &&
+        action_it->second == "default_control") {
+      if (!have_control || result.reward > selection.control_reward) {
+        selection.control_reward = result.reward;
+        have_control = true;
+      }
+    }
+  }
+
+  if (!selection.has_valid_results) {
+    return selection;
+  }
+
+  bool have_winner = false;
+  double second_best_reward = have_control ? selection.control_reward : 0.0;
+  for (std::size_t i = 0; i < results.size(); ++i) {
+    const auto& result = results[i];
+    if (failed_campaign_ids.count(result.campaign_id) > 0) {
+      continue;
+    }
+    const auto action_it = action_by_campaign.find(result.campaign_id);
+    const bool is_control = action_it != action_by_campaign.end() &&
+                            action_it->second == "default_control";
+    if (is_control) {
+      continue;
+    }
+    if (!have_winner || result.reward > selection.winner_reward) {
+      if (have_winner) {
+        second_best_reward = std::max(second_best_reward, selection.winner_reward);
+      }
+      selection.result_index = i;
+      selection.winner_reward = result.reward;
+      have_winner = true;
+    } else {
+      second_best_reward = std::max(second_best_reward, result.reward);
+    }
+  }
+
+  if (!have_winner) {
+    return selection;
+  }
+
+  selection.improvement_over_control =
+      selection.winner_reward - selection.control_reward;
+  const double control_margin =
+      std::max(abs_margin, std::abs(selection.control_reward) * rel_margin);
+  const double peer_margin =
+      std::max(abs_margin, std::abs(selection.winner_reward) * rel_margin);
+  selection.selected =
+      selection.improvement_over_control > control_margin &&
+      (selection.winner_reward - second_best_reward) > peer_margin;
+  return selection;
+}
+
+bool should_persist_micro_result(const MicroResult& result,
+                                 const std::set<std::string>& failed_campaign_ids) {
+  return failed_campaign_ids.count(result.campaign_id) == 0;
 }
 
 std::string micro_result_json(const MicroResult& result) {

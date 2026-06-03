@@ -1,7 +1,10 @@
 #pragma once
 
+#include "fuzzpilot/agents/agent_runtime.hpp"
+
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,6 +33,8 @@ struct RunOptions {
   bool disable_plateau_detector = false;
   bool disable_microcampaign = false;
   bool disable_static_analysis = false;
+  bool direct_promote_without_microcampaign = false;
+  bool suppress_semantic_context = false;
   std::string reward_mode = "edge_weighted";   // edge_weighted | edges_only | paths_only | random
   std::string recipe_source = "agent";          // agent | rule | random | none
   uint64_t micro_campaign_repeats = 1;          // statistical confidence per intervention
@@ -89,6 +94,8 @@ struct RunSummary {
 };
 
 RunSummary run_mvp(const RunOptions& options);
+std::optional<AgentDecision> select_direct_promotion_for_test(
+    const std::vector<AgentDecision>& decisions);
 std::string run_summary_json(const RunSummary& summary);
 
 }  // namespace fuzzpilot

@@ -1,0 +1,88 @@
+{
+  "binary": "cjson_fuzzer",
+  "binary_size": 227528,
+  "total_unique_tokens": 40,
+  "top256_written": 40,
+  "top20_samples": [
+    {
+      "token": "null",
+      "count": 1
+    },
+    {
+      "token": "false",
+      "count": 1
+    },
+    {
+      "token": "true",
+      "count": 1
+    },
+    {
+      "token": "%1.15g",
+      "count": 1
+    },
+    {
+      "token": "%1.17g",
+      "count": 1
+    },
+    {
+      "token": "u%04x",
+      "count": 1
+    },
+    {
+      "token": "%s/error.txt",
+      "count": 1
+    },
+    {
+      "token": "File %s, line %d: Error(%s): %s",
+      "count": 1
+    },
+    {
+      "token": "DEBUG: debug enabled",
+      "count": 1
+    },
+    {
+      "token": "DEBUG: AFL++ afl-compiler-rt++4.21c",
+      "count": 1
+    },
+    {
+      "token": "[-] ERROR: Invalid AFL_INST_RATIO (must be 1-100).",
+      "count": 1
+    },
+    {
+      "token": "DEBUG: Ignoring coverage from dynamically loaded code",
+      "count": 1
+    },
+    {
+      "token": "DEBUG: Reinit shm necessary (+%u)",
+      "count": 1
+    },
+    {
+      "token": "ALERT: Detected SQL injection in query: %s",
+      "count": 1
+    },
+    {
+      "token": "ALERT: Detected LDAP injection in query: %s",
+      "count": 1
+    },
+    {
+      "token": "ALERT: Detected XSS injection in content: %s",
+      "count": 1
+    },
+    {
+      "token": "wrong forkserver message from AFL++ tool",
+      "count": 1
+    },
+    {
+      "token": "instrumentation/afl-compiler-rt.o.c",
+      "count": 1
+    },
+    {
+      "token": "Error: could not send dictionary len",
+      "count": 1
+    },
+    {
+      "token": "could not send dictionary",
+      "count": 1
+    }
+  ]
+}

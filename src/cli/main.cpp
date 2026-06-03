@@ -36,7 +36,7 @@ void usage() {
       << "commands:\n"
       << "  init [--root PATH]\n"
       << "  run --config PATH --stats PATH... [--afl-output-dir PATH] [--micro-stats PATH...] [--provider NAME]\n"
-      << "      [--ablation full-agent|baseline-afl|rule-only|no-static-analysis|no-mutator|controller-only|no-microcampaign|no-plateau|random-recipe|random-reward|edges-only]\n"
+      << "      [--ablation full-agent|baseline-afl|rule-only|no-static-analysis|no-mutator|controller-only|no-microcampaign|no-plateau|random-recipe|random-reward|edges-only|ai-direct|single-agent-coordinator|single-agent-dictionary|no-semantic-context]\n"
       << "  check-config --config PATH [--runtime]\n"
       << "  m6-matrix --config PATH... [--out-dir PATH] [--work-dir PATH] [--repeats N]\n"
       << "  env --config PATH\n"
@@ -240,7 +240,7 @@ int main(int argc, char** argv) {
       for (const auto& path : arg_values(args, "--micro-stats")) {
         options.micro_stats_paths.emplace_back(path);
       }
-      options.dry_run = !has_arg(args, "--real-run");
+      options.dry_run = has_arg(args, "--dry-run");
       options.model_provider = arg_value(args, "--provider");
       options.model_endpoint = arg_value(args, "--endpoint");
       options.model_name = arg_value(args, "--model");

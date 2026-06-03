@@ -4,11 +4,9 @@
  * libxml2 parser fuzz harness. Persistent mode when built with
  * afl-clang-fast; file/stdin fallback otherwise.
  *
- * Mirrors experiments/targets/cjson/harness.c in shape so the
- * controller's recipe-store + plateau + inline-agent paths exercise
- * a target whose coverage growth is slow enough to actually plateau
- * within a reasonable budget (cjson plateaus in seconds, which is
- * why the W1b regression silently masquerades as success there).
+ * This harness is the active target for full-agent validation. It exercises
+ * a parser whose coverage growth is slow enough for heartbeat-driven agent
+ * and micro-campaign paths to run within a reasonable budget.
  *
  * Build:
  *   afl-clang-fast harness.c \

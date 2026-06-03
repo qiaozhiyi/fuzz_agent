@@ -1,0 +1,88 @@
+{
+  "binary": "libpng_fuzzer",
+  "binary_size": 102088,
+  "total_unique_tokens": 34,
+  "top256_written": 34,
+  "top20_samples": [
+    {
+      "token": "%s/error.txt",
+      "count": 1
+    },
+    {
+      "token": "File %s, line %d: Error(%s): %s",
+      "count": 1
+    },
+    {
+      "token": "DEBUG: debug enabled",
+      "count": 1
+    },
+    {
+      "token": "DEBUG: AFL++ afl-compiler-rt++4.21c",
+      "count": 1
+    },
+    {
+      "token": "[-] ERROR: Invalid AFL_INST_RATIO (must be 1-100).",
+      "count": 1
+    },
+    {
+      "token": "DEBUG: Ignoring coverage from dynamically loaded code",
+      "count": 1
+    },
+    {
+      "token": "DEBUG: Reinit shm necessary (+%u)",
+      "count": 1
+    },
+    {
+      "token": "ALERT: Detected SQL injection in query: %s",
+      "count": 1
+    },
+    {
+      "token": "ALERT: Detected LDAP injection in query: %s",
+      "count": 1
+    },
+    {
+      "token": "ALERT: Detected XSS injection in content: %s",
+      "count": 1
+    },
+    {
+      "token": "wrong forkserver message from AFL++ tool",
+      "count": 1
+    },
+    {
+      "token": "instrumentation/afl-compiler-rt.o.c",
+      "count": 1
+    },
+    {
+      "token": "Error: could not send dictionary len",
+      "count": 1
+    },
+    {
+      "token": "could not send dictionary",
+      "count": 1
+    },
+    {
+      "token": "read from AFL++ tool",
+      "count": 1
+    },
+    {
+      "token": "child_stopped && was_killed",
+      "count": 1
+    },
+    {
+      "token": "fork",
+      "count": 1
+    },
+    {
+      "token": "write to afl-fuzz",
+      "count": 1
+    },
+    {
+      "token": "waitpid",
+      "count": 1
+    },
+    {
+      "token": "writing to afl-fuzz",
+      "count": 1
+    }
+  ]
+}

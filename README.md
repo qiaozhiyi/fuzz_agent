@@ -302,8 +302,8 @@ static_analysis:
 
 model_api:
   provider: "openai-compatible"
-  endpoint: "https://api.deepseek.com/chat/completions"
-  model: "deepseek-chat"
+  endpoint: "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+  model: "glm-4-flash"
   api_key_env: "FUZZPILOT_MODEL_API_KEY"
 ```
 
@@ -318,6 +318,8 @@ Config notes:
   value.
 - `model_api.provider` accepts `openai-compatible` and legacy
   `openai_compatible`.
+- GLM/BigModel endpoints are restricted to `model_api.model: "glm-4-flash"`.
+  Other `glm-*` names are rejected by config validation and runtime overrides.
 - `target.dict` and legacy `target.dictionary` are both supported.
 - `model.model_name` and `model_api.model` are both supported.
 - `static_analysis.backend` only accepts `ghidra`; keep `enabled: false`
@@ -384,8 +386,8 @@ Healthy signs:
 
 ## Using a real model API
 
-FuzzPilot supports OpenAI-compatible chat completions APIs. DeepSeek works with
-the checked-in target configs.
+FuzzPilot supports OpenAI-compatible chat completions APIs. For GLM/BigModel,
+the only permitted model is `glm-4-flash`.
 
 Never put a real API key in a config, README, commit, shell history, issue, or
 PR comment. Export it only in your local shell:
@@ -397,7 +399,7 @@ export FUZZPILOT_MODEL_API_KEY="<YOUR_API_KEY>"
 Optional endpoint override:
 
 ```bash
-export FUZZPILOT_MODEL_ENDPOINT="https://api.deepseek.com/chat/completions"
+export FUZZPILOT_MODEL_ENDPOINT="https://open.bigmodel.cn/api/paas/v4/chat/completions"
 ```
 
 Minimal real API smoke:
@@ -410,8 +412,8 @@ Minimal real API smoke:
   --plateau-id plateau_model_probe \
   --blackboard-json '{"plateau":{"reason":"api_probe"},"target":{"name":"cjson_parser","format":"JSON"},"main_metrics":{"execs_done":1000,"execs_per_sec":1000},"static_analysis_context":{"magic_tokens":["true","false","null","[","]","{","}"]}}' \
   --provider openai-compatible \
-  --endpoint https://api.deepseek.com/chat/completions \
-  --model deepseek-chat \
+  --endpoint https://open.bigmodel.cn/api/paas/v4/chat/completions \
+  --model glm-4-flash \
   --api-key-env FUZZPILOT_MODEL_API_KEY
 ```
 
@@ -627,6 +629,8 @@ Rules for API keys:
 - Prefer `api_key_env: "FUZZPILOT_MODEL_API_KEY"`.
 - Export the secret only in the local shell that runs FuzzPilot.
 - Rotate the key if it appears in a commit, issue, PR, log, or screenshot.
+- GLM credentials must stay in `FUZZPILOT_MODEL_API_KEY`; do not document the
+  literal key value.
 
 Rules for command execution:
 

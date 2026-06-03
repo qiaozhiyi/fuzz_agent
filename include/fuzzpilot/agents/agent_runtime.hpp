@@ -35,6 +35,7 @@ struct AgentDecision {
   ModelResponse model_response;
   std::string task_json;
   std::string proposal_json;
+  std::vector<std::string> extracted_tokens;
   bool fallback_used = false;
   uint64_t created_ts = 0;
 };

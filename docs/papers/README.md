@@ -4,7 +4,7 @@ Three-paper plan derived from the current state of the repo and the related-work
 
 | # | Paper | Form | Status | Plan doc |
 |---|---|---|---|---|
-| 1 | FuzzPilot: Off-Hot-Path LLM Control for AFL++ | arXiv preliminary, ~8 pages | **In progress — outline + experiment plan ready** | [paper01_arxiv_placeholder.md](paper01_arxiv_placeholder.md), [paper01_experiment_plan.md](paper01_experiment_plan.md) |
+| 1 | FuzzPilot: Off-Hot-Path LLM Control for AFL++ | arXiv preliminary, ~8 pages | **In progress — architecture pilot scaffold ready** | [architecture_pilot_paper_skeleton.md](architecture_pilot_paper_skeleton.md), [architecture_pilot_runbook.md](architecture_pilot_runbook.md), [architecture_pilot_claim_matrix.md](architecture_pilot_claim_matrix.md), [architecture_pilot_related_work.md](architecture_pilot_related_work.md) |
 | 2 | When Should an LLM Intervene? Empirical Study | full empirical paper, ~10–12 pages | Planned | [paper02_when_to_intervene_plan.md](paper02_when_to_intervene_plan.md) |
 | 3 | FuzzPilot Full Evaluation (venue version) | conference, 12–13 pages | Planned | [paper03_full_venue_plan.md](paper03_full_venue_plan.md) |
 
@@ -42,6 +42,10 @@ starts.
 ```
 docs/papers/
 ├── README.md                              ← this file
+├── architecture_pilot_paper_skeleton.md   ← architecture paper RQs, sections, figures, and tables
+├── architecture_pilot_runbook.md          ← Stage S/A/B/C execution and host rules
+├── architecture_pilot_claim_matrix.md     ← claim-to-evidence map and interpretation rules
+├── architecture_pilot_related_work.md     ← recent LLM-fuzzing papers mapped to experiment pressure
 ├── paper01_arxiv_placeholder.md           ← Paper 1 outline + writing order
 ├── paper01_experiment_plan.md             ← Paper 1 runs, scripts, schedule
 ├── paper02_when_to_intervene_plan.md      ← Paper 2 RQs, matrix, build-out

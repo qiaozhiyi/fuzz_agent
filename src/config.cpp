@@ -23,6 +23,22 @@ bool is_valid_env_name(const std::string& value) {
   });
 }
 
+std::string lowercase_copy(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return value;
+}
+
+bool is_glm_endpoint(const std::string& endpoint) {
+  const auto value = lowercase_copy(endpoint);
+  return value.find("open.bigmodel.cn") != std::string::npos ||
+         value.find("bigmodel.cn/api/paas") != std::string::npos;
+}
+
+bool is_glm_model_name(const std::string& model) {
+  return lowercase_copy(model).rfind("glm-", 0) == 0;
+}
+
 bool should_check_filesystem_path(const std::filesystem::path& path) {
   return path.is_absolute() || path.has_parent_path();
 }
@@ -221,6 +237,7 @@ void assign_section(AppConfig& config,
     else if (key == "extractor_script") config.static_analysis.extractor_script = unquote(value);
     else if (key == "ghidra_home") config.static_analysis.ghidra_home = unquote(value);
     else if (key == "ghidra_headless" || key == "analyze_headless") config.static_analysis.ghidra_headless = unquote(value);
+    else if (key == "context_path" || key == "precomputed_context") config.static_analysis.context_path = unquote(value);
     else if (key == "timeout_sec") config.static_analysis.timeout_sec = parse_int(value, config.static_analysis.timeout_sec);
   }
 }
@@ -307,9 +324,17 @@ std::filesystem::path resolve_ghidra_headless_path(const StaticAnalysisConfig& c
 }
 
 std::filesystem::path resolve_mutator_library_path(const std::filesystem::path& configured_path) {
-  if (configured_path.empty() || std::filesystem::exists(configured_path)) {
+  if (configured_path.empty()) {
     return configured_path;
   }
+
+  auto try_exists = [](const std::filesystem::path& p) -> std::filesystem::path {
+    std::error_code ec;
+    if (std::filesystem::exists(p, ec) && !ec) {
+      return std::filesystem::absolute(p);
+    }
+    return "";
+  };
 
   std::vector<std::string> suffixes;
 #if defined(__APPLE__)
@@ -320,23 +345,42 @@ std::filesystem::path resolve_mutator_library_path(const std::filesystem::path& 
   suffixes = {".so", ".dylib"};
 #endif
 
-  if (configured_path.extension().empty()) {
-    for (const auto& suffix : suffixes) {
-      auto candidate = configured_path;
-      candidate += suffix;
-      if (std::filesystem::exists(candidate)) {
-        return candidate;
+  auto check_with_suffixes = [&](const std::filesystem::path& base) -> std::filesystem::path {
+    if (base.extension().empty()) {
+      for (const auto& suffix : suffixes) {
+        auto candidate = base;
+        candidate += suffix;
+        auto abs = try_exists(candidate);
+        if (!abs.empty()) return abs;
+      }
+    } else {
+      for (const auto& suffix : suffixes) {
+        auto candidate = base;
+        candidate.replace_extension(suffix);
+        auto abs = try_exists(candidate);
+        if (!abs.empty()) return abs;
       }
     }
-  } else {
-    for (const auto& suffix : suffixes) {
-      auto candidate = configured_path;
-      candidate.replace_extension(suffix);
-      if (std::filesystem::exists(candidate)) {
-        return candidate;
-      }
-    }
+    return "";
+  };
+
+  // 1. Try current directory
+  {
+    auto abs = try_exists(configured_path);
+    if (!abs.empty()) return abs;
+    auto abs_s = check_with_suffixes(configured_path);
+    if (!abs_s.empty()) return abs_s;
   }
+
+  // 2. Try parent directory (e.g. running from build/)
+  {
+    auto parent_path = std::filesystem::path("..") / configured_path;
+    auto abs = try_exists(parent_path);
+    if (!abs.empty()) return abs;
+    auto abs_s = check_with_suffixes(parent_path);
+    if (!abs_s.empty()) return abs_s;
+  }
+
   return configured_path;
 }
 
@@ -468,6 +512,11 @@ std::vector<std::string> validate_config(const AppConfig& config, bool check_run
     if (config.model_api.model.empty()) {
       errors.push_back("model_api.model is required when model_api.enabled is true");
     }
+    if ((is_glm_endpoint(config.model_api.endpoint) ||
+         is_glm_model_name(config.model_api.model)) &&
+        config.model_api.model != "glm-4-flash") {
+      errors.push_back("GLM runs must use model_api.model=glm-4-flash");
+    }
     if (config.model_api.endpoint.empty() && config.model_api.endpoint_env.empty()) {
       errors.push_back("model_api.endpoint or model_api.endpoint_env is required when model_api.enabled is true");
     }
@@ -525,6 +574,11 @@ std::vector<std::string> validate_config(const AppConfig& config, bool check_run
         errors.push_back("static_analysis.extractor_script does not exist: " +
                          config.static_analysis.extractor_script.string());
       }
+      if (!config.static_analysis.context_path.empty() &&
+          !std::filesystem::exists(config.static_analysis.context_path)) {
+        errors.push_back("static_analysis.context_path does not exist: " +
+                         config.static_analysis.context_path.string());
+      }
       if (backend == "ghidra") {
         const auto headless = resolve_ghidra_headless_path(config.static_analysis);
         if (should_check_filesystem_path(headless) && !std::filesystem::exists(headless)) {
@@ -569,6 +623,8 @@ std::string summarize_config(const AppConfig& config) {
       << (config.static_analysis.enabled ? "true" : "false") << "\n";
   out << "static_analysis_backend="
       << normalize_static_backend(config.static_analysis.backend) << "\n";
+  out << "static_analysis_context_path="
+      << config.static_analysis.context_path.string() << "\n";
   return out.str();
 }
 

@@ -15,6 +15,18 @@ namespace fuzzpilot {
 struct AgentDecision;
 struct MicroResult;
 
+struct RecentAgentDecision {
+  std::string id;
+  std::string run_id;
+  std::string plateau_id;
+  std::string agent;
+  std::string error_kind;
+  bool schema_valid = false;
+  bool fallback_used = false;
+  std::string proposal_json;
+  uint64_t created_ts = 0;
+};
+
 // Aggregate model usage accumulated by the controller and persisted to
 // runs.finish_run when the run terminates. Kept in a struct so the
 // caller can pass it as one argument rather than 5 scalars.
@@ -95,8 +107,17 @@ class Database {
                            double reward,
                            double confidence,
                            uint64_t updated_ts);
+  void insert_intervention(const std::string& id,
+                          const std::string& plateau_id,
+                          const std::string& agent,
+                          const std::string& action,
+                          const std::string& params_json,
+                          const std::string& hypothesis,
+                          const std::string& expected_signal,
+                          const std::string& status);
 
   std::vector<std::string> get_recent_decisions(const std::string& run_id, int limit);
+  std::vector<RecentAgentDecision> get_recent_agent_decisions(const std::string& run_id, int limit);
   std::vector<std::string> get_agent_memory(const std::string& run_id);
 
   void close();
@@ -125,7 +146,9 @@ class Database {
   sqlite3_stmt* stmt_insert_micro_result_ = nullptr;
   sqlite3_stmt* stmt_insert_agent_decision_ = nullptr;
   sqlite3_stmt* stmt_insert_agent_memory_ = nullptr;
+  sqlite3_stmt* stmt_insert_intervention_ = nullptr;
   sqlite3_stmt* stmt_get_recent_decisions_ = nullptr;
+  sqlite3_stmt* stmt_get_recent_agent_decisions_ = nullptr;
   sqlite3_stmt* stmt_get_agent_memory_ = nullptr;
   // Transaction nesting depth — we only emit BEGIN/COMMIT when depth
   // transitions across zero, so callers may freely begin() inside a
