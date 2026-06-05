@@ -379,6 +379,15 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     return response;
   }
 
+  auto format_double = [](double v) {
+    std::string s = std::to_string(v);
+    s.erase(s.find_last_not_of('0') + 1, std::string::npos);
+    if (!s.empty() && s.back() == '.') {
+      s.pop_back();
+    }
+    return s;
+  };
+
   std::string payload_str;
   payload_str.reserve(1024 + request.system_prompt.size() + request.user_context_json.size());
   payload_str += "{";
@@ -391,8 +400,8 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
   payload_str += "{\"role\":\"user\",\"content\":\"" + json_escape(request.user_context_json) + "\"}],";
   payload_str += "\"response_format\":{\"type\":\"json_object\"},";
   payload_str += "\"max_tokens\":" + std::to_string(request.max_output_tokens) + ",";
-  payload_str += "\"temperature\":" + std::to_string(request.temperature) + ",";
-  payload_str += "\"top_p\":" + std::to_string(request.top_p);
+  payload_str += "\"temperature\":" + format_double(request.temperature) + ",";
+  payload_str += "\"top_p\":" + format_double(request.top_p);
   if (request.seed != 0) {
     payload_str += ",\"seed\":" + std::to_string(request.seed);
   }
