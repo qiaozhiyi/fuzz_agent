@@ -12,10 +12,8 @@
 #include <cstdlib>
 #include <fcntl.h>
 #include <filesystem>
-#include <iomanip>
 #include <iostream>
 #include <mutex>
-#include <sstream>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <thread>
@@ -313,9 +311,13 @@ std::string stable_text_hash(const std::string& text) {
     hash ^= static_cast<uint64_t>(c);
     hash *= 1099511628211ull;
   }
-  std::ostringstream out;
-  out << std::hex << std::setfill('0') << std::setw(16) << hash;
-  return out.str();
+  std::string out;
+  out.reserve(16);
+  static const char hex_chars[] = "0123456789abcdef";
+  for (int i = 15; i >= 0; --i) {
+    out.push_back(hex_chars[(hash >> (i * 4)) & 0xF]);
+  }
+  return out;
 }
 
 std::string classify_openai_compatible_http_error(const std::string& raw, int http_status) {
@@ -377,24 +379,33 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
     return response;
   }
 
-  std::ostringstream payload;
-  payload << "{";
-  payload << "\"model\":\"" << json_escape(model_) << "\",";
+  auto format_double = [](double v) {
+    std::string s = std::to_string(v);
+    s.erase(s.find_last_not_of('0') + 1, std::string::npos);
+    if (!s.empty() && s.back() == '.') {
+      s.pop_back();
+    }
+    return s;
+  };
+
+  std::string payload_str;
+  payload_str.reserve(1024 + request.system_prompt.size() + request.user_context_json.size());
+  payload_str += "{";
+  payload_str += "\"model\":\"" + json_escape(model_) + "\",";
   if (disable_thinking_) {
-    payload << "\"thinking\":{\"type\":\"disabled\"},";
+    payload_str += "\"thinking\":{\"type\":\"disabled\"},";
   }
-  payload << "\"messages\":[";
-  payload << "{\"role\":\"system\",\"content\":\"" << json_escape(request.system_prompt) << "\"},";
-  payload << "{\"role\":\"user\",\"content\":\"" << json_escape(request.user_context_json) << "\"}],";
-  payload << "\"response_format\":{\"type\":\"json_object\"},";
-  payload << "\"max_tokens\":" << request.max_output_tokens << ",";
-  payload << "\"temperature\":" << request.temperature << ",";
-  payload << "\"top_p\":" << request.top_p;
+  payload_str += "\"messages\":[";
+  payload_str += "{\"role\":\"system\",\"content\":\"" + json_escape(request.system_prompt) + "\"},";
+  payload_str += "{\"role\":\"user\",\"content\":\"" + json_escape(request.user_context_json) + "\"}],";
+  payload_str += "\"response_format\":{\"type\":\"json_object\"},";
+  payload_str += "\"max_tokens\":" + std::to_string(request.max_output_tokens) + ",";
+  payload_str += "\"temperature\":" + format_double(request.temperature) + ",";
+  payload_str += "\"top_p\":" + format_double(request.top_p);
   if (request.seed != 0) {
-    payload << ",\"seed\":" << request.seed;
+    payload_str += ",\"seed\":" + std::to_string(request.seed);
   }
-  payload << "}";
-  const auto payload_str = payload.str();
+  payload_str += "}";
   // Persist the full payload on the response so the agent runtime can
   // write it to the replay log. The on-disk temp file is removed below.
   response.full_request_payload = payload_str;
