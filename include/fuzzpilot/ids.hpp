@@ -22,15 +22,30 @@ inline unsigned long long current_process_id() {
 #endif
 }
 
-inline std::string make_id(const std::string& prefix) {
+inline std::string make_id(const std::string &prefix) {
   static std::atomic<unsigned long long> counter{0};
   const auto now = std::chrono::system_clock::now().time_since_epoch();
-  const auto micros = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+  const auto micros =
+      std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+  const auto pid = current_process_id();
+  const auto c = counter.fetch_add(1, std::memory_order_relaxed);
 
-  std::ostringstream out;
-  out << prefix << "_" << micros << "_p" << current_process_id() << "_" << std::setfill('0')
-      << std::setw(4) << counter.fetch_add(1, std::memory_order_relaxed);
-  return out.str();
+  std::string result;
+  result.reserve(prefix.size() + 40);
+  result += prefix;
+  result += "_";
+  result += std::to_string(micros);
+  result += "_p";
+  result += std::to_string(pid);
+  result += "_";
+
+  std::string c_str = std::to_string(c);
+  if (c_str.size() < 4) {
+    result.append(4 - c_str.size(), '0');
+  }
+  result += c_str;
+
+  return result;
 }
 
-}  // namespace fuzzpilot
+} // namespace fuzzpilot
