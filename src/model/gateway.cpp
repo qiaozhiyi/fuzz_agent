@@ -179,10 +179,25 @@ std::filesystem::path make_private_tempfile(const std::string& prefix,
   // can patch the X's in place.
   std::vector<char> buf(tmpl.begin(), tmpl.end());
   buf.push_back('\0');
+
   const int fd = mkstemp(buf.data());
   if (fd < 0) {
     return {};
   }
+
+  // RAII guard for the fd and path
+  struct TempFileFdGuard {
+    int fd;
+    char* path;
+    bool release = false;
+    ~TempFileFdGuard() {
+      if (!release) {
+        if (fd >= 0) close(fd);
+        if (path) unlink(path);
+      }
+    }
+  } guard{fd, buf.data(), false};
+
   // mkstemp creates 0600 already, but be defensive in case umask differs.
   (void)fchmod(fd, S_IRUSR | S_IWUSR);
   std::size_t written = 0;
@@ -190,22 +205,25 @@ std::filesystem::path make_private_tempfile(const std::string& prefix,
     const ssize_t n = write(fd, content.data() + written, content.size() - written);
     if (n < 0) {
       if (errno == EINTR) continue;
-      close(fd);
-      unlink(buf.data());
       return {};
     }
     if (n == 0) {
-      close(fd);
-      unlink(buf.data());
       return {};
     }
     written += static_cast<std::size_t>(n);
   }
+
   if (close(fd) != 0) {
-    unlink(buf.data());
+    guard.fd = -1; // already closed (attempted), but failed, so unlink
     return {};
   }
-  return std::filesystem::path(buf.data());
+  guard.fd = -1; // successfully closed
+
+  // Construct path - this can throw! If it does, guard cleans up the file.
+  std::filesystem::path result(buf.data());
+
+  guard.release = true; // Everything succeeded, we want to keep the file.
+  return result;
 }
 
 std::string process_capture_text(const ProcessCaptureResult& result) {

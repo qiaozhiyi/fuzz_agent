@@ -1,0 +1,4 @@
+## 2024-05-24 - Fix secure tempfile leakage in model gateway
+**Vulnerability:** The `make_private_tempfile` function manually closed file descriptors and unlinked files using `close()` and `unlink()` directly. In the event of an unexpected C++ exception during path construction or resource allocation before these manual cleanup steps, the file descriptor would leak, and the temporary file containing sensitive data (e.g., API keys) would be left on disk.
+**Learning:** Even low-level C POSIX calls like `mkstemp()` combined with manual cleanup must be guarded by RAII when used in C++ to prevent resource and information leakage due to exceptions.
+**Prevention:** Always wrap low-level system resources (like file descriptors and created temp files) in RAII classes immediately upon creation, ensuring deterministic and exception-safe cleanup on scope exit.
