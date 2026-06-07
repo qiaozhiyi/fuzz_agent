@@ -79,7 +79,7 @@ run_smoke() {
   local smoke_root="${RUNS_ROOT}/_smoke_controller_only_$(date -u +%Y%m%dT%H%M%SZ)"
   mkdir -p "${smoke_root}"
   status_set "starting controller-only smoke at ${smoke_root}"
-  if "${FUZZPILOT_BIN}" run --real-run \
+  if "${FUZZPILOT_BIN}" run  \
       --config "${REPO}/experiments/targets/libxml2/config.yaml" \
       --ablation controller-only \
       --main-budget-sec "${SMOKE_BUDGET_SEC}" \

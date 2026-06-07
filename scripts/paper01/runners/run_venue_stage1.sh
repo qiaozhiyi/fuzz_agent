@@ -89,11 +89,11 @@ launch_one() {
   local log="$out_dir/runner.log"
   echo "[$(date -u +%FT%TZ)] launching $run_id on CPU $cpu" >> "$STATUS"
   if [[ "${DRY:-0}" == "1" ]]; then
-    echo "DRY: taskset -c $cpu $FUZZPILOT_BIN run --real-run --config $cfg --ablation $mode --main-budget-sec $BUDGET_SEC --work-dir $out_dir/work"
+    echo "DRY: taskset -c $cpu $FUZZPILOT_BIN run  --config $cfg --ablation $mode --main-budget-sec $BUDGET_SEC --work-dir $out_dir/work"
     return 0
   fi
   cd "$REPO"
-  AFL_NO_AFFINITY=1 taskset -c "$cpu" "$FUZZPILOT_BIN" run --real-run \
+  AFL_NO_AFFINITY=1 taskset -c "$cpu" "$FUZZPILOT_BIN" run  \
     --config "$cfg" \
     --ablation "$mode" \
     --main-budget-sec "$BUDGET_SEC" \

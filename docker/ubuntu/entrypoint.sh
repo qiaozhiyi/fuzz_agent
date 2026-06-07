@@ -89,7 +89,7 @@ run_smoke() {
   fi
 
   set +e
-  timeout --foreground "${timeout_sec}s" ./build/fuzzpilot run --real-run \
+  timeout --foreground "${timeout_sec}s" ./build/fuzzpilot run \
       --config experiments/targets/cjson/config.yaml \
       --ablation baseline-afl \
       --main-budget-sec "${budget}" \

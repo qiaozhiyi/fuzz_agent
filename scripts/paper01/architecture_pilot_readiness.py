@@ -212,7 +212,7 @@ def parse_args() -> argparse.Namespace:
         help="Allow an existing architecture pilot result directory.",
     )
     parser.add_argument(
-        "--real-run",
+        "",
         action="store_true",
         help="Require API key and previous-stage gates as if launching a real paper stage.",
     )

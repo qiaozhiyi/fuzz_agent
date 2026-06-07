@@ -483,7 +483,7 @@ int main(int argc, char** argv) {
       require_value(snapshot_dir, "--snapshot-dir");
       require_value(work_dir, "--work-dir");
       const auto loaded = fuzzpilot::load_config(config_path);
-      const bool dry_run = !has_arg(args, "--real-run");
+      const bool dry_run = has_arg(args, "--dry-run");
       const auto specs = fuzzpilot::plan_micro_campaigns(
           loaded.config, plateau_id, snapshot_dir, work_dir, dry_run);
       fuzzpilot::prepare_micro_campaigns(specs);
