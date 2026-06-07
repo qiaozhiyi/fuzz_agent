@@ -213,7 +213,7 @@ run_one() {
   esac
 
   if [[ ${DRY_RUN} -eq 1 ]]; then
-    echo "DRY: ${FUZZPILOT_BIN} run --real-run --config ${target_config} --ablation ${mode} --main-budget-sec ${budget_sec} --work-dir ${out_dir}/work"
+    echo "DRY: ${FUZZPILOT_BIN} run  --config ${target_config} --ablation ${mode} --main-budget-sec ${budget_sec} --work-dir ${out_dir}/work"
     return 0
   fi
 
@@ -226,7 +226,7 @@ run_one() {
   echo "running" > "${status_file}"
   # `stdbuf -oL -eL` forces line-buffered IO so SIGTERM doesn't lose the tail
   # of stderr (where LLM/network failures and stack traces land).
-  if stdbuf -oL -eL "${FUZZPILOT_BIN}" run --real-run \
+  if stdbuf -oL -eL "${FUZZPILOT_BIN}" run  \
       --config "${target_config}" \
       --ablation "${mode}" \
       --main-budget-sec "${budget_sec}" \

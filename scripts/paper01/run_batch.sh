@@ -147,7 +147,7 @@ run_afl_one() {
     # safe plumbing check even on a results dir with real run state.
     mkdir -p "${out_dir}"
     echo "[${run_id}] DRY-RUN mode=${mode} budget=${budget}s out=${out_dir}"
-    echo "  DRY-RUN: ${FUZZPILOT_BIN} run --real-run --config ${target_config} --ablation ${mode} --main-budget-sec ${budget} --work-dir ${out_dir}/work"
+    echo "  DRY-RUN: ${FUZZPILOT_BIN} run  --config ${target_config} --ablation ${mode} --main-budget-sec ${budget} --work-dir ${out_dir}/work"
     return 0
   fi
 
@@ -176,7 +176,7 @@ run_afl_one() {
   # signal (cumulative state is in fuzzer_stats / coverage.csv; WARNING / ERROR /
   # banner / summary lines do NOT match this pattern, so they pass through).
   # grep --line-buffered avoids buffering 4h of output in RAM.
-  "${FUZZPILOT_BIN}" run --real-run \
+  "${FUZZPILOT_BIN}" run  \
       --config "${target_config}" \
       --ablation "${mode}" \
       --main-budget-sec "${budget}" \

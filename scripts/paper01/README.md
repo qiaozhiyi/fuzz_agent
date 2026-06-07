@@ -24,7 +24,7 @@ scripts/paper01/with_model_key.sh \
   scripts/paper01/model_auth_smoke.py --config experiments/targets/libxml2/config_glm.yaml \
     --free-glm-candidates --show-response
 scripts/paper01/with_model_key.sh \
-  scripts/paper01/architecture_pilot_readiness.py S --real-run
+  scripts/paper01/architecture_pilot_readiness.py S
 scripts/paper01/with_model_key.sh \
   scripts/paper01/run_architecture_stage.sh S
 ```

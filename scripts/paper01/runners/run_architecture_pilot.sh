@@ -314,7 +314,7 @@ def build_cell(repeat, target, mode, cpu, run_order_index, blocked_order_index):
     base_cmd = [
         fuzzpilot_bin,
         "run",
-        "--real-run",
+        "",
         "--config",
         target["config"],
         "--ablation",
