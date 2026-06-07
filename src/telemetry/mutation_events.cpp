@@ -192,11 +192,11 @@ std::string mutation_telemetry_json(const MutationTelemetrySnapshot &snapshot) {
   std::string out;
   out.reserve(256);
   out += "{\"recipe_hits\":";
-  out += std::to_string(snapshot.recipe_hits);
+  out += std::to_string(static_cast<unsigned long long>(snapshot.recipe_hits));
   out += ",\"recipe_misses\":";
-  out += std::to_string(snapshot.recipe_misses);
+  out += std::to_string(static_cast<unsigned long long>(snapshot.recipe_misses));
   out += ",\"mutation_count\":";
-  out += std::to_string(snapshot.mutation_count);
+  out += std::to_string(static_cast<unsigned long long>(snapshot.mutation_count));
   out += ",\"operators\":{";
   bool first = true;
   for (const auto &[op, count] : snapshot.operator_counts) {
@@ -207,7 +207,7 @@ std::string mutation_telemetry_json(const MutationTelemetrySnapshot &snapshot) {
     out += "\"";
     out += json_escape(op);
     out += "\":";
-    out += std::to_string(count);
+    out += std::to_string(static_cast<unsigned long long>(count));
   }
   out += "}}";
   return out;
