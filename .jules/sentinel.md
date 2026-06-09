@@ -1,0 +1,4 @@
+## 2026-06-09 - Exception-Induced Sensitive File Leak in mkstemp
+**Vulnerability:** Temporary files containing sensitive data (e.g., API keys) created via `mkstemp` could be leaked in `/tmp` without being unlinked if `std::filesystem::path` throws an exception upon construction, as manual cleanup was bypassed.
+**Learning:** Manual resource cleanup logic (like closing file descriptors and unlinking paths) is vulnerable to exceptions occurring after the resource creation but before the cleanup logic, leading to permanent leaks of sensitive state on disk.
+**Prevention:** Always use RAII patterns (such as a custom `TempFileGuard` or smart pointers) to manage temporary file descriptors and unlink file paths automatically on scope exit, ensuring cleanup happens regardless of early returns or exceptions.
