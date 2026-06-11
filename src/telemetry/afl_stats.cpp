@@ -10,9 +10,8 @@
 namespace fuzzpilot {
 namespace {
 
-
-
-uint64_t as_u64(const std::map<std::string, std::string>& raw, const std::string& key) {
+uint64_t as_u64(const std::map<std::string, std::string> &raw,
+                const std::string &key) {
   const auto it = raw.find(key);
   if (it == raw.end()) {
     return 0;
@@ -24,7 +23,8 @@ uint64_t as_u64(const std::map<std::string, std::string>& raw, const std::string
   }
 }
 
-double as_double(const std::map<std::string, std::string>& raw, const std::string& key) {
+double as_double(const std::map<std::string, std::string> &raw,
+                 const std::string &key) {
   const auto it = raw.find(key);
   if (it == raw.end()) {
     return 0.0;
@@ -38,10 +38,9 @@ double as_double(const std::map<std::string, std::string>& raw, const std::strin
   }
 }
 
-
-
-uint64_t first_nonzero(const AflStats& stats, const std::initializer_list<const char*> keys) {
-  for (const char* key : keys) {
+uint64_t first_nonzero(const AflStats &stats,
+                       const std::initializer_list<const char *> keys) {
+  for (const char *key : keys) {
     const auto value = as_u64(stats.raw, key);
     if (value != 0) {
       return value;
@@ -50,10 +49,10 @@ uint64_t first_nonzero(const AflStats& stats, const std::initializer_list<const 
   return 0;
 }
 
-}  // namespace
+} // namespace
 
-std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
-                                           std::string* error) {
+std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path &path,
+                                           std::string *error) {
   std::ifstream input(path);
   if (!input) {
     if (error != nullptr) {
@@ -79,7 +78,8 @@ std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
     }
   }
 
-  if (const auto last_update = as_u64(stats.raw, "last_update"); last_update != 0) {
+  if (const auto last_update = as_u64(stats.raw, "last_update");
+      last_update != 0) {
     stats.sampled_at = static_cast<std::time_t>(last_update);
   }
   stats.execs_done = as_u64(stats.raw, "execs_done");
@@ -90,10 +90,11 @@ std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
   stats.paths_favored = as_u64(stats.raw, "paths_favored");
   stats.paths_found = as_u64(stats.raw, "paths_found");
   stats.paths_imported = as_u64(stats.raw, "paths_imported");
-  // AFL++ 3.x calls this `edges_found`; some forks emit `edge_count` / `total_edges`.
-  // Prefer absolute edge count over bitmap percentage for statistical comparison.
-  stats.edges_found =
-      first_nonzero(stats, {"edges_found", "edge_count", "total_edges", "fuzzed_edges"});
+  // AFL++ 3.x calls this `edges_found`; some forks emit `edge_count` /
+  // `total_edges`. Prefer absolute edge count over bitmap percentage for
+  // statistical comparison.
+  stats.edges_found = first_nonzero(
+      stats, {"edges_found", "edge_count", "total_edges", "fuzzed_edges"});
   stats.max_depth = as_u64(stats.raw, "max_depth");
   stats.cur_path = as_u64(stats.raw, "cur_path");
   stats.pending_favs = as_u64(stats.raw, "pending_favs");
@@ -103,7 +104,8 @@ std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
   stats.unique_hangs = as_u64(stats.raw, "unique_hangs");
   stats.bitmap_cvg = as_double(stats.raw, "bitmap_cvg");
   stats.stability = as_double(stats.raw, "stability");
-  stats.last_path = first_nonzero(stats, {"last_path", "last_find", "last_path_time"});
+  stats.last_path =
+      first_nonzero(stats, {"last_path", "last_find", "last_path_time"});
   stats.last_crash = as_u64(stats.raw, "last_crash");
   stats.last_hang = as_u64(stats.raw, "last_hang");
   stats.recipe_hits = as_u64(stats.raw, "recipe_hits");
@@ -112,63 +114,87 @@ std::optional<AflStats> parse_fuzzer_stats(const std::filesystem::path& path,
   // in-memory map carried in every telemetry sample) stays bounded.
   // Without this, a 24h run accumulates several hundred MB of
   // redundant strings since each sample copies the entire raw map.
-  static const std::initializer_list<const char*> kTypedKeys = {
-      "last_update", "execs_done", "execs_per_sec", "paths_total", "corpus_count",
-      "paths_favored", "paths_found", "paths_imported",
-      "edges_found", "edge_count", "total_edges", "fuzzed_edges",
-      "max_depth", "cur_path", "pending_favs", "pending_total",
-      "variable_paths", "unique_crashes", "unique_hangs",
-      "bitmap_cvg", "stability",
-      "last_path", "last_find", "last_path_time",
-      "last_crash", "last_hang",
-      "recipe_hits", "recipe_misses",
+  static const std::initializer_list<const char *> kTypedKeys = {
+      "last_update",    "execs_done",     "execs_per_sec", "paths_total",
+      "corpus_count",   "paths_favored",  "paths_found",   "paths_imported",
+      "edges_found",    "edge_count",     "total_edges",   "fuzzed_edges",
+      "max_depth",      "cur_path",       "pending_favs",  "pending_total",
+      "variable_paths", "unique_crashes", "unique_hangs",  "bitmap_cvg",
+      "stability",      "last_path",      "last_find",     "last_path_time",
+      "last_crash",     "last_hang",      "recipe_hits",   "recipe_misses",
   };
-  for (const char* key : kTypedKeys) {
+  for (const char *key : kTypedKeys) {
     stats.raw.erase(key);
   }
   return stats;
 }
 
-std::string afl_stats_json(const AflStats& stats) {
-  std::ostringstream out;
-  out << "{";
-  out << "\"ts\":" << stats.sampled_at << ",";
-  out << "\"execs_done\":" << stats.execs_done << ",";
-  out << "\"execs_per_sec\":" << stats.execs_per_sec << ",";
-  out << "\"paths_total\":" << stats.paths_total << ",";
-  out << "\"edges_found\":" << stats.edges_found << ",";
-  out << "\"stale\":" << (stats.stale ? "true" : "false") << ",";
-  out << "\"unique_crashes\":" << stats.unique_crashes << ",";
-  out << "\"unique_hangs\":" << stats.unique_hangs << ",";
-  out << "\"bitmap_cvg\":" << stats.bitmap_cvg << ",";
-  out << "\"stability\":" << stats.stability << ",";
-  out << "\"last_path\":" << stats.last_path << ",";
-  out << "\"recipe_hits\":" << stats.recipe_hits << ",";
-  out << "\"recipe_misses\":" << stats.recipe_misses << ",";
-  out << "\"raw\":{";
+std::string afl_stats_json(const AflStats &stats) {
+  std::string out;
+  out.reserve(512); // Pre-allocate to reduce reallocations
+  out += "{\"ts\":";
+  out += std::to_string(stats.sampled_at);
+  out += ",\"execs_done\":";
+  out += std::to_string(stats.execs_done);
+  out += ",\"execs_per_sec\":";
+  out += format_double(stats.execs_per_sec);
+  out += ",\"paths_total\":";
+  out += std::to_string(stats.paths_total);
+  out += ",\"edges_found\":";
+  out += std::to_string(stats.edges_found);
+  out += ",\"stale\":";
+  out += (stats.stale ? "true" : "false");
+  out += ",\"unique_crashes\":";
+  out += std::to_string(stats.unique_crashes);
+  out += ",\"unique_hangs\":";
+  out += std::to_string(stats.unique_hangs);
+  out += ",\"bitmap_cvg\":";
+  out += format_double(stats.bitmap_cvg);
+  out += ",\"stability\":";
+  out += format_double(stats.stability);
+  out += ",\"last_path\":";
+  out += std::to_string(stats.last_path);
+  out += ",\"recipe_hits\":";
+  out += std::to_string(stats.recipe_hits);
+  out += ",\"recipe_misses\":";
+  out += std::to_string(stats.recipe_misses);
+  out += ",\"raw\":{";
   bool first = true;
-  for (const auto& [key, value] : stats.raw) {
+  for (const auto &[key, value] : stats.raw) {
     if (!first) {
-      out << ",";
+      out += ",";
     }
     first = false;
-    out << "\"" << json_escape(key) << "\":\"" << json_escape(value) << "\"";
+    out += "\"";
+    out += json_escape(key);
+    out += "\":\"";
+    out += json_escape(value);
+    out += "\"";
   }
-  out << "}}";
-  return out.str();
+  out += "}}";
+  return out;
 }
 
-std::string afl_stats_summary(const AflStats& stats) {
-  std::ostringstream out;
-  out << "execs_done=" << stats.execs_done
-      << " execs_per_sec=" << stats.execs_per_sec
-      << " paths_total=" << stats.paths_total
-      << " edges_found=" << stats.edges_found
-      << " unique_crashes=" << stats.unique_crashes
-      << " unique_hangs=" << stats.unique_hangs
-      << " bitmap_cvg=" << stats.bitmap_cvg
-      << " stability=" << stats.stability;
-  return out.str();
+std::string afl_stats_summary(const AflStats &stats) {
+  std::string out;
+  out.reserve(256);
+  out += "execs_done=";
+  out += std::to_string(stats.execs_done);
+  out += " execs_per_sec=";
+  out += format_double(stats.execs_per_sec);
+  out += " paths_total=";
+  out += std::to_string(stats.paths_total);
+  out += " edges_found=";
+  out += std::to_string(stats.edges_found);
+  out += " unique_crashes=";
+  out += std::to_string(stats.unique_crashes);
+  out += " unique_hangs=";
+  out += std::to_string(stats.unique_hangs);
+  out += " bitmap_cvg=";
+  out += format_double(stats.bitmap_cvg);
+  out += " stability=";
+  out += format_double(stats.stability);
+  return out;
 }
 
-}  // namespace fuzzpilot
+} // namespace fuzzpilot
