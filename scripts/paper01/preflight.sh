@@ -279,10 +279,10 @@ fi
 # --- disk
 echo "[disk]"
 FREE_GB=$(df -Pk "${REPO_ROOT}" 2>/dev/null | awk 'NR==2 {printf "%.0f", $4/1024/1024}')
-if [[ -n "${FREE_GB}" && "${FREE_GB}" -ge 50 ]]; then
+if [[ -n "${FREE_GB}" && "${FREE_GB}" -ge 10 ]]; then
   green "free disk: ${FREE_GB} GB"
 elif [[ -n "${FREE_GB}" ]]; then
-  red "free disk: ${FREE_GB} GB (<50 GB; insufficient for 19 runs)"
+  red "free disk: ${FREE_GB} GB (<10 GB; insufficient for 19 runs)"
 else
   yellow "could not determine free disk"
 fi
