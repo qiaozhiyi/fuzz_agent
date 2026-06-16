@@ -1,14 +1,17 @@
 #include "fuzzpilot/string_util.hpp"
 
 #include <cctype>
+#include <cstdio>
 
 namespace fuzzpilot {
 
-// Performance optimization: Uses std::string_view to avoid copying the input string.
-// Only creates a new string at the very end after calculating the exact trimmed boundaries.
+// Performance optimization: Uses std::string_view to avoid copying the input
+// string. Only creates a new string at the very end after calculating the exact
+// trimmed boundaries.
 std::string trim(std::string_view value) {
   auto start = value.begin();
-  while (start != value.end() && std::isspace(static_cast<unsigned char>(*start))) {
+  while (start != value.end() &&
+         std::isspace(static_cast<unsigned char>(*start))) {
     ++start;
   }
 
@@ -20,4 +23,10 @@ std::string trim(std::string_view value) {
   return std::string(start, end);
 }
 
-}  // namespace fuzzpilot
+std::string format_double(double value) {
+  char buf[32];
+  std::snprintf(buf, sizeof(buf), "%g", value);
+  return std::string(buf);
+}
+
+} // namespace fuzzpilot
