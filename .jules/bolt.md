@@ -1,0 +1,3 @@
+## 2026-06-17 - Remove std::ostringstream allocations in telemetry hot path
+**Learning:** Using `std::ostringstream` for simple formatting introduces significant dynamic allocation overhead in hot paths. The standard `std::to_string(double)` retains trailing zeros, so `std::snprintf` with `%g` into a fixed-size stack buffer is an efficient alternative. Inline `+` operators also force temporary string allocations.
+**Action:** Use pre-allocated `std::string` (`reserve`) and standard concatenation (sequential `+=`) for performance-critical string construction, and use the custom `fuzzpilot::format_double()` utility for doubles to avoid `std::ostringstream`.
