@@ -104,34 +104,6 @@ std::string extract_openai_content_with_reasoning_fallback(const std::string& re
   return response;
 }
 
-// Retained for callers that need to overwrite a known path with 0600
-// permission semantics. The hot model-request path now uses
-// make_private_tempfile() instead, which is atomic and TOCTOU-safe.
-[[maybe_unused]] bool write_private_text_file(const std::filesystem::path& path,
-                                              const std::string& content) {
-  const int fd = open(path.string().c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-  if (fd < 0) {
-    return false;
-  }
-  std::size_t written = 0;
-  while (written < content.size()) {
-    const ssize_t n = write(fd, content.data() + written, content.size() - written);
-    if (n < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      close(fd);
-      return false;
-    }
-    if (n == 0) {
-      close(fd);
-      return false;
-    }
-    written += static_cast<std::size_t>(n);
-  }
-  return close(fd) == 0;
-}
-
 class ScopedTempFile {
  public:
   explicit ScopedTempFile(std::filesystem::path path) : path_(std::move(path)) {}
