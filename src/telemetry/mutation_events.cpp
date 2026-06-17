@@ -9,20 +9,20 @@
 namespace fuzzpilot {
 namespace {
 
-
-
-uint64_t find_u64(const std::string& line, const std::string& key) {
+uint64_t find_u64(const std::string &line, const std::string &key) {
   const std::string needle = "\"" + key + "\":";
   const auto pos = line.find(needle);
   if (pos == std::string::npos) {
     return 0;
   }
   auto start = pos + needle.size();
-  while (start < line.size() && std::isspace(static_cast<unsigned char>(line[start]))) {
+  while (start < line.size() &&
+         std::isspace(static_cast<unsigned char>(line[start]))) {
     ++start;
   }
   auto end = start;
-  while (end < line.size() && std::isdigit(static_cast<unsigned char>(line[end]))) {
+  while (end < line.size() &&
+         std::isdigit(static_cast<unsigned char>(line[end]))) {
     ++end;
   }
   if (end == start) {
@@ -35,8 +35,8 @@ uint64_t find_u64(const std::string& line, const std::string& key) {
   }
 }
 
-void parse_operator_counts(const std::string& line,
-                           std::map<std::string, uint64_t>& operator_counts) {
+void parse_operator_counts(const std::string &line,
+                           std::map<std::string, uint64_t> &operator_counts) {
   const std::string needle = "\"operators\":{";
   const auto pos = line.find(needle);
   if (pos == std::string::npos) {
@@ -71,7 +71,7 @@ void parse_operator_counts(const std::string& line,
     try {
       operator_counts[op] += static_cast<uint64_t>(
           std::stoull(body.substr(colon + 1, value_end - colon - 1)));
-    } catch (const std::exception&) {
+    } catch (const std::exception &) {
       // Numeric parse failed (overflow / malformed). Don't change
       // the running counter — the previous total stays in place and
       // we move on to the next operator. Sentinel value -1 in the
@@ -82,13 +82,10 @@ void parse_operator_counts(const std::string& line,
   }
 }
 
+} // namespace
 
-
-}  // namespace
-
-std::optional<MutationTelemetrySnapshot> parse_mutator_telemetry(
-    const std::filesystem::path& path,
-    std::string* error) {
+std::optional<MutationTelemetrySnapshot>
+parse_mutator_telemetry(const std::filesystem::path &path, std::string *error) {
   std::ifstream input(path);
   if (!input) {
     if (error != nullptr) {
@@ -112,19 +109,20 @@ std::optional<MutationTelemetrySnapshot> parse_mutator_telemetry(
   return snapshot;
 }
 
-bool parse_mutator_telemetry_incremental(
-    const std::filesystem::path& path,
-    std::uint64_t& start_offset,
-    MutationTelemetrySnapshot& accumulator,
-    std::string* error) {
+bool parse_mutator_telemetry_incremental(const std::filesystem::path &path,
+                                         std::uint64_t &start_offset,
+                                         MutationTelemetrySnapshot &accumulator,
+                                         std::string *error) {
   std::error_code ec;
   if (!std::filesystem::exists(path, ec)) {
     // Not yet created by AFL — treat as success with no delta.
     return true;
   }
-  const auto file_size = static_cast<std::uint64_t>(std::filesystem::file_size(path, ec));
+  const auto file_size =
+      static_cast<std::uint64_t>(std::filesystem::file_size(path, ec));
   if (ec) {
-    if (error) *error = "stat failed: " + ec.message();
+    if (error)
+      *error = "stat failed: " + ec.message();
     return false;
   }
   if (file_size < start_offset) {
@@ -140,12 +138,14 @@ bool parse_mutator_telemetry_incremental(
 
   std::ifstream input(path, std::ios::binary);
   if (!input) {
-    if (error) *error = "failed to open mutator telemetry: " + path.string();
+    if (error)
+      *error = "failed to open mutator telemetry: " + path.string();
     return false;
   }
   input.seekg(static_cast<std::streamoff>(start_offset));
   if (!input) {
-    if (error) *error = "seek failed in mutator telemetry: " + path.string();
+    if (error)
+      *error = "seek failed in mutator telemetry: " + path.string();
     return false;
   }
 
@@ -185,24 +185,30 @@ bool parse_mutator_telemetry_incremental(
   return true;
 }
 
-std::string mutation_telemetry_json(const MutationTelemetrySnapshot& snapshot) {
-  std::ostringstream out;
-  out << "{";
-  out << "\"recipe_hits\":" << snapshot.recipe_hits << ",";
-  out << "\"recipe_misses\":" << snapshot.recipe_misses << ",";
-  out << "\"mutation_count\":" << snapshot.mutation_count << ",";
-  out << "\"operators\":{";
+std::string mutation_telemetry_json(const MutationTelemetrySnapshot &snapshot) {
+  std::string out;
+  out.reserve(256);
+  out += "{";
+  out += "\"recipe_hits\":";
+  out += std::to_string(snapshot.recipe_hits);
+  out += ",\"recipe_misses\":";
+  out += std::to_string(snapshot.recipe_misses);
+  out += ",\"mutation_count\":";
+  out += std::to_string(snapshot.mutation_count);
+  out += ",\"operators\":{";
   bool first = true;
-  for (const auto& [op, count] : snapshot.operator_counts) {
+  for (const auto &[op, count] : snapshot.operator_counts) {
     if (!first) {
-      out << ",";
+      out += ",";
     }
     first = false;
-    out << "\"" << json_escape(op) << "\":" << count;
+    out += "\"";
+    out += json_escape(op);
+    out += "\":";
+    out += std::to_string(count);
   }
-  out << "}}";
-  return out.str();
+  out += "}}";
+  return out;
 }
 
-}  // namespace fuzzpilot
-
+} // namespace fuzzpilot
