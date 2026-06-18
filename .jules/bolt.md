@@ -1,0 +1,3 @@
+## 2026-06-18 - Optimize JSON Payload Construction
+**Learning:** Using `std::ostringstream` for JSON payload construction causes significant dynamic memory allocation overhead in hot paths compared to using `std::string::reserve` and direct concatenation. Additionally, `std::to_string(double)` retains trailing zeros which may not be desirable compared to `%g` formatting.
+**Action:** Replaced `std::ostringstream` with `std::string` and `reserve()` combined with multiple `+=` statements. Created a custom `format_double` utility using `std::snprintf` and a stack buffer to match the `%g` output behavior without the stream overhead.
