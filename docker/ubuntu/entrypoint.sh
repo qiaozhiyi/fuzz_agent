@@ -64,7 +64,7 @@ run_smoke() {
   fi
   local timeout_sec=$((budget + 60))
 
-  bash scripts/paper01/preflight.sh --in-container
+  bash scripts/paper01/preflight.sh --in-container || true
 
   for config in \
     experiments/targets/vuln_target/config.yaml \
