@@ -112,6 +112,7 @@ run_image() {
     FUZZPILOT_MODEL_ENDPOINT \
     FUZZPILOT_PARALLEL \
     FUZZPILOT_SMOKE_BUDGET_SEC \
+    FUZZPILOT_SMOKE_MICRO_BUDGET_SEC \
     FUZZPILOT_REQUIRE_CANONICAL_PLATFORM; do
     if [[ -n "${!maybe_env:-}" ]]; then
       env_args+=(-e "${maybe_env}=${!maybe_env}")
