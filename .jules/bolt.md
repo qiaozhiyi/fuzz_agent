@@ -1,0 +1,4 @@
+## 2026-06-20 - Optimize telemetry string formatting
+
+**Learning:** `std::ostringstream` has significant dynamic memory allocation overhead in hot paths for formatting JSON payloads. Replaced with `std::string::reserve` and `+=` with `std::to_string`, but trailing zero handling for doubles was an issue. Using `std::snprintf` into a fixed stack buffer avoids `std::ostringstream`'s overhead and successfully handles trailing zeroes correctly.
+**Action:** Avoid `std::ostringstream` for telemetry/JSON formatting in hot paths. Implement and use `std::string::reserve` combined with direct sequence building and stack-buffer `std::snprintf` for doubles to avoid allocations.
