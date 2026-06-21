@@ -443,6 +443,7 @@ ModelResponse OpenAICompatibleGateway::complete_json(const ModelRequest& request
       "-H", "Content-Type: application/json",
       "-H", "@" + auth_header_path.path().string(),
       "-d", "@" + payload_path.path().string(),
+      "--",
       endpoint_,
   };
 
