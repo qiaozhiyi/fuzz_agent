@@ -9,4 +9,6 @@ namespace fuzzpilot {
 
 std::string trim(std::string_view value);
 
-}  // namespace fuzzpilot
+std::string format_double(double value);
+
+} // namespace fuzzpilot
