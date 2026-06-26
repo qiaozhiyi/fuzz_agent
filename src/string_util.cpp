@@ -1,6 +1,7 @@
 #include "fuzzpilot/string_util.hpp"
 
 #include <cctype>
+#include <cstdio>
 
 namespace fuzzpilot {
 
@@ -18,6 +19,12 @@ std::string trim(std::string_view value) {
   }
 
   return std::string(start, end);
+}
+
+std::string format_double(double value) {
+  char buf[32];
+  std::snprintf(buf, sizeof(buf), "%g", value);
+  return std::string(buf);
 }
 
 }  // namespace fuzzpilot

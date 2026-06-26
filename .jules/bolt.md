@@ -1,0 +1,3 @@
+## 2026-06-26 - Avoid std::ostringstream for simple JSON formatting in hot paths
+**Learning:** Using `std::ostringstream` for formatting JSON strings incurs significant overhead from dynamic allocations and stream formatting. Pre-allocating memory with `std::string::reserve` and directly appending values (using `std::to_string` or a custom `snprintf` wrapper for floats to match formatting) is demonstrably faster and uses less memory.
+**Action:** Avoid `std::ostringstream` in performance-critical JSON payload construction; use pre-allocated `std::string` and direct concatenation (`+=`) instead.
